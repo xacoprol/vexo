@@ -382,7 +382,8 @@ model FiscalFiling {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  documents FiscalDocument[]
+  documents  FiscalDocument[]
+  taxPayments TaxPayment[]
 
   @@index([modelType, year])
   @@index([year, quarter])
@@ -478,6 +479,8 @@ model TaxPayment {
   paidAt     DateTime?
   nrc        String?
   status     String   @default("PAGADO") // PAGADO | PENDIENTE | DEVUELTO
+  filingId   String?
+  filing     FiscalFiling? @relation(fields: [filingId], references: [id], onDelete: SetNull)
   documentId String?
   document   FiscalDocument? @relation(fields: [documentId], references: [id], onDelete: SetNull)
   notes      String?
@@ -487,6 +490,8 @@ model TaxPayment {
   @@index([year, quarter])
   @@index([modelType])
   @@index([paidAt])
+  @@index([filingId])
+  @@index([status])
 }
 
 // ─── Fiscal: comunicaciones AEAT ─────────────────────────────────────────────

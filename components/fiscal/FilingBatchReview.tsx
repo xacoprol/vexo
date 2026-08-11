@@ -23,12 +23,14 @@ import {
   isAnnualOrCensusModel,
   FISCAL_MODEL_TYPES,
 } from "@/lib/gemini-fiscal-filing";
+import { paymentHrefForFiling } from "@/lib/fiscal-payments";
 
 type RowStatus = "pending" | "saving" | "saved" | "error";
 
 type Row = FilingQueueItem & {
   status: RowStatus;
   error?: string;
+  paymentHref?: string | null;
 };
 
 function toQueueItem(row: Row): FilingQueueItem {
@@ -123,7 +125,22 @@ export function FilingBatchReview() {
       patchRow(row.localId, { status: "error", error: res.error });
       return false;
     }
-    patchRow(row.localId, { status: "saved", error: undefined });
+    const needsPay =
+      (row.modelType === "303" || row.modelType === "130") && row.result > 0;
+    const paymentHref = needsPay
+      ? paymentHrefForFiling({
+          filingId: res.id,
+          modelType: row.modelType,
+          year: row.year,
+          quarter: isAnnualOrCensusModel(row.modelType) ? null : row.quarter,
+          amount: row.result,
+        })
+      : null;
+    patchRow(row.localId, {
+      status: "saved",
+      error: undefined,
+      paymentHref,
+    });
     persistPending(rowsRef.current ?? []);
     return true;
   }
@@ -255,6 +272,18 @@ export function FilingBatchReview() {
               {row.error ? (
                 <p className="rounded-md bg-danger/10 px-3 py-2 text-sm text-danger">
                   {row.error}
+                </p>
+              ) : null}
+
+              {row.status === "saved" && row.paymentHref ? (
+                <p className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning">
+                  Resultado a ingresar {formatCurrency(row.result)}.{" "}
+                  <Link
+                    href={row.paymentHref}
+                    className="font-medium underline"
+                  >
+                    Registrar NRC / pago
+                  </Link>
                 </p>
               ) : null}
 

@@ -9,6 +9,8 @@ import { createFiscalDocument, blobConfigured } from "@/lib/fiscal-blob";
 function revalidatePayments() {
   revalidatePath("/fiscal/payments");
   revalidatePath("/fiscal/archive");
+  revalidatePath("/fiscal/filings");
+  revalidatePath("/fiscal/guide");
 }
 
 export async function createTaxPayment(formData: FormData): Promise<void> {
@@ -18,10 +20,29 @@ export async function createTaxPayment(formData: FormData): Promise<void> {
   const yearRaw = parseInt(String(formData.get("year") ?? ""), 10);
   const quarterRaw = parseInt(String(formData.get("quarter") ?? ""), 10);
   const paidAtRaw = String(formData.get("paidAt") ?? "").trim();
-  const modelType = String(formData.get("modelType") ?? "").trim() || null;
+  let modelType = String(formData.get("modelType") ?? "").trim() || null;
   const nrc = String(formData.get("nrc") ?? "").trim() || null;
   const notes = String(formData.get("notes") ?? "").trim() || null;
-  const status = String(formData.get("status") ?? "PAGADO").trim() || "PAGADO";
+  const filingIdRaw = String(formData.get("filingId") ?? "").trim();
+  let filingId: string | null = filingIdRaw || null;
+  let year = Number.isFinite(yearRaw) ? yearRaw : null;
+  let quarter = quarterRaw >= 1 && quarterRaw <= 4 ? quarterRaw : null;
+
+  if (filingId) {
+    const filing = await prisma.fiscalFiling.findUnique({
+      where: { id: filingId },
+    });
+    if (filing) {
+      modelType = filing.modelType;
+      year = filing.year;
+      quarter = filing.quarter;
+    } else {
+      filingId = null;
+    }
+  }
+
+  const statusRaw = String(formData.get("status") ?? "").trim();
+  const status = statusRaw || "PAGADO";
 
   let documentId: string | null = null;
   const file = formData.get("file");
@@ -32,10 +53,11 @@ export async function createTaxPayment(formData: FormData): Promise<void> {
       fileName: file.name,
       mimeType: file.type || "application/pdf",
       category: "PAYMENT",
-      title: `Pago ${modelType ?? "AEAT"} ${yearRaw || ""}`.trim(),
-      year: Number.isFinite(yearRaw) ? yearRaw : null,
-      quarter: quarterRaw >= 1 && quarterRaw <= 4 ? quarterRaw : null,
+      title: `Pago ${modelType ?? "AEAT"} ${year ?? ""}`.trim(),
+      year,
+      quarter,
       modelType,
+      filingId,
     });
     documentId = doc.id;
   }
@@ -43,12 +65,13 @@ export async function createTaxPayment(formData: FormData): Promise<void> {
   await prisma.taxPayment.create({
     data: {
       modelType,
-      year: Number.isFinite(yearRaw) ? yearRaw : null,
-      quarter: quarterRaw >= 1 && quarterRaw <= 4 ? quarterRaw : null,
+      year,
+      quarter,
       amount: new Prisma.Decimal(amount),
       paidAt: paidAtRaw ? new Date(`${paidAtRaw}T12:00:00`) : null,
       nrc,
       status,
+      filingId,
       documentId,
       notes,
     },

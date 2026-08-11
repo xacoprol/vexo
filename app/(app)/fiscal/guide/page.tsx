@@ -11,6 +11,7 @@ import {
   urgencyLabel,
 } from "@/lib/fiscal-calendar";
 import { buildModelo349Draft } from "@/lib/fiscal-347-349";
+import { listPendingLiquidaciones } from "@/lib/fiscal-payments";
 import { CopyableBoxes } from "@/components/fiscal/CopyableBoxes";
 import { ThirdPartyOpsTable } from "@/components/fiscal/ThirdPartyOpsTable";
 
@@ -19,13 +20,14 @@ export default async function FiscalGuidePage() {
   const target = filingTargetPeriod(now);
   const year = target.year;
   const quarter = target.quarter as FiscalQuarter;
-  const [summary, draft349, presented303, presented130, presented349] =
+  const [summary, draft349, presented303, presented130, presented349, pendingPay] =
     await Promise.all([
       buildFiscalPeriodSummary(year, quarter),
       buildModelo349Draft(year, quarter),
       getPresentedFiling("303", year, quarter),
       getPresentedFiling("130", year, quarter),
       getPresentedFiling("349", year, quarter),
+      listPendingLiquidaciones(),
     ]);
   const deadlines = buildUpcomingDeadlines(now);
 
@@ -79,6 +81,21 @@ export default async function FiscalGuidePage() {
           : `Hay ops UE · entregas ${formatCurrency(draft349.totalEntregas)} · adquis. ${formatCurrency(draft349.totalAdquisiciones)}`
         : "Sin ops intracomunitarias este trimestre",
       href: `/fiscal/349?year=${year}&q=${quarter}`,
+    },
+    {
+      ok: pendingPay.length === 0,
+      label:
+        pendingPay.length === 0
+          ? "Pagos / NRC al día"
+          : `${pendingPay.length} liquidación(es) sin NRC`,
+      hint:
+        pendingPay.length === 0
+          ? "No hay 303/130 a ingresar sin pago"
+          : pendingPay
+              .slice(0, 3)
+              .map((p) => `${p.modelType} ${p.periodLabel}`)
+              .join(" · "),
+      href: "/fiscal/payments",
     },
   ];
 
