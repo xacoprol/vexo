@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { formatCurrency } from "@/lib/calculations";
 import type { FiscalPeriodSummary } from "@/lib/fiscal";
+import { CopyableBoxes } from "@/components/fiscal/CopyableBoxes";
 
 type Props = {
   title: string;
@@ -24,72 +25,43 @@ export function ModeloDraft({ title, model, summary }: Props) {
 
   const how =
     model === "303"
-      ? "Régimen general: cuotas 4/10/21 % + AIB (10/11) − deducible (29+37). Incluye ops. especiales (59/60/123) y compensación (110/78/69)."
-      : "Acumulado desde el 1 de enero: 20 % del rendimiento neto − pagos 130 previos del año − retenciones. Casillas alineadas con el modelo oficial.";
+      ? "Se calcula solo con facturas + marketplace + gastos del trimestre."
+      : "Acumulado desde el 1 de enero: 20 % del beneficio − pagos 130 previos − retenciones.";
 
   return (
     <section className="card-panel space-y-4 p-5 sm:p-6">
       <div>
         <h2 className="form-section-title">{title}</h2>
         <p className="form-section-hint">
-          Periodo {summary.label}. Cálculo automático con lo que hay en el
-          panel ({how}) Úsalo como guía para la AEAT; no sustituye el modelo
-          oficial presentado.
+          Periodo {summary.label}. {how} Usa{" "}
+          <Link href="/fiscal/guide" className="text-accent underline">
+            Guía de presentación
+          </Link>{" "}
+          para el paso a paso.
         </p>
       </div>
 
       {missingExpenses ? (
         <p className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2.5 text-sm text-warning">
           {model === "130"
-            ? "Aún no hay gastos deducibles en el acumulado del año hasta este trimestre. Sin ellos el 130 sale más alto de lo real."
-            : "Aún no hay gastos en este trimestre. Sin ellos el IVA soportado va a 0, y el importe a ingresar sale más alto de lo real."}{" "}
+            ? "Aún no hay gastos deducibles en el acumulado del año. Sin ellos el 130 sale más alto."
+            : "Aún no hay gastos en este trimestre. Sin ellos el IVA a pagar sale más alto."}{" "}
           <Link href="/fiscal/expenses" className="font-medium underline">
             Registrar gastos
           </Link>
         </p>
       ) : null}
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="border-b border-line text-xs uppercase tracking-wide text-ink-muted">
-            <tr>
-              <th className="px-2 py-2 text-left font-medium">Casilla</th>
-              <th className="px-2 py-2 text-left font-medium">Concepto</th>
-              <th className="px-2 py-2 text-right font-medium">Importe</th>
-            </tr>
-          </thead>
-          <tbody>
-            {draft.boxes.map((b) => (
-              <tr key={`${b.code}-${b.label}`} className="border-b border-line/50">
-                <td className="px-2 py-2 font-mono text-ink-muted">{b.code}</td>
-                <td className="px-2 py-2">{b.label}</td>
-                <td className="px-2 py-2 text-right font-mono">
-                  {formatCurrency(b.value)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <CopyableBoxes
+        boxes={draft.boxes}
+        result={draft.result}
+        resultLabel={resultTitle}
+      />
 
-      <div
-        className={`rounded-lg px-4 py-3 text-sm ${
-          missingExpenses
-            ? "bg-line/40 text-ink-muted"
-            : resultPositive
-              ? "bg-warning/10 text-warning"
-              : "bg-success/10 text-success"
-        }`}
-      >
-        <p className="font-medium">
-          {resultTitle}:{" "}
-          <span className="font-mono font-semibold">
-            {formatCurrency(Math.abs(draft.result))}
-          </span>
-          {missingExpenses ? " (incompleto)" : null}
-        </p>
-        <p className="mt-1 text-xs opacity-90">{how}</p>
-      </div>
+      <p className="text-xs text-ink-muted">
+        Orientativo: {formatCurrency(Math.abs(draft.result))}
+        {missingExpenses ? " (incompleto)" : ""} · no sustituye el modelo AEAT
+      </p>
     </section>
   );
 }

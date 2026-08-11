@@ -32,6 +32,9 @@ export default async function FiscalPage({
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Link href="/fiscal/guide" className="btn-primary">
+            Guía presentación
+          </Link>
           <Link href="/fiscal/expenses" className="btn-secondary">
             Gastos
           </Link>
@@ -72,7 +75,7 @@ export default async function FiscalPage({
           </Link>
           <Link
             href={`/fiscal/annual?year=${year}`}
-            className="btn-primary"
+            className="btn-secondary"
           >
             Resumen anual
           </Link>
@@ -83,28 +86,19 @@ export default async function FiscalPage({
 
       <p className="rounded-lg border border-line bg-accent-soft/40 px-4 py-3 text-sm text-ink-muted">
         Trimestre operativo: <span className="font-medium text-ink">3T 2026</span>
-        . Las facturas W3D entran solas. Los{" "}
+        . Empieza por la{" "}
+        <Link href="/fiscal/guide" className="text-accent underline">
+          Guía de presentación
+        </Link>
+        : te dice qué modelo tocar y las casillas a copiar. Sube{" "}
         <Link href="/fiscal/expenses" className="text-accent underline">
           gastos
         </Link>{" "}
-        y los{" "}
+        e{" "}
         <Link href="/fiscal/income" className="text-accent underline">
-          ingresos de Amazon/Shopify
+          ingresos marketplace
         </Link>{" "}
-        hay que importarlos. El paquete de gestoría (modelos, libros, censo,
-        pagos) vive en{" "}
-        <Link href="/fiscal/archive" className="text-accent underline">
-          Archivo
-        </Link>
-        ,{" "}
-        <Link href="/fiscal/books" className="text-accent underline">
-          Libros
-        </Link>{" "}
-        y{" "}
-        <Link href="/fiscal/payments" className="text-accent underline">
-          Liquidaciones
-        </Link>
-        .
+        y el borrador se recalcula solo.
       </p>
 
       {summary.expenses.count === 0 ? (
