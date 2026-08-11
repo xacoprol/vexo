@@ -5,6 +5,7 @@ import {
   geminiConfigured,
   parseIssuedInvoiceDocument,
 } from "@/lib/gemini-invoice";
+import { stashSourceDocument } from "@/lib/fiscal-blob";
 
 export const dynamic = "force-dynamic";
 /** OCR de PDF puede necesitar más de 10s (plan Pro). */
@@ -58,12 +59,26 @@ export async function POST(request: Request) {
 
   try {
     const buffer = Buffer.from(await file.arrayBuffer());
+    const mime = resolveUploadMime(file.type, file.name);
     const draft = await parseIssuedInvoiceDocument({
       buffer,
-      mimeType: resolveUploadMime(file.type, file.name),
+      mimeType: mime,
       fileName: file.name,
     });
-    return NextResponse.json({ ok: true, draft });
+    const documentId = await stashSourceDocument({
+      buffer,
+      fileName: file.name,
+      mimeType: mime,
+      category: "INVOICE_SOURCE",
+      title: `${draft.fullNumber || draft.clientName || "Factura"} · ${file.name}`,
+      year: draft.issueDate
+        ? Number(draft.issueDate.slice(0, 4)) || null
+        : null,
+    });
+    return NextResponse.json({
+      ok: true,
+      draft: { ...draft, documentId },
+    });
   } catch (e) {
     const message =
       e instanceof Error ? e.message : "No se pudo leer la factura";

@@ -6,6 +6,7 @@ export const MARKETPLACE_INCOME_QUEUE_KEY = "fiscal-marketplace-income-queue-v1"
 export type MarketplaceIncomeQueueItem = AmazonTaxReportRow & {
   localId: string;
   sourceFile: string;
+  documentId?: string | null;
 };
 
 export type MarketplaceIncomeQueuePayload = {

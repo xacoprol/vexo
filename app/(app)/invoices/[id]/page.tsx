@@ -91,6 +91,16 @@ export default async function InvoiceDetailPage({
           >
             Descargar PDF
           </Link>
+          {invoice.sourceDocumentId ? (
+            <a
+              href={`/api/fiscal/documents/${invoice.sourceDocumentId}`}
+              className="btn-secondary"
+              target="_blank"
+              rel="noreferrer"
+            >
+              PDF original
+            </a>
+          ) : null}
           <DeleteInvoiceButton
             invoiceId={id}
             fullNumber={invoice.fullNumber}

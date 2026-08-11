@@ -278,13 +278,23 @@ export default async function ExpensesPage({
                           {formatCurrency(Number(e.total))}
                         </td>
                         <td className="sticky right-0 z-10 bg-bg-elevated px-2 py-3 group-hover:bg-accent-soft/20 sm:static sm:bg-transparent sm:px-4">
-                          <div className="flex flex-col items-end gap-1 sm:flex-row sm:justify-end">
-                            <Link
-                              href={`/fiscal/expenses/${e.id}/edit`}
+                        <div className="flex flex-col items-end gap-1 sm:flex-row sm:justify-end">
+                          {e.documentId ? (
+                            <a
+                              href={`/api/fiscal/documents/${e.documentId}`}
+                              target="_blank"
+                              rel="noreferrer"
                               className="btn-ghost px-2 py-1 text-xs"
                             >
-                              Editar
-                            </Link>
+                              PDF
+                            </a>
+                          ) : null}
+                          <Link
+                            href={`/fiscal/expenses/${e.id}/edit`}
+                            className="btn-ghost px-2 py-1 text-xs"
+                          >
+                            Editar
+                          </Link>
                             <form action={deleteExpense.bind(null, e.id)}>
                               <button
                                 type="submit"

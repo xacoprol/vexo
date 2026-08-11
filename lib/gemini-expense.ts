@@ -43,6 +43,8 @@ export type ParsedExpenseDraft = {
   activityFitReason: string | null;
   /** Consejo home office / prorrateo si aplica */
   homeOfficeTip: string | null;
+  /** FiscalDocument id si el original se guardó en Blob al parsear */
+  documentId?: string | null;
 };
 
 const ALLOWED_MIME = new Set([

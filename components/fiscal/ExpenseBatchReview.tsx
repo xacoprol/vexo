@@ -57,6 +57,7 @@ function toQueueItem(row: Row): ExpenseQueueItem {
     activityFit: row.activityFit ?? "ok",
     activityFitReason: row.activityFitReason ?? null,
     homeOfficeTip: row.homeOfficeTip ?? null,
+    documentId: row.documentId ?? null,
   };
 }
 
@@ -85,6 +86,7 @@ function toInput(row: Row): ExpenseDraftInput {
       : round2(row.subtotal + vatAmount),
     deductible: row.deductible,
     notes: row.notes,
+    documentId: row.documentId ?? null,
   };
 }
 

@@ -44,6 +44,8 @@ export type ParsedInvoiceDraft = {
   /** Si el documento indica pagada / cobrada */
   likelyPaid: boolean;
   confidence: "high" | "medium" | "low";
+  /** FiscalDocument id del PDF original (si Blob está configurado) */
+  documentId?: string | null;
 };
 
 const ALLOWED_MIME = new Set([

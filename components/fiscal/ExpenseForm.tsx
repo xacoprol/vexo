@@ -22,6 +22,7 @@ import type { ParsedExpenseDraft, ActivityFit } from "@/lib/gemini-expense";
 import { consumeExpenseDraft } from "@/lib/expense-draft-storage";
 import { ButtonPending } from "@/components/ui/ButtonPending";
 import { ActivityFitAlert } from "@/components/fiscal/ActivityFitAlert";
+import { fiscalDocumentHref } from "@/lib/fiscal-blob";
 
 type Props = {
   expense?: Expense;
@@ -72,6 +73,9 @@ export function ExpenseForm({ expense }: Props) {
     null
   );
   const [homeOfficeTip, setHomeOfficeTip] = useState<string | null>(null);
+  const [documentId, setDocumentId] = useState<string | null>(
+    expense?.documentId ?? null
+  );
 
   const intracom = isExpenseIntracom(vatOperationType);
   const rateOptions = intracom
@@ -111,6 +115,7 @@ export function ExpenseForm({ expense }: Props) {
     setActivityFit(draft.activityFit ?? "ok");
     setActivityFitReason(draft.activityFitReason ?? null);
     setHomeOfficeTip(draft.homeOfficeTip ?? null);
+    setDocumentId(draft.documentId ?? null);
     if (draft.activityFit === "suspicious") {
       setDeductible(false);
     }
@@ -134,6 +139,22 @@ export function ExpenseForm({ expense }: Props) {
 
   return (
     <form action={formAction} className="mx-auto max-w-2xl space-y-5">
+      {documentId ? (
+        <input type="hidden" name="documentId" value={documentId} />
+      ) : null}
+      {documentId ? (
+        <p className="rounded-lg border border-line bg-accent-soft/40 px-3 py-2 text-sm text-ink-muted">
+          Factura original guardada en Vexo.{" "}
+          <a
+            href={fiscalDocumentHref(documentId)}
+            target="_blank"
+            rel="noreferrer"
+            className="font-medium text-accent underline"
+          >
+            Ver archivo
+          </a>
+        </p>
+      ) : null}
       {state.error ? (
         <p className="rounded-md bg-danger/10 px-3 py-2 text-sm text-danger">
           {state.error}

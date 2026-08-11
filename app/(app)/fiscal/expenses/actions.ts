@@ -81,6 +81,7 @@ function parseExpenseForm(formData: FormData) {
       formData.get("deductible") === "on" ||
       formData.get("deductible") === "1",
     notes: String(formData.get("notes") ?? "").trim() || null,
+    documentId: String(formData.get("documentId") ?? "").trim() || null,
   };
 }
 
@@ -154,7 +155,24 @@ async function insertExpense(data: ExpenseWriteData): Promise<
     };
   }
 
-  const created = await prisma.expense.create({ data });
+  const created = await prisma.expense.create({
+    data: {
+      issueDate: data.issueDate,
+      supplierName: data.supplierName,
+      supplierNif: data.supplierNif,
+      invoiceNumber: data.invoiceNumber,
+      description: data.description,
+      category: data.category,
+      vatOperationType: data.vatOperationType,
+      subtotal: data.subtotal,
+      vatRate: data.vatRate,
+      vatAmount: data.vatAmount,
+      total: data.total,
+      deductible: data.deductible,
+      notes: data.notes,
+      documentId: data.documentId || null,
+    },
+  });
   revalidatePath("/fiscal");
   revalidatePath("/fiscal/expenses");
   return { ok: true, id: created.id };
@@ -174,6 +192,7 @@ export type ExpenseDraftInput = {
   total?: number;
   deductible?: boolean;
   notes?: string | null;
+  documentId?: string | null;
 };
 
 function fromDraftInput(input: ExpenseDraftInput): ExpenseWriteData {
@@ -210,6 +229,7 @@ function fromDraftInput(input: ExpenseDraftInput): ExpenseWriteData {
     total,
     deductible: input.deductible !== false,
     notes: String(input.notes ?? "").trim() || null,
+    documentId: String(input.documentId ?? "").trim() || null,
   };
 }
 
@@ -272,8 +292,20 @@ export async function updateExpense(
     await prisma.expense.update({
       where: { id },
       data: {
-        ...data,
+        issueDate: data.issueDate,
+        supplierName: data.supplierName,
+        supplierNif: data.supplierNif,
+        invoiceNumber: data.invoiceNumber,
+        description: data.description,
+        category: data.category,
+        vatOperationType: data.vatOperationType,
+        subtotal: data.subtotal,
+        vatRate: data.vatRate,
+        vatAmount: data.vatAmount,
+        total: data.total,
+        notes: data.notes,
         deductible: formData.has("deductible"),
+        ...(data.documentId ? { documentId: data.documentId } : {}),
       },
     });
     revalidatePath("/fiscal");

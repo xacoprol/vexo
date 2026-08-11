@@ -448,6 +448,8 @@ export type HistoricalInvoiceDraftInput = {
   markAsPaid?: boolean;
   /** Forzar guardado pese a aviso país/IVA */
   forceVatMismatch?: boolean;
+  /** PDF original guardado en Blob al parsear */
+  documentId?: string | null;
 };
 
 export type HistoricalInvoiceResult =
@@ -570,6 +572,7 @@ export async function createHistoricalInvoice(
         irpfAmount: totals.irpfAmount,
         total: totals.total,
         previousInvoiceId: lastInSeries?.id ?? null,
+        sourceDocumentId: data.documentId?.trim() || null,
       },
     });
     await createInvoiceLines(invoice.id, totals.lines);

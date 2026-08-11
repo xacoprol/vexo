@@ -251,6 +251,7 @@ export function MarketplaceIncomeImportReview() {
           total: r.total,
           shipToCountry: r.shipToCountry,
           sourceFile: r.sourceFile,
+          documentId: r.documentId ?? null,
           notes: r.notes,
         }))
       );

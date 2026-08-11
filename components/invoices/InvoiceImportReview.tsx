@@ -71,6 +71,7 @@ function toQueueItem(row: Row): InvoiceQueueItem {
     notes: row.notes,
     likelyPaid: row.likelyPaid,
     confidence: row.confidence,
+    documentId: row.documentId ?? null,
   };
 }
 
@@ -132,6 +133,7 @@ function toInput(row: Row): HistoricalInvoiceDraftInput {
     paymentMethod: row.paymentMethod,
     notes: row.notes,
     markAsPaid: row.markAsPaid,
+    documentId: row.documentId ?? null,
   };
 }
 

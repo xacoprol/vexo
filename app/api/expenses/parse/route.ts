@@ -11,6 +11,7 @@ import {
   parseAmazonFeesInvoiceCsv,
 } from "@/lib/amazon-fees-invoice";
 import { parseCsv } from "@/lib/amazon-tax-report";
+import { stashSourceDocument } from "@/lib/fiscal-blob";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -25,6 +26,14 @@ function isCsvUpload(file: File, mime: string): boolean {
     mime === "application/csv" ||
     mime === "text/plain"
   );
+}
+
+function withDocumentId(
+  drafts: ParsedExpenseDraft[],
+  documentId: string | null
+): ParsedExpenseDraft[] {
+  if (!documentId) return drafts;
+  return drafts.map((d) => ({ ...d, documentId }));
 }
 
 export async function POST(request: Request) {
@@ -84,10 +93,19 @@ export async function POST(request: Request) {
       }
 
       const drafts = parseAmazonFeesInvoiceCsv(text, file.name);
+      const documentId = await stashSourceDocument({
+        buffer: Buffer.from(text, "utf8"),
+        fileName: file.name,
+        mimeType: mime || "text/csv",
+        category: "EXPENSE",
+        title: `Comisiones Amazon · ${file.name}`,
+        notes: "CSV fees invoice (varias líneas de gasto)",
+      });
+      const withDoc = withDocumentId(drafts, documentId);
       return NextResponse.json({
         ok: true,
-        draft: drafts[0],
-        drafts,
+        draft: withDoc[0],
+        drafts: withDoc,
       });
     }
 
@@ -108,7 +126,18 @@ export async function POST(request: Request) {
       mimeType: mime,
       fileName: file.name,
     });
-    return NextResponse.json({ ok: true, draft, drafts: [draft] });
+    const documentId = await stashSourceDocument({
+      buffer,
+      fileName: file.name,
+      mimeType: mime,
+      category: "EXPENSE",
+      title: `${draft.supplierName || "Gasto"} · ${file.name}`,
+      year: draft.issueDate
+        ? Number(draft.issueDate.slice(0, 4)) || null
+        : null,
+    });
+    const withDoc = { ...draft, documentId };
+    return NextResponse.json({ ok: true, draft: withDoc, drafts: [withDoc] });
   } catch (e) {
     const message =
       e instanceof Error ? e.message : "No se pudo leer la factura";

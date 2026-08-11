@@ -8,6 +8,9 @@ export type FiscalDocCategory =
   | "PAYMENT"
   | "AEAT"
   | "IRPF"
+  | "EXPENSE"
+  | "INVOICE_SOURCE"
+  | "INCOME"
   | "OTHER";
 
 export function blobConfigured(): boolean {
@@ -114,4 +117,44 @@ export async function deleteFiscalDocument(id: string) {
     // El registro se borra igual si el blob ya no existe
   }
   await prisma.fiscalDocument.delete({ where: { id } });
+}
+
+/**
+ * Guarda el PDF/CSV/imagen original en Blob. Si Blob no está configurado,
+ * no falla el OCR: devuelve null y el alta sigue sin adjunto.
+ */
+export async function stashSourceDocument(opts: {
+  buffer: Buffer;
+  fileName: string;
+  mimeType: string;
+  category: Extract<
+    FiscalDocCategory,
+    "EXPENSE" | "INVOICE_SOURCE" | "INCOME"
+  >;
+  title: string;
+  year?: number | null;
+  notes?: string | null;
+}): Promise<string | null> {
+  if (!blobConfigured()) return null;
+  try {
+    const doc = await createFiscalDocument({
+      buffer: opts.buffer,
+      fileName: opts.fileName,
+      mimeType: opts.mimeType,
+      category: opts.category,
+      title: opts.title,
+      year: opts.year ?? new Date().getFullYear(),
+      notes: opts.notes ?? null,
+      folder:
+        opts.category === "EXPENSE"
+          ? "expenses"
+          : opts.category === "INCOME"
+            ? "income"
+            : "invoices-source",
+    });
+    return doc.id;
+  } catch (err) {
+    console.error("stashSourceDocument failed:", err);
+    return null;
+  }
 }

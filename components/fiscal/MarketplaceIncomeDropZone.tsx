@@ -40,6 +40,7 @@ export function MarketplaceIncomeDropZone() {
           ...r,
           localId: newLocalId(),
           sourceFile: res.sourceFile,
+          documentId: res.sourceDocumentId,
         })),
       });
       const channelLabel = res.channel === "SHOPIFY" ? "Shopify" : "Amazon";

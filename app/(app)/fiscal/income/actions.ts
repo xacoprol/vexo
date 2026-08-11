@@ -10,6 +10,7 @@ import {
   parseShopifyIvaReportDocument,
 } from "@/lib/gemini-shopify-report";
 import { resolveUploadMime } from "@/lib/gemini-client";
+import { stashSourceDocument } from "@/lib/fiscal-blob";
 import { parseShopifyIvaSummaryDraft } from "@/lib/shopify-sales-report";
 import type { AmazonTaxReportRow } from "@/lib/amazon-tax-report";
 import { Prisma } from "@prisma/client";
@@ -30,6 +31,7 @@ export type ParseMarketplaceIncomeResult =
         refundsBase: number;
       };
       sourceFile: string;
+      sourceDocumentId: string | null;
     }
   | { ok: false; error: string };
 
@@ -79,12 +81,20 @@ export async function parseMarketplaceIncomeUpload(
     }
     try {
       const buffer = Buffer.from(await file.arrayBuffer());
+      const mime = resolveUploadMime(file.type, file.name);
       const draft = await parseShopifyIvaReportDocument({
         buffer,
-        mimeType: resolveUploadMime(file.type, file.name),
+        mimeType: mime,
         fileName: file.name,
       });
       const parsed = parseShopifyIvaSummaryDraft(draft, file.name);
+      const sourceDocumentId = await stashSourceDocument({
+        buffer,
+        fileName: file.name,
+        mimeType: mime,
+        category: "INCOME",
+        title: `Shopify IVA · ${file.name}`,
+      });
       return {
         ok: true,
         channel: "SHOPIFY",
@@ -92,6 +102,7 @@ export async function parseMarketplaceIncomeUpload(
         rows: parsed.rows,
         summary: parsed.summary,
         sourceFile: file.name,
+        sourceDocumentId,
       };
     } catch (e) {
       return {
@@ -115,6 +126,13 @@ export async function parseMarketplaceIncomeUpload(
   try {
     const text = await file.text();
     const parsed = parseMarketplaceIncomeCsv(text, file.name);
+    const sourceDocumentId = await stashSourceDocument({
+      buffer: Buffer.from(text, "utf8"),
+      fileName: file.name,
+      mimeType: file.type || "text/csv",
+      category: "INCOME",
+      title: `${parsed.channel} · ${file.name}`,
+    });
     return {
       ok: true,
       channel: parsed.channel,
@@ -122,6 +140,7 @@ export async function parseMarketplaceIncomeUpload(
       rows: parsed.rows,
       summary: parsed.summary,
       sourceFile: file.name,
+      sourceDocumentId,
     };
   } catch (e) {
     return {
@@ -150,6 +169,7 @@ export type MarketplaceIncomeInput = {
   total: number;
   shipToCountry?: string | null;
   sourceFile?: string | null;
+  documentId?: string | null;
   notes?: string | null;
 };
 
@@ -278,6 +298,7 @@ export async function importMarketplaceIncomeRows(
             total,
             shipToCountry: row.shipToCountry?.trim() || null,
             sourceFile: row.sourceFile?.trim() || null,
+            documentId: row.documentId?.trim() || null,
             notes: row.notes?.trim() || null,
           },
         });

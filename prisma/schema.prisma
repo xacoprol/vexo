@@ -223,6 +223,10 @@ model Invoice {
   recurringTemplateId String?
   recurringTemplate   RecurringInvoiceTemplate? @relation(fields: [recurringTemplateId], references: [id])
 
+  /// PDF original si se importó por OCR (histórico)
+  sourceDocumentId String?
+  sourceDocument   FiscalDocument? @relation("InvoiceSourceDocument", fields: [sourceDocumentId], references: [id], onDelete: SetNull)
+
   // Veri*Factu (RRSIF) — hash encadenado + QR; remisión AEAT pendiente
   verifactuHash          String?
   verifactuPreviousHash  String?
@@ -245,6 +249,7 @@ model Invoice {
   @@index([status])
   @@index([issueDate])
   @@index([recurringTemplateId])
+  @@index([sourceDocumentId])
 }
 
 model InvoiceLine {
@@ -324,6 +329,9 @@ model Expense {
   total          Decimal
   deductible     Boolean  @default(true) // IVA deducible / gasto computable 130
   notes          String?
+  /// PDF/imagen/CSV original subido (Vercel Blob vía FiscalDocument)
+  documentId     String?
+  document       FiscalDocument? @relation(fields: [documentId], references: [id], onDelete: SetNull)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -331,13 +339,14 @@ model Expense {
   @@index([category])
   @@index([supplierName])
   @@index([invoiceNumber])
+  @@index([documentId])
 }
 
 // ─── Fiscal: archivo documental (Vercel Blob) ────────────────────────────────
 
 model FiscalDocument {
   id             String   @id @default(cuid())
-  /// FILING | BOOK | CENSUS | PAYMENT | AEAT | IRPF | OTHER
+  /// FILING | BOOK | CENSUS | PAYMENT | AEAT | IRPF | EXPENSE | INVOICE_SOURCE | INCOME | OTHER
   category       String
   title          String
   year           Int?
@@ -358,6 +367,9 @@ model FiscalDocument {
   aeatCommunications AeatCommunication[]
   registerBooks      RegisterBook[]
   investmentAssets   InvestmentAsset[]
+  expenses           Expense[]
+  sourceInvoices     Invoice[]           @relation("InvoiceSourceDocument")
+  marketplaceIncomes MarketplaceIncome[]
 
   @@index([category])
   @@index([year, quarter])
@@ -561,6 +573,9 @@ model MarketplaceIncome {
   total           Decimal
   shipToCountry   String?
   sourceFile      String?
+  /// CSV/PDF/imagen original del import
+  documentId      String?
+  document        FiscalDocument? @relation(fields: [documentId], references: [id], onDelete: SetNull)
   notes           String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -570,6 +585,7 @@ model MarketplaceIncome {
   @@index([channel])
   @@index([vatStatus])
   @@index([externalRef])
+  @@index([documentId])
 }
 
 // ─── Recurring invoices ─────────────────────────────────────────────────────
