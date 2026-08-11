@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { SettingsForm } from "@/components/settings/SettingsForm";
+import { IntegrationHealthPanel } from "@/components/settings/IntegrationHealthPanel";
+import { getIntegrationHealth } from "@/lib/integration-health";
 
 export default async function SettingsPage() {
   const [settings, invoiceSeries, quoteSeries] = await Promise.all([
@@ -12,6 +14,8 @@ export default async function SettingsPage() {
     return <p>No hay configuración. Ejecuta el seed.</p>;
   }
 
+  const health = getIntegrationHealth();
+
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div>
@@ -20,6 +24,7 @@ export default async function SettingsPage() {
           Datos del emisor, series e impuestos
         </p>
       </div>
+      <IntegrationHealthPanel items={health} />
       <SettingsForm
         settings={settings}
         invoiceSeries={invoiceSeries}

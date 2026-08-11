@@ -8,7 +8,7 @@ import {
   type FiscalQuarter,
 } from "@/lib/fiscal";
 
-export type GuideModel = "303" | "130" | "349" | "390" | "347";
+export type GuideModel = "303" | "130" | "349" | "390" | "347" | "100";
 
 export type FilingDeadline = {
   model: GuideModel;
@@ -97,7 +97,7 @@ export function buildUpcomingDeadlines(now = new Date()): FilingDeadline[] {
     },
   ];
 
-  // Anuales: visibles en nov–ene
+  // Anuales: visibles en nov–ene (390/347) y feb–jun (renta 100)
   const showAnnual = now.getMonth() >= 10 || now.getMonth() === 0;
   if (showAnnual) {
     const annualYear = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
@@ -126,6 +126,24 @@ export function buildUpcomingDeadlines(now = new Date()): FilingDeadline[] {
         href: `/fiscal/347?year=${annualYear}`,
       }
     );
+  }
+
+  // Renta (modelo 100): visible feb–30 jun del año siguiente
+  const m = now.getMonth();
+  if (m >= 1 && m <= 5) {
+    const rentYear = now.getFullYear() - 1;
+    const rentDue = new Date(now.getFullYear(), 5, 30, 23, 59, 59);
+    quarterly.push({
+      model: "100",
+      year: rentYear,
+      quarter: null,
+      periodLabel: periodLabel(rentYear, null),
+      dueDate: rentDue,
+      dueLabel: formatEs(rentDue),
+      what: "IRPF anual (renta). Vexo no calcula el 100: archiva el PDF y usa tus 130/libros.",
+      aeatPath: "https://sede.agenciatributaria.gob.es/",
+      href: `/fiscal/annual?year=${rentYear}`,
+    });
   }
 
   return quarterly.sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime());

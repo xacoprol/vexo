@@ -15,6 +15,7 @@ export type ClientOption = {
   name: string;
   nif?: string | null;
   email?: string | null;
+  countryCode?: string | null;
 };
 
 type Props = {
@@ -23,6 +24,7 @@ type Props = {
   defaultClient?: ClientOption | null;
   label?: string;
   id?: string;
+  onClientChange?: (client: ClientOption | null) => void;
 };
 
 type SearchResponse = { clients: ClientOption[] };
@@ -33,6 +35,7 @@ export function ClientCombobox({
   defaultClient = null,
   label = "Cliente",
   id: idProp,
+  onClientChange,
 }: Props) {
   const autoId = useId();
   const inputId = idProp ?? `client-search-${autoId}`;
@@ -98,6 +101,7 @@ export function ClientCombobox({
     setOpen(false);
     setResults([]);
     setError(null);
+    onClientChange?.(client);
   }
 
   function clearSelection() {
@@ -105,12 +109,14 @@ export function ClientCombobox({
     setQuery("");
     setOpen(true);
     search("");
+    onClientChange?.(null);
   }
 
   function onInputChange(value: string) {
     setQuery(value);
     if (selected && value !== selected.name) {
       setSelected(null);
+      onClientChange?.(null);
     }
     setOpen(true);
   }

@@ -135,7 +135,11 @@ export default async function FiscalGuidePage() {
             </>
           ) : null}
           . En enero también el <strong>347</strong> / <strong>390</strong> del
-          año anterior.
+          año anterior; en primavera el <strong>100</strong> (renta) y revisa el{" "}
+          <Link href="/fiscal/036" className="text-accent underline">
+            censo 036
+          </Link>
+          .
         </p>
         <ol className="list-decimal space-y-2 pl-5 text-sm text-ink-muted">
           <li>

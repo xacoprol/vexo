@@ -33,6 +33,7 @@ function appBaseUrl(): string {
 }
 
 function periodKeyFor(d: FilingDeadline): string {
+  if (d.model === "100") return `100:${d.year}`;
   return fiscalFilingPeriodKey(
     d.model as FiscalModelType,
     d.year,
@@ -69,7 +70,7 @@ export async function runFiscalDeadlineReminders(now = new Date()) {
   const skipped: string[] = [];
 
   for (const d of deadlines) {
-    if (!["303", "130", "349", "390", "347"].includes(d.model)) continue;
+    if (!["303", "130", "349", "390", "347", "100"].includes(d.model)) continue;
 
     const days = daysUntil(d.dueDate, now);
     const kind = kindForDays(days);
@@ -77,13 +78,15 @@ export async function runFiscalDeadlineReminders(now = new Date()) {
 
     const periodKey = periodKeyFor(d);
 
-    const alreadyPresented = await prisma.fiscalFiling.findUnique({
-      where: { periodKey },
-      select: { id: true },
-    });
-    if (alreadyPresented) {
-      skipped.push(`${periodKey} already presented`);
-      continue;
+    if (d.model !== "100") {
+      const alreadyPresented = await prisma.fiscalFiling.findUnique({
+        where: { periodKey },
+        select: { id: true },
+      });
+      if (alreadyPresented) {
+        skipped.push(`${periodKey} already presented`);
+        continue;
+      }
     }
 
     const existing = await prisma.fiscalReminderLog.findUnique({

@@ -24,6 +24,10 @@ import {
   isZeroVatOperation,
   VAT_OPERATION_TYPES,
 } from "@/lib/recurring";
+import {
+  OPERATION_KEY_347_OPTIONS,
+  invoiceVatCountryWarning,
+} from "@/lib/invoice-fiscal";
 
 type SeriesOption = {
   id: string;
@@ -45,6 +49,7 @@ type InvoiceData = {
   notes: string;
   irpfRate: number;
   vatOperationType: string;
+  operationKey347: string;
   lines: EditorLine[];
 };
 
@@ -92,6 +97,12 @@ export function InvoiceForm({
   const [vatOperationType, setVatOperationType] = useState(
     invoice?.vatOperationType ?? "SUJETA"
   );
+  const [operationKey347, setOperationKey347] = useState(
+    invoice?.operationKey347 || "B"
+  );
+  const [selectedClient, setSelectedClient] = useState<ClientOption | null>(
+    defaultClient ?? null
+  );
   const defaultSeriesId =
     series.find((s) => s.isDefault)?.id ?? series[0]?.id ?? "";
   const [selectedSeriesId, setSelectedSeriesId] = useState(
@@ -118,6 +129,11 @@ export function InvoiceForm({
       );
     }
   }
+
+  const vatCountryWarn = invoiceVatCountryWarning({
+    vatOperationType,
+    clientCountryCode: selectedClient?.countryCode,
+  });
 
   const numberLabel = invoice?.fullNumber ?? preview ?? undefined;
 
@@ -164,7 +180,10 @@ export function InvoiceForm({
               </div>
             )}
             <div className={invoice ? "sm:col-span-2" : undefined}>
-              <ClientCombobox defaultClient={defaultClient} />
+              <ClientCombobox
+                defaultClient={defaultClient}
+                onClientChange={setSelectedClient}
+              />
             </div>
             <div>
               <label className="label" htmlFor="issueDate">
@@ -250,6 +269,33 @@ export function InvoiceForm({
               <p className="mt-1 text-xs text-ink-muted">
                 Intracomunitaria y Canarias no llevan IVA peninsular (0 %). Así
                 Fiscal las separa del IVA repercutido del 303.
+              </p>
+              {vatCountryWarn ? (
+                <p className="mt-2 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
+                  {vatCountryWarn}
+                </p>
+              ) : null}
+            </div>
+            <div className="sm:col-span-2">
+              <label className="label" htmlFor="operationKey347">
+                Clave modelo 347
+              </label>
+              <select
+                id="operationKey347"
+                name="operationKey347"
+                className="input"
+                value={operationKey347}
+                onChange={(e) => setOperationKey347(e.target.value)}
+              >
+                {OPERATION_KEY_347_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-ink-muted">
+                Ventas a clientes ES → normalmente B. Solo afecta al borrador
+                347 anual.
               </p>
             </div>
           </div>

@@ -248,12 +248,15 @@ export function RecurringForm({
           <label className="label" htmlFor="operationKey347">
             Clave operación modelo 347
           </label>
-          <input
+          <select
             id="operationKey347"
             name="operationKey347"
             className="input"
-            defaultValue={template?.operationKey347 ?? ""}
-          />
+            defaultValue={template?.operationKey347 || "B"}
+          >
+            <option value="B">B — Ventas / entregas</option>
+            <option value="A">A — Compras / adquisiciones</option>
+          </select>
         </div>
       </div>
 

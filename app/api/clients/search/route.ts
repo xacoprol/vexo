@@ -31,6 +31,7 @@ export async function GET(request: Request) {
       name: true,
       nif: true,
       email: true,
+      countryCode: true,
     },
   });
 

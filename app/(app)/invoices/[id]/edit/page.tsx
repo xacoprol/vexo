@@ -13,7 +13,7 @@ export default async function EditInvoicePage({
     prisma.invoice.findUnique({
       where: { id },
       include: {
-        client: { select: { id: true, name: true, nif: true, email: true } },
+        client: { select: { id: true, name: true, nif: true, email: true, countryCode: true } },
         lines: { orderBy: { sortOrder: "asc" } },
       },
     }),
@@ -63,6 +63,7 @@ export default async function EditInvoicePage({
           notes: invoice.notes ?? "",
           irpfRate: invoice.irpfRate,
           vatOperationType: invoice.vatOperationType,
+          operationKey347: invoice.operationKey347 ?? "B",
           lines: invoice.lines.map((l) => ({
             id: l.id,
             description: l.description,

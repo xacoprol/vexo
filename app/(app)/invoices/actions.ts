@@ -20,6 +20,10 @@ import {
   isZeroVatOperation,
   parseVatOperationType,
 } from "@/lib/recurring";
+import {
+  invoiceVatCountryWarning,
+  parseOperationKey347,
+} from "@/lib/invoice-fiscal";
 import { Prisma } from "@prisma/client";
 
 export type DocFormState = { error?: string };
@@ -80,11 +84,29 @@ export async function createInvoice(
     const vatOperationType = parseVatOperationType(
       formData.get("vatOperationType")
     );
+    const operationKey347 = parseOperationKey347(
+      formData.get("operationKey347")
+    );
     const lines = applyVatOperationToLines(parseLines(formData), vatOperationType);
     const irpfRate = parseFloat(String(formData.get("irpfRate") ?? "0")) || 0;
 
     if (!clientId) return { error: "Selecciona un cliente" };
     if (!lines.length) return { error: "Añade al menos una línea" };
+
+    const client = await prisma.client.findUnique({
+      where: { id: clientId },
+      select: { countryCode: true },
+    });
+    const vatWarn = invoiceVatCountryWarning({
+      vatOperationType,
+      clientCountryCode: client?.countryCode,
+    });
+    if (vatWarn && formData.get("forceVatMismatch") !== "1") {
+      // Soft: allow save but surface as error only for clear INTRACOM+ES
+      if (vatOperationType === "INTRACOMUNITARIA") {
+        return { error: vatWarn };
+      }
+    }
 
     const totals = calculateDocument(lines, irpfRate);
     const issueDate = new Date(String(formData.get("issueDate")));
@@ -115,6 +137,7 @@ export async function createInvoice(
             paymentMethod,
             notes,
             vatOperationType,
+            operationKey347,
             subtotal: totals.subtotal,
             vatAmount: totals.vatAmount,
             irpfRate: totals.irpfRate,
@@ -160,10 +183,29 @@ export async function updateInvoice(
     const vatOperationType = parseVatOperationType(
       formData.get("vatOperationType")
     );
+    const operationKey347 = parseOperationKey347(
+      formData.get("operationKey347")
+    );
     const lines = applyVatOperationToLines(parseLines(formData), vatOperationType);
     const irpfRate = parseFloat(String(formData.get("irpfRate") ?? "0")) || 0;
     if (!clientId) return { error: "Selecciona un cliente" };
     if (!lines.length) return { error: "Añade al menos una línea" };
+
+    const client = await prisma.client.findUnique({
+      where: { id: clientId },
+      select: { countryCode: true },
+    });
+    const vatWarn = invoiceVatCountryWarning({
+      vatOperationType,
+      clientCountryCode: client?.countryCode,
+    });
+    if (
+      vatWarn &&
+      vatOperationType === "INTRACOMUNITARIA" &&
+      formData.get("forceVatMismatch") !== "1"
+    ) {
+      return { error: vatWarn };
+    }
 
     const totals = calculateDocument(lines, irpfRate);
     const issueDate = new Date(String(formData.get("issueDate")));
@@ -186,6 +228,7 @@ export async function updateInvoice(
           String(formData.get("paymentMethod") ?? "").trim() || "Transferencia",
         notes: String(formData.get("notes") ?? "").trim() || null,
         vatOperationType,
+        operationKey347,
         subtotal: totals.subtotal,
         vatAmount: totals.vatAmount,
         irpfRate: totals.irpfRate,

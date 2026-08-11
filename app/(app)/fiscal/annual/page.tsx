@@ -101,7 +101,15 @@ export default async function FiscalAnnualPage({
         >
           Modelo 390
         </Link>
-        . La renta (modelo 100) se hace aparte en primavera.
+        . La renta (modelo 100) se hace aparte en primavera — archivo IRPF en{" "}
+        <Link href="/fiscal/archive" className="text-accent underline">
+          Archivo
+        </Link>
+        ; checklist censal en{" "}
+        <Link href="/fiscal/036" className="text-accent underline">
+          036
+        </Link>
+        .
       </p>
 
       <div className="flex flex-wrap gap-2">
