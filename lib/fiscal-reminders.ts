@@ -130,6 +130,47 @@ export async function runFiscalDeadlineReminders(now = new Date()) {
     sent.push({ periodKey, kind, model: d.model });
   }
 
+  // Plazos de comunicaciones AEAT abiertas
+  const aeatOpen = await prisma.aeatCommunication.findMany({
+    where: { status: "ABIERTA", dueAt: { not: null } },
+    select: { id: true, subject: true, dueAt: true, kind: true },
+  });
+  for (const a of aeatOpen) {
+    if (!a.dueAt) continue;
+    const days = daysUntil(a.dueAt, now);
+    const kind = kindForDays(days);
+    if (!kind) continue;
+    const periodKey = `aeat:${a.id}`;
+    const existing = await prisma.fiscalReminderLog.findUnique({
+      where: { periodKey_kind: { periodKey, kind } },
+    });
+    if (existing) {
+      skipped.push(`${periodKey} ${kind} already sent`);
+      continue;
+    }
+    const subject = `[Vexo] AEAT ${a.kind}: ${a.subject} — ${kindLabel(kind)}`;
+    const text = [
+      `Hola,`,
+      ``,
+      `Tienes una comunicación AEAT abierta con plazo:`,
+      ``,
+      `Asunto: ${a.subject}`,
+      `Tipo: ${a.kind}`,
+      `Plazo: ${a.dueAt.toISOString().slice(0, 10)}`,
+      `Estado: ${kindLabel(kind)}`,
+      ``,
+      `Revisa y responde en la sede (DEHú). Cuando acabes, márcalo en Vexo:`,
+      `${base}/fiscal/aeat`,
+      ``,
+      `— Vexo`,
+    ].join("\n");
+    await sendMail({ to, subject, text });
+    await prisma.fiscalReminderLog.create({
+      data: { periodKey, kind, toEmail: to, subject },
+    });
+    sent.push({ periodKey, kind, model: "AEAT" });
+  }
+
   return {
     skipped: false as const,
     sent: sent.length,

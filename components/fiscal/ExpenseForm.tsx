@@ -231,7 +231,8 @@ export function ExpenseForm({ expense }: Props) {
           </div>
           <div>
             <label className="label" htmlFor="supplierNif">
-              NIF proveedor
+              NIF / VAT proveedor
+              {intracom ? " (obligatorio)" : ""}
             </label>
             <input
               id="supplierNif"
@@ -239,8 +240,16 @@ export function ExpenseForm({ expense }: Props) {
               className="input font-mono"
               value={supplierNif}
               onChange={(e) => setSupplierNif(e.target.value)}
-              placeholder="Opcional"
+              required={intracom}
+              placeholder={
+                intracom ? "Ej. NL123456789B01" : "Recomendado (347)"
+              }
             />
+            {!intracom ? (
+              <p className="mt-1 text-xs text-ink-muted">
+                Sin NIF el gasto no entra en el borrador 347.
+              </p>
+            ) : null}
           </div>
         </div>
 

@@ -91,6 +91,10 @@ function validate(data: ReturnType<typeof parseExpenseForm>) {
   }
   if (data.subtotal < 0) return "La base no puede ser negativa";
   if (data.vatAmount < 0) return "El IVA no puede ser negativo";
+  const nif = String(data.supplierNif ?? "").trim();
+  if (data.vatOperationType === "INTRACOMUNITARIA" && !nif) {
+    return "En compras intracomunitarias el NIF-IVA del proveedor es obligatorio (modelo 349)";
+  }
   return null;
 }
 
