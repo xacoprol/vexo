@@ -1,6 +1,10 @@
 import { endOfYear, startOfYear } from "date-fns";
 import { prisma } from "@/lib/prisma";
 import { fiscalFilingPeriodKey } from "@/lib/gemini-fiscal-filing";
+import {
+  sumAmortizationYtd,
+  type AmortizationPeriodInput,
+} from "@/lib/investment-amortization";
 
 export type FiscalQuarter = 1 | 2 | 3 | 4;
 
@@ -670,13 +674,14 @@ function buildModelo130(
 /**
  * Cadena del 130: YTD (1 ene → fin T). Casilla 05 = pagos presentados previos
  * si existen; si no, resultados positivos de borradores previos.
+ * Amortizaciones: prorrateo por mes de alta hasta fin de cada T.
  */
 async function buildModelo130Chain(
   year: number,
   invoices: InvoiceRow[],
   expenses: ExpenseRow[],
   marketplace: MarketplaceRow[],
-  amortizationYearTotal: number,
+  amortizationRows: AmortizationPeriodInput[],
   presentedPriorByQuarter: Partial<Record<FiscalQuarter, number>>
 ): Promise<Record<FiscalQuarter, ModeloBoxes>> {
   const yearStart = yearRange(year).from;
@@ -686,7 +691,7 @@ async function buildModelo130Chain(
   for (const q of [1, 2, 3, 4] as FiscalQuarter[]) {
     const { to } = quarterRange(year, q);
     const agg = aggregateRows(invoices, expenses, marketplace, yearStart, to);
-    const amortYtd = round2((amortizationYearTotal * q) / 4);
+    const amortYtd = sumAmortizationYtd(amortizationRows, year, q);
     const draft = buildModelo130(
       agg.issued.incomeBase,
       round2(agg.expenses.base + amortYtd),
@@ -943,12 +948,21 @@ async function fetchFiscalRows(from: Date, to: Date) {
   };
 }
 
-async function fetchYearAmortizationTotal(year: number): Promise<number> {
+async function fetchYearAmortizationRows(
+  year: number
+): Promise<AmortizationPeriodInput[]> {
   const rows = await prisma.investmentAmortization.findMany({
     where: { year },
-    select: { amount: true },
+    select: {
+      amount: true,
+      asset: { select: { purchaseDate: true, startYear: true } },
+    },
   });
-  return round2(rows.reduce((s, r) => s + Number(r.amount), 0));
+  return rows.map((r) => ({
+    yearAmount: Number(r.amount),
+    purchaseDate: r.asset.purchaseDate,
+    startYear: r.asset.startYear,
+  }));
 }
 
 async function fetchPresented130Results(
@@ -996,13 +1010,13 @@ export async function buildFiscalPeriodSummary(
   const [
     { invoices, expenses, marketplace, assets },
     priorYearCompensation,
-    amortYear,
+    amortRows,
     presented130,
     presented303,
   ] = await Promise.all([
     fetchFiscalRows(yearStart, to),
     getPriorYear303Compensation(year),
-    fetchYearAmortizationTotal(year),
+    fetchYearAmortizationRows(year),
     fetchPresented130Results(year),
     fetchPresented303Carries(year),
   ]);
@@ -1020,7 +1034,7 @@ export async function buildFiscalPeriodSummary(
     invoices,
     expenses,
     marketplace,
-    amortYear,
+    amortRows,
     presented130
   );
   const chain303 = buildModelo303Chain(
@@ -1033,9 +1047,7 @@ export async function buildFiscalPeriodSummary(
     assets
   );
 
-  const amortYtd = round2((amortYear * quarter) / 4);
   const modelo130 = chain130[quarter];
-  void amortYtd;
 
   return {
     year,
@@ -1061,13 +1073,13 @@ export async function buildFiscalYearSummary(
   const [
     { invoices, expenses, marketplace, assets },
     priorYearCompensation,
-    amortYear,
+    amortRows,
     presented130,
     presented303,
   ] = await Promise.all([
     fetchFiscalRows(from, to),
     getPriorYear303Compensation(year),
-    fetchYearAmortizationTotal(year),
+    fetchYearAmortizationRows(year),
     fetchPresented130Results(year),
     fetchPresented303Carries(year),
   ]);
@@ -1085,7 +1097,7 @@ export async function buildFiscalYearSummary(
     invoices,
     expenses,
     marketplace,
-    amortYear,
+    amortRows,
     presented130
   );
   const chain303 = buildModelo303Chain(
@@ -1110,7 +1122,7 @@ export async function buildFiscalYearSummary(
         0,
         assets
       );
-      const amortYtd = round2((amortYear * q) / 4);
+      const amortYtd = sumAmortizationYtd(amortRows, year, q);
       return {
         quarter: q,
         label: `${q}T ${year}`,
