@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { formatCurrency } from "@/lib/calculations";
+import { prisma } from "@/lib/prisma";
 import {
   buildFiscalPeriodSummary,
   type FiscalQuarter,
@@ -20,7 +21,7 @@ export default async function FiscalGuidePage() {
   const target = filingTargetPeriod(now);
   const year = target.year;
   const quarter = target.quarter as FiscalQuarter;
-  const [summary, draft349, presented303, presented130, presented349, pendingPay] =
+  const [summary, draft349, presented303, presented130, presented349, pendingPay, aeatOpenCount] =
     await Promise.all([
       buildFiscalPeriodSummary(year, quarter),
       buildModelo349Draft(year, quarter),
@@ -28,6 +29,7 @@ export default async function FiscalGuidePage() {
       getPresentedFiling("130", year, quarter),
       getPresentedFiling("349", year, quarter),
       listPendingLiquidaciones(),
+      prisma.aeatCommunication.count({ where: { status: "ABIERTA" } }),
     ]);
   const deadlines = buildUpcomingDeadlines(now);
 
@@ -102,6 +104,18 @@ export default async function FiscalGuidePage() {
               .map((p) => `${p.modelType} ${p.periodLabel}`)
               .join(" · "),
       href: "/fiscal/payments",
+    },
+    {
+      ok: aeatOpenCount === 0,
+      label:
+        aeatOpenCount === 0
+          ? "AEAT sin plazos abiertos"
+          : `${aeatOpenCount} comunicación(es) AEAT abiertas`,
+      hint:
+        aeatOpenCount === 0
+          ? "Sin requerimientos pendientes en Vexo (mira también DEHú)"
+          : "Registra plazo y marca respondida cuando acabes",
+      href: "/fiscal/aeat",
     },
   ];
 

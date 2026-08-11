@@ -497,19 +497,26 @@ model TaxPayment {
 // ─── Fiscal: comunicaciones AEAT ─────────────────────────────────────────────
 
 model AeatCommunication {
-  id         String   @id @default(cuid())
-  occurredAt DateTime @default(now())
+  id          String    @id @default(cuid())
+  occurredAt  DateTime  @default(now())
   /// NOTIFICACION | REQUERIMIENTO | COMUNICACION | OTRO
-  kind       String   @default("COMUNICACION")
-  subject    String
-  summary    String?
-  documentId String?
-  document   FiscalDocument? @relation(fields: [documentId], references: [id], onDelete: SetNull)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  kind        String    @default("COMUNICACION")
+  subject     String
+  summary     String?
+  /// Plazo de respuesta (DEHú / requerimiento)
+  dueAt       DateTime?
+  /// ABIERTA | RESPONDIDA | CERRADA
+  status      String    @default("ABIERTA")
+  respondedAt DateTime?
+  documentId  String?
+  document    FiscalDocument? @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   @@index([occurredAt])
   @@index([kind])
+  @@index([dueAt])
+  @@index([status])
 }
 
 // ─── Fiscal: log de emails de plazo ──────────────────────────────────────────

@@ -223,13 +223,19 @@ export function RecurringForm({
           </select>
         </div>
         <div className="flex items-end pb-2">
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              name="cashAccounting"
-              defaultChecked={template?.cashAccounting ?? false}
-            />
-            Criterio de caja
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                name="cashAccounting"
+                defaultChecked={template?.cashAccounting ?? false}
+              />
+              Criterio de caja (dato guardado)
+            </span>
+            <span className="text-xs text-ink-muted">
+              El fiscal de Vexo usa fecha de factura, no de cobro. No actives
+              esto hasta que el 303 por cobros esté implementado.
+            </span>
           </label>
         </div>
         <div className="sm:col-span-2">

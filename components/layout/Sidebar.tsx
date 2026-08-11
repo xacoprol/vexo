@@ -33,7 +33,7 @@ function Icon({
   );
 }
 
-type NavChild = { href: string; label: string };
+type NavChild = { href: string; label: string; heading?: boolean };
 
 type NavItem = {
   href: string;
@@ -125,21 +125,24 @@ const NAV: NavItem[] = [
     children: [
       { href: "/fiscal", label: "Resumen" },
       { href: "/fiscal/guide", label: "Guía presentación" },
+      { href: "#", label: "Operativa", heading: true },
       { href: "/fiscal/expenses", label: "Gastos" },
-      { href: "/fiscal/income", label: "Ingresos marketplace" },
-      { href: "/fiscal/303", label: "Modelo 303" },
-      { href: "/fiscal/130", label: "Modelo 130" },
-      { href: "/fiscal/390", label: "Modelo 390" },
-      { href: "/fiscal/347", label: "Modelo 347" },
-      { href: "/fiscal/349", label: "Modelo 349" },
-      { href: "/fiscal/036", label: "Censo 036" },
-      { href: "/fiscal/filings", label: "Presentados" },
-      { href: "/fiscal/archive", label: "Archivo" },
+      { href: "/fiscal/income", label: "Marketplace" },
       { href: "/fiscal/books", label: "Libros registro" },
       { href: "/fiscal/assets", label: "Bienes inversión" },
-      { href: "/fiscal/payments", label: "Liquidaciones" },
-      { href: "/fiscal/aeat", label: "AEAT" },
+      { href: "#", label: "Modelos", heading: true },
+      { href: "/fiscal/303", label: "303 IVA" },
+      { href: "/fiscal/130", label: "130 IRPF" },
+      { href: "/fiscal/349", label: "349 Intracom" },
+      { href: "/fiscal/390", label: "390 Anual IVA" },
+      { href: "/fiscal/347", label: "347 Terceros" },
+      { href: "/fiscal/036", label: "Censo 036" },
       { href: "/fiscal/annual", label: "Resumen anual" },
+      { href: "#", label: "Cumplimiento", heading: true },
+      { href: "/fiscal/filings", label: "Presentados" },
+      { href: "/fiscal/payments", label: "Pagos / NRC" },
+      { href: "/fiscal/archive", label: "Archivo" },
+      { href: "/fiscal/aeat", label: "Comunicaciones AEAT" },
     ],
   },
   {
@@ -280,7 +283,17 @@ function NavItemRow({
 
       {showInline ? (
         <div className="mt-0.5 ml-3 space-y-0.5 border-l border-white/15 pl-2">
-          {item.children!.map((child) => {
+          {item.children!.map((child, idx) => {
+            if (child.heading) {
+              return (
+                <p
+                  key={`h-${child.label}-${idx}`}
+                  className="px-3 pb-0.5 pt-2 text-[10px] font-medium uppercase tracking-wide text-white/35"
+                >
+                  {child.label}
+                </p>
+              );
+            }
             const active = childActive(pathname, child.href);
             return (
               <Link
@@ -301,11 +314,21 @@ function NavItemRow({
       ) : null}
 
       {showFlyout ? (
-        <div className="absolute left-full top-0 z-[60] ml-2 hidden w-44 rounded-lg border border-white/10 bg-sidebar py-1.5 shadow-xl lg:block">
+        <div className="absolute left-full top-0 z-[60] ml-2 hidden w-48 rounded-lg border border-white/10 bg-sidebar py-1.5 shadow-xl lg:block">
           <p className="px-3 pb-1 pt-1 text-[10px] font-medium uppercase tracking-wide text-white/40">
             {item.label}
           </p>
-          {item.children!.map((child) => {
+          {item.children!.map((child, idx) => {
+            if (child.heading) {
+              return (
+                <p
+                  key={`fh-${child.label}-${idx}`}
+                  className="px-3 pb-0.5 pt-2 text-[10px] font-medium uppercase tracking-wide text-white/35"
+                >
+                  {child.label}
+                </p>
+              );
+            }
             const active = childActive(pathname, child.href);
             return (
               <Link

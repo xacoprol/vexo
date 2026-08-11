@@ -49,12 +49,26 @@ export default async function ExpensesPage({
 
   const total = await prisma.expense.count({ where });
   const meta = paginationMeta(total, page);
-  const expenses = await prisma.expense.findMany({
-    where,
-    orderBy: [{ issueDate: "desc" }, { createdAt: "desc" }],
-    skip: meta.skip,
-    take: meta.take,
-  });
+  const [expenses, missingNifCount, missingIntracomNif] = await Promise.all([
+    prisma.expense.findMany({
+      where,
+      orderBy: [{ issueDate: "desc" }, { createdAt: "desc" }],
+      skip: meta.skip,
+      take: meta.take,
+    }),
+    prisma.expense.count({
+      where: {
+        OR: [{ supplierNif: null }, { supplierNif: "" }],
+        vatOperationType: "INTERIOR",
+      },
+    }),
+    prisma.expense.count({
+      where: {
+        OR: [{ supplierNif: null }, { supplierNif: "" }],
+        vatOperationType: "INTRACOMUNITARIA",
+      },
+    }),
+  ]);
 
   const monthSections: { key: string; label: string; items: typeof expenses }[] =
     [];
@@ -90,6 +104,18 @@ export default async function ExpensesPage({
       </div>
 
       <ExpenseDropZone />
+
+      {missingNifCount + missingIntracomNif > 0 ? (
+        <p className="rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
+          {missingNifCount > 0
+            ? `${missingNifCount} gasto(s) interior(es) sin NIF (afectan al 347). `
+            : null}
+          {missingIntracomNif > 0
+            ? `${missingIntracomNif} intracom sin NIF-IVA (afectan al 349). `
+            : null}
+          Complétalos antes de presentar.
+        </p>
+      ) : null}
 
       <Suspense fallback={<InlineSkeleton />}>
         <LiveSearch placeholder="Buscar proveedor, NIF, nº factura o concepto…" />
