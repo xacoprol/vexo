@@ -8,6 +8,7 @@ import {
   parseRegisterBookExcel,
   type RegisterBookType,
 } from "@/lib/register-book-import";
+import { regenerateRegisterBooksForYear } from "@/lib/register-book-build";
 import { createFiscalDocument, blobConfigured } from "@/lib/fiscal-blob";
 import { buildLinearAmortization } from "@/lib/investment-amortization";
 
@@ -15,6 +16,32 @@ function revalidateBooks() {
   revalidatePath("/fiscal/books");
   revalidatePath("/fiscal/assets");
   revalidatePath("/fiscal/archive");
+}
+
+export async function regenerateRegisterBooksFromApp(
+  year: number
+): Promise<
+  | { ok: true; summary: string }
+  | { ok: false; error: string }
+> {
+  await requireAuth();
+  if (!Number.isFinite(year) || year < 2000 || year > 2100) {
+    return { ok: false, error: "Año no válido" };
+  }
+
+  try {
+    const { books } = await regenerateRegisterBooksForYear(year);
+    const summary = books
+      .map((b) => `${b.bookType}: ${b.lines}`)
+      .join(" · ");
+    revalidateBooks();
+    return { ok: true, summary: `${year} → ${summary}` };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Error al generar los libros",
+    };
+  }
 }
 
 export async function importRegisterBookFromUpload(

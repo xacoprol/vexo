@@ -2,6 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { formatCurrency, formatDate } from "@/lib/calculations";
 import { BookImportForm } from "@/components/fiscal/BookImportForm";
+import { BookGenerateForm } from "@/components/fiscal/BookGenerateForm";
 import { deleteRegisterBook } from "./actions";
 import { fiscalDocumentHref } from "@/lib/fiscal-blob";
 
@@ -19,6 +20,7 @@ export default async function FiscalBooksPage({
   const sp = await searchParams;
   const year = parseInt(sp.year ?? "", 10);
   const type = (sp.type ?? "").toUpperCase();
+  const defaultYear = new Date().getFullYear();
 
   const books = await prisma.registerBook.findMany({
     where: {
@@ -46,6 +48,7 @@ export default async function FiscalBooksPage({
       ).map((b) => b.year)
     ),
   ];
+  if (!years.includes(defaultYear)) years.unshift(defaultYear);
 
   const active = books[0] ?? null;
 
@@ -59,11 +62,21 @@ export default async function FiscalBooksPage({
           Libros registro
         </h1>
         <p className="mt-1 text-sm text-ink-muted">
-          Ingresos, gastos y bienes de inversión (importación Excel gestoría)
+          Generados desde tus facturas, marketplace y gastos. También puedes
+          importar un Excel histórico.
         </p>
       </div>
 
-      <BookImportForm />
+      <BookGenerateForm defaultYear={Number.isFinite(year) ? year : defaultYear} />
+
+      <details className="card-panel px-4 py-3">
+        <summary className="cursor-pointer text-sm font-medium text-ink-muted">
+          Importar Excel (histórico gestoría)
+        </summary>
+        <div className="mt-3">
+          <BookImportForm />
+        </div>
+      </details>
 
       <div className="flex flex-wrap gap-2 text-sm">
         <Link
@@ -96,7 +109,8 @@ export default async function FiscalBooksPage({
 
       {books.length === 0 ? (
         <p className="card-panel px-4 py-8 text-center text-sm text-ink-muted">
-          No hay libros importados. Sube los Excel de la gestoría.
+          Aún no hay libros. Pulsa «Generar libros del año» con tus datos de
+          Vexo.
         </p>
       ) : (
         <div className="space-y-6">
@@ -119,17 +133,28 @@ export default async function FiscalBooksPage({
                           rel="noreferrer"
                           className="text-accent underline"
                         >
-                          Descargar original
+                          Original importado
                         </a>
                       </>
                     ) : null}
                   </p>
                 </div>
-                <form action={deleteRegisterBook.bind(null, book.id)}>
-                  <button type="submit" className="text-xs text-danger hover:underline">
-                    Borrar libro
-                  </button>
-                </form>
+                <div className="flex items-center gap-3">
+                  <a
+                    href={`/api/fiscal/books/${book.id}/export`}
+                    className="text-xs text-accent hover:underline"
+                  >
+                    Descargar Excel
+                  </a>
+                  <form action={deleteRegisterBook.bind(null, book.id)}>
+                    <button
+                      type="submit"
+                      className="text-xs text-danger hover:underline"
+                    >
+                      Borrar
+                    </button>
+                  </form>
+                </div>
               </div>
               <table className="w-full min-w-[48rem] text-sm">
                 <thead className="border-b border-line bg-line/20 text-xs uppercase text-ink-muted">
