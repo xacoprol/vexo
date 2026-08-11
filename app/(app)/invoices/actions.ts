@@ -24,6 +24,7 @@ import {
   invoiceVatCountryWarning,
   parseOperationKey347,
 } from "@/lib/invoice-fiscal";
+import { applyVerifactuSeal } from "@/lib/verifactu-seal";
 import { Prisma } from "@prisma/client";
 
 export type DocFormState = { error?: string };
@@ -155,6 +156,7 @@ export async function createInvoice(
       return { error: "No se pudo reservar un número de factura válido" };
     }
     await createInvoiceLines(invoice.id, totals.lines);
+    await applyVerifactuSeal(prisma, invoice.id);
 
     revalidatePath("/invoices");
     redirect(`/invoices/${invoice.id}`);
@@ -584,6 +586,7 @@ export async function createHistoricalInvoice(
       });
     }
 
+    await applyVerifactuSeal(prisma, invoice.id);
     await syncInvoiceSeriesNextNumber(prisma, num.seriesId);
 
     revalidatePath("/invoices");

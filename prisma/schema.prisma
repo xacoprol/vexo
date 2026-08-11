@@ -219,12 +219,15 @@ model Invoice {
   recurringTemplateId String?
   recurringTemplate   RecurringInvoiceTemplate? @relation(fields: [recurringTemplateId], references: [id])
 
-  // Veri*Factu readiness (nullable, unused for now)
-  verifactuHash     String?
-  verifactuSentAt   DateTime?
-  previousInvoiceId String?
-  previousInvoice   Invoice?  @relation("InvoiceChain", fields: [previousInvoiceId], references: [id])
-  nextInChain       Invoice[] @relation("InvoiceChain")
+  // Veri*Factu (RRSIF) — hash encadenado + QR; remisión AEAT pendiente
+  verifactuHash          String?
+  verifactuPreviousHash  String?
+  verifactuRecordAt      DateTime?
+  verifactuQrUrl         String?
+  verifactuSentAt        DateTime?
+  previousInvoiceId      String?
+  previousInvoice        Invoice?  @relation("InvoiceChain", fields: [previousInvoiceId], references: [id])
+  nextInChain            Invoice[] @relation("InvoiceChain")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

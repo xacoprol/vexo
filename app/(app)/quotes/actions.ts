@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/session";
 import { calculateDocument, type LineInput } from "@/lib/calculations";
 import { allocateQuoteNumber, allocateInvoiceNumber } from "@/lib/numbering";
+import { applyVerifactuSeal } from "@/lib/verifactu-seal";
 
 export type DocFormState = { error?: string };
 
@@ -227,6 +228,8 @@ export async function convertQuoteToInvoice(quoteId: string) {
       },
     });
   }
+
+  await applyVerifactuSeal(prisma, invoice.id);
 
   await prisma.quote.update({
     where: { id: quoteId },

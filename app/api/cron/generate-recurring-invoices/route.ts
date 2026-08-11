@@ -4,6 +4,7 @@ import { calculateDocument, formatCurrency } from "@/lib/calculations";
 import { allocateInvoiceNumber } from "@/lib/numbering";
 import { advanceDate, isZeroVatOperation, type Frequency } from "@/lib/recurring";
 import { isSmtpConfigured, sendMail } from "@/lib/mail";
+import { applyVerifactuSeal } from "@/lib/verifactu-seal";
 import { parseISO, isValid } from "date-fns";
 
 /** Clave de día local YYYY-MM-DD (evita desfases UTC en comparaciones) */
@@ -192,6 +193,8 @@ async function runGeneration(asOf: Date) {
             },
           });
         }
+
+        await applyVerifactuSeal(prisma, invoice.id);
 
         const nextRun = advanceDate(
           issueDate,

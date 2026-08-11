@@ -57,6 +57,9 @@ export type InvoicePdfProps = {
   specialDiscountAmount?: number;
   earlyPaymentDiscountPct?: number;
   earlyPaymentDiscountAmount?: number;
+  /** Veri*Factu: data URL PNG del QR tributario (solo facturas). */
+  verifactuQrDataUrl?: string | null;
+  verifactuHash?: string | null;
 };
 
 /**
@@ -78,7 +81,7 @@ const R = 6; // radio realista en PDF (12 se ve mal / se “corta”)
 const styles = StyleSheet.create({
   page: {
     paddingTop: 36,
-    paddingBottom: 52,
+    paddingBottom: 120,
     paddingHorizontal: 40,
     fontSize: 9,
     fontFamily: "Helvetica",
@@ -438,6 +441,29 @@ const styles = StyleSheet.create({
     fontSize: 7,
     color: MUTED,
   },
+  verifactuBlock: {
+    position: "absolute",
+    bottom: 52,
+    right: 40,
+    width: 95,
+    alignItems: "center",
+  },
+  verifactuLabel: {
+    fontSize: 6,
+    color: MUTED,
+    marginBottom: 3,
+    textAlign: "center",
+  },
+  verifactuQr: {
+    width: 85,
+    height: 85,
+  },
+  verifactuHash: {
+    marginTop: 3,
+    fontSize: 5,
+    color: MUTED,
+    textAlign: "center",
+  },
 });
 
 function num(n: number, digits = 2): string {
@@ -526,6 +552,8 @@ export function InvoicePdfDocument(props: InvoicePdfProps) {
     specialDiscountAmount = 0,
     earlyPaymentDiscountPct = 0,
     earlyPaymentDiscountAmount = 0,
+    verifactuQrDataUrl,
+    verifactuHash,
   } = props;
 
   const vatRate = primaryVatRate(lines);
@@ -722,6 +750,19 @@ export function InvoicePdfDocument(props: InvoicePdfProps) {
           </View>
         </View>
 
+        {title.toUpperCase() === "FACTURA" && verifactuQrDataUrl ? (
+          <View style={styles.verifactuBlock} fixed>
+            <Text style={styles.verifactuLabel}>QR tributario:</Text>
+            {/* eslint-disable-next-line jsx-a11y/alt-text */}
+            <Image src={verifactuQrDataUrl} style={styles.verifactuQr} />
+            {verifactuHash ? (
+              <Text style={styles.verifactuHash}>
+                {verifactuHash.slice(0, 16)}…
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
+
         <View style={styles.footer} fixed>
           <View style={styles.footerLegal}>
             <Text style={styles.footerLine}>
@@ -730,9 +771,9 @@ export function InvoicePdfDocument(props: InvoicePdfProps) {
             </Text>
             {title.toUpperCase() === "FACTURA" ? (
               <Text style={styles.footerLine}>
-                Factura no remitida al sistema Veri*Factu de la AEAT. Documento
-                emitido con software de facturación pendiente de adaptación
-                plena al RRSIF (obligación autónomos: 1 jul 2027).
+                {verifactuQrDataUrl
+                  ? "Registro Veri*Factu local (modalidad no verificable): huella SHA-256 encadenada y QR tributario AEAT. Aún no se remite en línea a la sede. Obligación plena autónomos: 1 jul 2027."
+                  : "Factura no remitida al sistema Veri*Factu de la AEAT. Documento emitido con software de facturación pendiente de adaptación plena al RRSIF (obligación autónomos: 1 jul 2027)."}
               </Text>
             ) : null}
           </View>

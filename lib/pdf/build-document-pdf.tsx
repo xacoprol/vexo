@@ -1,5 +1,6 @@
 import React from "react";
 import { renderToBuffer } from "@react-pdf/renderer";
+import QRCode from "qrcode";
 import { prisma } from "@/lib/prisma";
 import { calculateDocument, formatDate } from "@/lib/calculations";
 import { InvoicePdfDocument } from "@/lib/pdf/InvoiceDocument";
@@ -7,6 +8,7 @@ import {
   quotePdfFilename,
   quotePdfTitle,
 } from "@/lib/quote-kind";
+import { buildVerifactuQrUrl, formatFechaExpedicion } from "@/lib/verifactu";
 
 export async function buildQuotePdf(
   quoteId: string
@@ -113,6 +115,26 @@ export async function buildInvoicePdf(
   ]);
   if (!invoice || !settings) throw new Error("Factura no encontrada");
 
+  let verifactuQrDataUrl: string | null = null;
+  const qrUrl =
+    invoice.verifactuQrUrl ||
+    (settings.nif && invoice.verifactuHash
+      ? buildVerifactuQrUrl({
+          nif: settings.nif,
+          numSerie: invoice.fullNumber,
+          fechaExpedicion: formatFechaExpedicion(invoice.issueDate),
+          importeTotal: Number(invoice.total),
+        })
+      : null);
+  if (qrUrl) {
+    verifactuQrDataUrl = await QRCode.toDataURL(qrUrl, {
+      errorCorrectionLevel: "M",
+      margin: 2,
+      width: 240,
+      color: { dark: "#1A1528", light: "#FFFFFF" },
+    });
+  }
+
   const doc = (
     <InvoicePdfDocument
       title="FACTURA"
@@ -164,6 +186,8 @@ export async function buildInvoicePdf(
       bankName={settings.bankName}
       bizumPhone={settings.bizumPhone}
       showPayment
+      verifactuQrDataUrl={verifactuQrDataUrl}
+      verifactuHash={invoice.verifactuHash}
     />
   );
 

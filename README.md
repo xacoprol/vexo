@@ -52,4 +52,4 @@ Las facturas usan series correlativas sin huecos. No se pueden borrar facturas
 Las facturas se pueden eliminar; si borras la última de la serie, el número
 vuelve a quedar disponible. También puedes anularlas (el número queda
 reservado). Campos preparados para
-Veri*Factu (`verifactuHash`, `previousInvoiceId`, `verifactuSentAt`) sin lógica aún.
+Veri*Factu: huella SHA-256 encadenada + QR tributario en PDF (modalidad no verificable; remisión AEAT pendiente).
