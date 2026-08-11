@@ -239,6 +239,14 @@ export default async function FiscalGuidePage() {
         intracom, prorrateos), revisa con tu gestoría o pregunta aquí antes de
         presentar.
       </p>
+
+      <p className="text-xs text-ink-muted">
+        Recordatorios por email (14 días, 3 días y el día del plazo) → activa en{" "}
+        <Link href="/settings" className="text-accent underline">
+          Ajustes
+        </Link>{" "}
+        y asegúrate de tener el email de la empresa relleno.
+      </p>
     </div>
   );
 }

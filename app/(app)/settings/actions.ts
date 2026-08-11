@@ -85,6 +85,10 @@ export async function updateSettings(
       formData.get("reminderOnOverdue") === "1",
     reminderSubject: String(formData.get("reminderSubject") ?? "").trim(),
     reminderBody: String(formData.get("reminderBody") ?? "").trim(),
+    fiscalReminderEnabled:
+      formData.get("fiscalReminderEnabled") === "on" ||
+      formData.get("fiscalReminderEnabled") === "1",
+    fiscalReminderEmail: String(formData.get("fiscalReminderEmail") ?? "").trim(),
     themeBg: sanitizeHex(
       String(formData.get("themeBg") ?? ""),
       DEFAULT_THEME.themeBg

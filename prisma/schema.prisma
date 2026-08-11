@@ -52,6 +52,11 @@ model CompanySettings {
   reminderSubject    String  @default("Recordatorio: factura {{number}} pendiente")
   reminderBody       String  @default("Hola {{contact}},\n\nLe recordamos que la factura {{number}} por {{remaining}} vence el {{dueDate}}.\n\nUn saludo,\n{{company}}")
 
+  // Recordatorios fiscales (modelos AEAT)
+  fiscalReminderEnabled Boolean @default(true)
+  /// Destino; si vacío usa email de la empresa
+  fiscalReminderEmail   String  @default("")
+
   // Shopify Admin API (ingresos marketplace) — Dev Dashboard 2026+
   shopifyShop          String? // tienda.myshopify.com
   shopifyClientId      String? // Client ID de la app
@@ -500,6 +505,22 @@ model AeatCommunication {
 
   @@index([occurredAt])
   @@index([kind])
+}
+
+// ─── Fiscal: log de emails de plazo ──────────────────────────────────────────
+
+model FiscalReminderLog {
+  id        String   @id @default(cuid())
+  /// e.g. 303:2026:3 | 390:2025
+  periodKey String
+  /// 14d | 3d | due
+  kind      String
+  toEmail   String
+  subject   String
+  sentAt    DateTime @default(now())
+
+  @@unique([periodKey, kind])
+  @@index([sentAt])
 }
 
 // ─── Fiscal: ingresos marketplace (Amazon / Shopify) ─────────────────────────

@@ -471,6 +471,43 @@ export function SettingsForm({ settings, invoiceSeries, quoteSeries }: Props) {
 
         <section className="card-panel space-y-4 p-6">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-muted">
+            Recordatorios fiscales (AEAT)
+          </h2>
+          <p className="text-xs text-ink-muted">
+            Email automático 14 días antes, 3 días antes y el día del plazo
+            (303, 130, 349, 390, 347). No se envía si el modelo ya está en
+            Presentados. Cron diario a las 09:00 UTC.
+          </p>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              name="fiscalReminderEnabled"
+              value="1"
+              defaultChecked={settings.fiscalReminderEnabled ?? true}
+              className="rounded border-line"
+            />
+            Activar recordatorios fiscales
+          </label>
+          <div>
+            <label className="label" htmlFor="fiscalReminderEmail">
+              Email destino (opcional)
+            </label>
+            <input
+              id="fiscalReminderEmail"
+              name="fiscalReminderEmail"
+              type="email"
+              className="input"
+              placeholder={settings.email || "usa el email de la empresa"}
+              defaultValue={settings.fiscalReminderEmail ?? ""}
+            />
+            <p className="mt-1 text-xs text-ink-muted">
+              Si lo dejas vacío, se usa el email de la empresa de arriba.
+            </p>
+          </div>
+        </section>
+
+        <section className="card-panel space-y-4 p-6">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-muted">
             Recordatorios de cobro
           </h2>
           <p className="text-xs text-ink-muted">
