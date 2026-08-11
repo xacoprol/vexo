@@ -37,6 +37,8 @@ export type ParsedInvoiceDraft = {
   irpfAmount: number;
   total: number;
   vatOperationType: string;
+  /** Clave 347 (A/B); por defecto B en import. */
+  operationKey347?: string | null;
   paymentMethod: string | null;
   notes: string | null;
   /** Si el documento indica pagada / cobrada */

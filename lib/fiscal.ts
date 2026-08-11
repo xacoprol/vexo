@@ -102,7 +102,10 @@ type ExpenseRow = {
   vatRate: number;
   total: unknown;
   vatOperationType: string | null;
-  /** Si false: no computa en casilla 02 del 130; sí puede contar en IVA/AIB del 303. */
+  /**
+   * Si false: no computa en IRPF (130) ni en IVA soportado interior (303).
+   * Las AIB (intracom) se declaran siempre en el 303 (autorrepercusión).
+   */
   deductible: boolean;
 };
 
@@ -113,6 +116,42 @@ type MarketplaceRow = {
   vatRate: number;
   vatStatus: string | null;
 };
+
+/** IVA de bienes de inversión en el trimestre de compra → casillas 28/29 del 303. */
+type AssetVatRow = {
+  purchaseDate: Date | null;
+  base: unknown;
+  vatAmount: unknown;
+};
+
+function parseFilingBoxes(
+  raw: unknown
+): { code: string; value: number }[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((b) => {
+    const o = b as Record<string, unknown>;
+    return {
+      code: String(o.code ?? "").trim(),
+      value: Number(o.value) || 0,
+    };
+  });
+}
+
+/** Saldo a compensar que arrastra al siguiente periodo desde un 303 presentado. */
+function carryFromPresented303(row: {
+  result: unknown;
+  boxes: unknown;
+}): number {
+  const result = Number(row.result);
+  const boxes = parseFilingBoxes(row.boxes);
+  const box87 = boxes.find((b) => b.code === "87");
+  if (box87) {
+    return round2(
+      Math.max(0, box87.value) + (result < 0 ? Math.max(0, -result) : 0)
+    );
+  }
+  return round2(Math.max(0, -result));
+}
 
 function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
@@ -408,15 +447,18 @@ function buildModelo303(input: Modelo303Input): ModeloBoxes {
 }
 
 /**
- * Cadena trimestral del 303: casilla 110 arrastra saldos a compensar
- * (resultados negativos previos del año + semilla de años anteriores).
+ * Cadena trimestral del 303: casilla 110 arrastra saldos a compensar.
+ * Si hay 303 presentado del trimestre, el arrastre al siguiente usa ese
+ * saldo (casilla 87 + resultado negativo), no el borrador.
  */
 function buildModelo303Chain(
   year: number,
   invoices: InvoiceRow[],
   expenses: ExpenseRow[],
   marketplace: MarketplaceRow[],
-  priorYearCompensation = 0
+  priorYearCompensation = 0,
+  presentedCarryByQuarter: Partial<Record<FiscalQuarter, number>> = {},
+  assets: AssetVatRow[] = []
 ): Record<FiscalQuarter, ModeloBoxes> {
   let pending = round2(Math.max(0, priorYearCompensation));
   const out = {} as Record<FiscalQuarter, ModeloBoxes>;
@@ -429,12 +471,21 @@ function buildModelo303Chain(
       marketplace,
       from,
       to,
-      pending
+      pending,
+      assets
     );
     out[q] = agg.modelo303;
-    pending = round2(
-      Math.max(0, agg.modelo303.carryForward ?? Math.max(0, -agg.modelo303.result))
-    );
+    const presentedCarry = presentedCarryByQuarter[q];
+    if (presentedCarry != null && Number.isFinite(presentedCarry)) {
+      pending = round2(Math.max(0, presentedCarry));
+    } else {
+      pending = round2(
+        Math.max(
+          0,
+          agg.modelo303.carryForward ?? Math.max(0, -agg.modelo303.result)
+        )
+      );
+    }
   }
 
   return out;
@@ -661,7 +712,8 @@ function aggregateRows(
   marketplace: MarketplaceRow[],
   from: Date,
   to: Date,
-  priorCompensation303 = 0
+  priorCompensation303 = 0,
+  assets: AssetVatRow[] = []
 ): {
   issued: FiscalPeriodSummary["issued"];
   expenses: FiscalPeriodSummary["expenses"];
@@ -671,6 +723,9 @@ function aggregateRows(
   const invs = invoices.filter((i) => inRange(i.issueDate, from, to));
   const exps = expenses.filter((e) => inRange(e.issueDate, from, to));
   const mkts = marketplace.filter((m) => inRange(m.issueDate, from, to));
+  const assetRows = assets.filter(
+    (a) => a.purchaseDate != null && inRange(a.purchaseDate, from, to)
+  );
 
   const vatMap = new Map<number, VatBucket>();
   let baseExenta = 0;
@@ -754,21 +809,26 @@ function aggregateRows(
     const sub = Number(e.subtotal);
     const vat = Number(e.vatAmount);
     const tot = Number(e.total);
-    const irpfOk = e.deductible !== false;
-    if (irpfOk) {
+    const deductibleOk = e.deductible !== false;
+    if (deductibleOk) {
       expenseBase = round2(expenseBase + sub);
       expenseTotal = round2(expenseTotal + tot);
     }
-    // IVA 303: siempre (incl. AIB), aunque no compute en IRPF
+    // AIB: siempre en 303 (autorrepercusión). Interior: solo si deducible.
     if (isExpenseIntracom(e.vatOperationType)) {
       aibBase = round2(aibBase + sub);
       const rate = e.vatRate > 0 ? e.vatRate : 21;
       const quota = vat > 0 ? vat : round2(sub * (rate / 100));
       aibQuota = round2(aibQuota + quota);
-    } else {
+    } else if (deductibleOk) {
       expenseBaseInterior = round2(expenseBaseInterior + sub);
       expenseVatInterior = round2(expenseVatInterior + vat);
     }
+  }
+
+  for (const a of assetRows) {
+    expenseBaseInterior = round2(expenseBaseInterior + Number(a.base));
+    expenseVatInterior = round2(expenseVatInterior + Number(a.vatAmount));
   }
 
   return {
@@ -830,7 +890,7 @@ const invoiceSelect = {
 } as const;
 
 async function fetchFiscalRows(from: Date, to: Date) {
-  const [invoices, expenses, marketplace] = await Promise.all([
+  const [invoices, expenses, marketplace, assets] = await Promise.all([
     prisma.invoice.findMany({
       where: {
         status: { not: "ANULADA" },
@@ -864,11 +924,22 @@ async function fetchFiscalRows(from: Date, to: Date) {
         vatStatus: true,
       },
     }),
+    prisma.investmentAsset.findMany({
+      where: {
+        purchaseDate: { gte: from, lte: to },
+      },
+      select: {
+        purchaseDate: true,
+        base: true,
+        vatAmount: true,
+      },
+    }),
   ]);
   return {
     invoices: invoices as InvoiceRow[],
     expenses: expenses as ExpenseRow[],
     marketplace: marketplace as MarketplaceRow[],
+    assets: assets as AssetVatRow[],
   };
 }
 
@@ -896,6 +967,23 @@ async function fetchPresented130Results(
   return out;
 }
 
+/** Carry-forward (casilla 87 + resultado a compensar) de 303 presentados del año. */
+async function fetchPresented303Carries(
+  year: number
+): Promise<Partial<Record<FiscalQuarter, number>>> {
+  const rows = await prisma.fiscalFiling.findMany({
+    where: { modelType: "303", year, quarter: { not: null } },
+    select: { quarter: true, result: true, boxes: true },
+  });
+  const out: Partial<Record<FiscalQuarter, number>> = {};
+  for (const r of rows) {
+    if (r.quarter === 1 || r.quarter === 2 || r.quarter === 3 || r.quarter === 4) {
+      out[r.quarter as FiscalQuarter] = carryFromPresented303(r);
+    }
+  }
+  return out;
+}
+
 /** Agrega facturas emitidas + gastos del trimestre para libros y borradores 303/130. */
 export async function buildFiscalPeriodSummary(
   year: number,
@@ -906,17 +994,27 @@ export async function buildFiscalPeriodSummary(
   // 303 = solo el trimestre; 130 = YTD desde 1 ene (necesita filas de todo el año hasta fin T)
   const yearStart = yearRange(year).from;
   const [
-    { invoices, expenses, marketplace },
+    { invoices, expenses, marketplace, assets },
     priorYearCompensation,
     amortYear,
     presented130,
+    presented303,
   ] = await Promise.all([
     fetchFiscalRows(yearStart, to),
     getPriorYear303Compensation(year),
     fetchYearAmortizationTotal(year),
     fetchPresented130Results(year),
+    fetchPresented303Carries(year),
   ]);
-  const quarterAgg = aggregateRows(invoices, expenses, marketplace, from, to);
+  const quarterAgg = aggregateRows(
+    invoices,
+    expenses,
+    marketplace,
+    from,
+    to,
+    0,
+    assets
+  );
   const chain130 = await buildModelo130Chain(
     year,
     invoices,
@@ -930,7 +1028,9 @@ export async function buildFiscalPeriodSummary(
     invoices,
     expenses,
     marketplace,
-    priorYearCompensation
+    priorYearCompensation,
+    presented303,
+    assets
   );
 
   const amortYtd = round2((amortYear * quarter) / 4);
@@ -959,17 +1059,27 @@ export async function buildFiscalYearSummary(
 ): Promise<FiscalYearSummary> {
   const { from, to } = yearRange(year);
   const [
-    { invoices, expenses, marketplace },
+    { invoices, expenses, marketplace, assets },
     priorYearCompensation,
     amortYear,
     presented130,
+    presented303,
   ] = await Promise.all([
     fetchFiscalRows(from, to),
     getPriorYear303Compensation(year),
     fetchYearAmortizationTotal(year),
     fetchPresented130Results(year),
+    fetchPresented303Carries(year),
   ]);
-  const yearAgg = aggregateRows(invoices, expenses, marketplace, from, to);
+  const yearAgg = aggregateRows(
+    invoices,
+    expenses,
+    marketplace,
+    from,
+    to,
+    0,
+    assets
+  );
   const chain130 = await buildModelo130Chain(
     year,
     invoices,
@@ -983,7 +1093,9 @@ export async function buildFiscalYearSummary(
     invoices,
     expenses,
     marketplace,
-    priorYearCompensation
+    priorYearCompensation,
+    presented303,
+    assets
   );
 
   const quarters: FiscalQuarterSlice[] = ([1, 2, 3, 4] as FiscalQuarter[]).map(
@@ -994,7 +1106,9 @@ export async function buildFiscalYearSummary(
         expenses,
         marketplace,
         range.from,
-        range.to
+        range.to,
+        0,
+        assets
       );
       const amortYtd = round2((amortYear * q) / 4);
       return {
@@ -1038,8 +1152,8 @@ export async function buildFiscalYearSummary(
 }
 
 /**
- * Semilla de casilla 110 al empezar el año: si el 4T del año anterior
- * quedó a compensar (resultado negativo presentado o, en su defecto, borrador).
+ * Semilla de casilla 110 al empezar el año: arrastre del 4T anterior
+ * (casilla 87 + resultado a compensar del presentado, o cadena borrador).
  */
 async function getPriorYear303Compensation(year: number): Promise<number> {
   const prev = year - 1;
@@ -1047,20 +1161,27 @@ async function getPriorYear303Compensation(year: number): Promise<number> {
     where: {
       periodKey: fiscalFilingPeriodKey("303", prev, 4),
     },
-    select: { result: true },
+    select: { result: true, boxes: true },
   });
   if (presented) {
-    const r = Number(presented.result);
-    return round2(Math.max(0, -r));
+    return carryFromPresented303(presented);
   }
   // Sin 4T presentado: calcula cadena 303 del año anterior (sin recursión de compensación)
   const { to } = yearRange(prev);
   const yearStart = yearRange(prev).from;
-  const { invoices, expenses, marketplace } = await fetchFiscalRows(
+  const { invoices, expenses, marketplace, assets } = await fetchFiscalRows(
     yearStart,
     to
   );
-  const chain = buildModelo303Chain(prev, invoices, expenses, marketplace, 0);
+  const chain = buildModelo303Chain(
+    prev,
+    invoices,
+    expenses,
+    marketplace,
+    0,
+    {},
+    assets
+  );
   const last = chain[4];
   return round2(
     last.carryForward ?? Math.max(0, last.result < 0 ? -last.result : 0)

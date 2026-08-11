@@ -63,7 +63,8 @@ export default async function FiscalBooksPage({
         </h1>
         <p className="mt-1 text-sm text-ink-muted">
           Generados desde tus facturas, marketplace y gastos. También puedes
-          importar un Excel histórico.
+          importar un Excel histórico. El libro de gastos incluye todos los
+          asientos; el 130 solo usa los marcados como deducibles.
         </p>
       </div>
 

@@ -80,8 +80,8 @@ export default async function StatsPage({
             Estadísticas
           </h1>
           <p className="mt-1 text-sm text-ink-muted">
-            Ingresos del panel y, si hay modelos presentados, histórico oficial
-            de gestoría
+            Ingresos del panel y, si hay modelos presentados, histórico
+            registrado en Vexo
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -160,7 +160,7 @@ export default async function StatsPage({
               Histórico gestoría ({year})
             </h2>
             <p className="mt-0.5 text-xs text-ink-muted">
-              Totales oficiales de modelos presentados
+              Totales de modelos presentados guardados en Vexo (no son la sede AEAT)
             </p>
           </div>
           <Link
@@ -181,12 +181,12 @@ export default async function StatsPage({
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {[
                 {
-                  label: "Ingresos oficiales",
+                  label: "Ingresos presentados",
                   value: official.incomeBase,
                   hint: official.incomeSource,
                 },
                 {
-                  label: "Gastos oficiales",
+                  label: "Gastos presentados",
                   value: official.expensesBase,
                   hint: official.expensesSource,
                 },

@@ -439,10 +439,13 @@ export type HistoricalInvoiceDraftInput = {
   lines: LineInput[];
   irpfRate?: number;
   vatOperationType?: string;
+  operationKey347?: string | null;
   paymentMethod?: string | null;
   notes?: string | null;
   /** Marcar como cobrada e insertar cobro por el total */
   markAsPaid?: boolean;
+  /** Forzar guardado pese a aviso país/IVA */
+  forceVatMismatch?: boolean;
 };
 
 export type HistoricalInvoiceResult =
@@ -468,12 +471,24 @@ export async function createHistoricalInvoice(
     }
 
     const vatOperationType = parseVatOperationType(data.vatOperationType);
+    const operationKey347 =
+      parseOperationKey347(data.operationKey347) ?? "B";
     const lines = applyVatOperationToLines(
       (data.lines ?? []).filter((l) => l.description?.trim()),
       vatOperationType
     );
     if (!lines.length) {
       return { ok: false, error: "Añade al menos una línea" };
+    }
+
+    const vatWarn = invoiceVatCountryWarning({
+      vatOperationType,
+      clientCountryCode: data.clientCountryCode,
+    });
+    if (vatWarn && !data.forceVatMismatch) {
+      if (vatOperationType === "INTRACOMUNITARIA") {
+        return { ok: false, error: vatWarn };
+      }
     }
 
     const irpfRate = Number(data.irpfRate) || 0;
@@ -546,6 +561,7 @@ export async function createHistoricalInvoice(
           data.paymentMethod?.trim() || "Transferencia",
         notes: noteParts.join(" · ") || null,
         vatOperationType,
+        operationKey347,
         subtotal: totals.subtotal,
         vatAmount: totals.vatAmount,
         irpfRate: totals.irpfRate,

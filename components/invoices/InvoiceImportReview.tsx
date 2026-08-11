@@ -66,6 +66,7 @@ function toQueueItem(row: Row): InvoiceQueueItem {
     irpfAmount: row.irpfAmount,
     total: row.total,
     vatOperationType: row.vatOperationType,
+    operationKey347: row.operationKey347 ?? "B",
     paymentMethod: row.paymentMethod,
     notes: row.notes,
     likelyPaid: row.likelyPaid,
@@ -127,6 +128,7 @@ function toInput(row: Row): HistoricalInvoiceDraftInput {
     lines: ensureLines(row),
     irpfRate: row.irpfRate,
     vatOperationType: row.vatOperationType,
+    operationKey347: row.operationKey347 ?? "B",
     paymentMethod: row.paymentMethod,
     notes: row.notes,
     markAsPaid: row.markAsPaid,
@@ -507,6 +509,22 @@ export function InvoiceImportReview({ series }: Props) {
                         {o.label}
                       </option>
                     ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="label">Clave 347</label>
+                  <select
+                    className="input"
+                    value={row.operationKey347 ?? "B"}
+                    disabled={locked}
+                    onChange={(e) =>
+                      patchRow(row.localId, {
+                        operationKey347: e.target.value,
+                      })
+                    }
+                  >
+                    <option value="B">B — Ventas</option>
+                    <option value="A">A — Compras</option>
                   </select>
                 </div>
                 <div>

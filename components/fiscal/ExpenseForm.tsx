@@ -392,8 +392,9 @@ export function ExpenseForm({ expense }: Props) {
             onChange={(e) => setDeductible(e.target.checked)}
             className="rounded border-line"
           />
-          Deducible en IRPF (casilla 02 del 130). El IVA / AIB del 303 se calcula
-          siempre con este gasto.
+          Deducible IRPF e IVA (130 casilla 02 + 303 soportado). Si lo
+          desmarcas (gasto privado), no entra en IRPF ni como IVA deducible.
+          Las adquisiciones intracomunitarias siguen declarándose en el 303.
         </label>
 
         <div>

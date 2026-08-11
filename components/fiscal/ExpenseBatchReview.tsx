@@ -355,11 +355,15 @@ export function ExpenseBatchReview() {
                   />
                 </div>
                 <div>
-                  <label className="label">NIF</label>
+                  <label className="label">
+                    NIF{intracom ? " / NIF-IVA *" : ""}
+                  </label>
                   <input
                     className="input font-mono"
                     value={row.supplierNif ?? ""}
                     disabled={locked}
+                    required={intracom}
+                    placeholder={intracom ? "Ej. DE123456789" : undefined}
                     onChange={(e) =>
                       patchRow(row.localId, {
                         supplierNif: e.target.value || null,
@@ -464,8 +468,13 @@ export function ExpenseBatchReview() {
                   }
                   className="rounded border-line"
                 />
-                Deducible
+                Deducible IRPF e IVA
               </label>
+              {!row.deductible && !intracom ? (
+                <p className="text-xs text-amber-800">
+                  Sin marcar: no entra en el 130 ni como IVA soportado del 303.
+                </p>
+              ) : null}
             </li>
           );
         })}

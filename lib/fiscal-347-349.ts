@@ -53,6 +53,11 @@ export function normalizeTaxId(raw: string | null | undefined): string {
     .trim();
 }
 
+/** NIF temporales de import (no declarar en 347/349). */
+export function isPlaceholderTaxId(nif: string): boolean {
+  return nif.toUpperCase().startsWith("PEND-");
+}
+
 /** Prefijo país ISO desde NIF-IVA UE (ESB123… → ES). */
 export function countryFromVatId(nif: string): string | null {
   const m = /^([A-Z]{2})/.exec(nif);
@@ -84,7 +89,7 @@ function sortOps(ops: ThirdPartyOp[]): ThirdPartyOp[] {
 
 /**
  * Borrador 347: terceros ES (ventas nacionales + compras interiores)
- * con importe anual ≥ 3.005,06 € (base imponible).
+ * con importe anual ≥ 3.005,06 € (IVA incluido, criterio AEAT habitual).
  */
 export async function buildModelo347Draft(year: number): Promise<Modelo347Draft> {
   const { from, to } = yearRange(year);
@@ -96,7 +101,7 @@ export async function buildModelo347Draft(year: number): Promise<Modelo347Draft>
         vatOperationType: { in: ["SUJETA", "EXENTA"] },
       },
       select: {
-        subtotal: true,
+        total: true,
         operationKey347: true,
         client: { select: { name: true, nif: true, countryCode: true } },
       },
@@ -107,7 +112,7 @@ export async function buildModelo347Draft(year: number): Promise<Modelo347Draft>
         vatOperationType: "INTERIOR",
       },
       select: {
-        subtotal: true,
+        total: true,
         supplierName: true,
         supplierNif: true,
       },
@@ -120,7 +125,7 @@ export async function buildModelo347Draft(year: number): Promise<Modelo347Draft>
 
   for (const inv of invoices) {
     const nif = normalizeTaxId(inv.client.nif);
-    if (!nif) {
+    if (!nif || isPlaceholderTaxId(nif)) {
       skippedSales += 1;
       continue;
     }
@@ -135,13 +140,13 @@ export async function buildModelo347Draft(year: number): Promise<Modelo347Draft>
       name: inv.client.name,
       countryCode: "ES",
       key: key === "A" ? "A" : "B",
-      amount: num(inv.subtotal),
+      amount: num(inv.total),
     });
   }
 
   for (const e of expenses) {
     const nif = normalizeTaxId(e.supplierNif);
-    if (!nif) {
+    if (!nif || isPlaceholderTaxId(nif)) {
       skippedPurchases += 1;
       continue;
     }
@@ -150,7 +155,7 @@ export async function buildModelo347Draft(year: number): Promise<Modelo347Draft>
       name: e.supplierName,
       countryCode: "ES",
       key: "A",
-      amount: num(e.subtotal),
+      amount: num(e.total),
     });
   }
 
@@ -219,7 +224,7 @@ export async function buildModelo349Draft(
 
   for (const inv of invoices) {
     const nif = normalizeTaxId(inv.client.nif);
-    if (!nif) {
+    if (!nif || isPlaceholderTaxId(nif)) {
       skippedEntregas += 1;
       continue;
     }
@@ -237,7 +242,7 @@ export async function buildModelo349Draft(
 
   for (const e of expenses) {
     const nif = normalizeTaxId(e.supplierNif);
-    if (!nif) {
+    if (!nif || isPlaceholderTaxId(nif)) {
       skippedAdquis += 1;
       continue;
     }

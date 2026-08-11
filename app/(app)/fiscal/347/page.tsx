@@ -140,7 +140,7 @@ export default async function Modelo347Page({
       </section>
 
       <p className="text-xs text-ink-muted">
-        Orientativo por NIF y base imponible. Revisa claves A/B en la sede y
+        Orientativo por NIF e importe con IVA incluido (≥ 3.005,06 €). Revisa claves A/B en la sede y
         que los NIF de proveedores estén bien en gastos.
       </p>
     </div>

@@ -7,14 +7,17 @@ import {
 } from "@/lib/fiscal-calendar";
 import { fiscalFilingPeriodKey } from "@/lib/gemini-fiscal-filing";
 import type { FiscalModelType } from "@/lib/gemini-fiscal-filing";
+import { buildModelo349Draft } from "@/lib/fiscal-347-349";
+import type { FiscalQuarter } from "@/lib/fiscal";
 
 const REMINDER_DAYS = [14, 3, 0] as const;
 type ReminderKind = "14d" | "3d" | "due";
 
 function kindForDays(d: number): ReminderKind | null {
-  if (d === 14) return "14d";
-  if (d === 3) return "3d";
-  if (d === 0) return "due";
+  // Ventana corta: si el cron falla un día, el siguiente sigue enviando
+  if (d >= 12 && d <= 14) return "14d";
+  if (d >= 2 && d <= 3) return "3d";
+  if (d >= -1 && d <= 0) return "due";
   return null;
 }
 
@@ -85,6 +88,17 @@ export async function runFiscalDeadlineReminders(now = new Date()) {
       });
       if (alreadyPresented) {
         skipped.push(`${periodKey} already presented`);
+        continue;
+      }
+    }
+
+    if (d.model === "349" && d.quarter != null) {
+      const draft349 = await buildModelo349Draft(
+        d.year,
+        d.quarter as FiscalQuarter
+      );
+      if (!draft349.hasOps) {
+        skipped.push(`${periodKey} no intracom ops`);
         continue;
       }
     }
