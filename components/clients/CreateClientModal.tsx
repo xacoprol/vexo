@@ -9,6 +9,7 @@ type CreatedClient = {
   name: string;
   nif?: string | null;
   email?: string | null;
+  countryCode?: string | null;
 };
 
 type Props = {

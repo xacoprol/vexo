@@ -63,7 +63,7 @@ export async function createClientQuick(
 ): Promise<
   | {
       ok: true;
-      client: { id: string; name: string; nif: string; email: string | null };
+      client: { id: string; name: string; nif: string; email: string | null; countryCode: string };
     }
   | { ok: false; error?: string; fieldErrors?: Record<string, string> }
 > {
@@ -82,6 +82,7 @@ export async function createClientQuick(
         name: client.name,
         nif: client.nif,
         email: client.email,
+        countryCode: client.countryCode,
       },
     };
   } catch (err) {
