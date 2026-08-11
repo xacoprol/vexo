@@ -24,9 +24,8 @@ export default async function FiscalAssetsPage() {
           Bienes de inversión
         </h1>
         <p className="mt-1 text-sm text-ink-muted">
-          Altas desde el libro de bienes y cuadro lineal. El 130 prorratea la
-          cuota anual por meses desde la fecha de alta hasta fin de cada
-          trimestre.
+          Altas desde el libro de bienes y cuadro lineal. El 130 prorratea por
+          meses desde la fecha de alta y corta al final de la vida útil.
         </p>
       </div>
 

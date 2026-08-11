@@ -350,6 +350,8 @@ Reglas:
 - incomeBase / expensesBase / vatRepercutida / vatDeductible: como en 303/130/390; null si no aplica.
 - Usa null si el dato no aparece (no inventes).
 - boxes: casillas numéricas relevantes. Importes en euros con punto decimal.
+- Para modelo 303 incluye SIEMPRE (si aparecen): 01–09 (bases/cuotas), 10–11 (AIB), 27 (IVA devengado), 28–29 (soportado), 36–37 (AIB deducible), 45, 46, 66/69 (resultado), 78, 87, 110 (compensaciones). Mínimo 8 casillas si el PDF es un 303 completo.
+- Para modelo 130 incluye: 01–07 (ingresos, gastos, rendimiento, 20%, pagos previos, retenciones, resultado).
 - filedAt: fecha de presentación si aparece; si no, null.
 - Archivo de referencia: ${file.fileName}`;
 

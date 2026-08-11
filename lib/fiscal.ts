@@ -955,13 +955,20 @@ async function fetchYearAmortizationRows(
     where: { year },
     select: {
       amount: true,
-      asset: { select: { purchaseDate: true, startYear: true } },
+      asset: {
+        select: {
+          purchaseDate: true,
+          startYear: true,
+          usefulLifeYears: true,
+        },
+      },
     },
   });
   return rows.map((r) => ({
     yearAmount: Number(r.amount),
     purchaseDate: r.asset.purchaseDate,
     startYear: r.asset.startYear,
+    usefulLifeYears: r.asset.usefulLifeYears,
   }));
 }
 

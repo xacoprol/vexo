@@ -21,7 +21,7 @@ export default async function FiscalGuidePage() {
   const target = filingTargetPeriod(now);
   const year = target.year;
   const quarter = target.quarter as FiscalQuarter;
-  const [summary, draft349, presented303, presented130, presented349, pendingPay, aeatOpenCount] =
+  const [summary, draft349, presented303, presented130, presented349, pendingPay, aeatOpenCount, booksForYear] =
     await Promise.all([
       buildFiscalPeriodSummary(year, quarter),
       buildModelo349Draft(year, quarter),
@@ -30,12 +30,33 @@ export default async function FiscalGuidePage() {
       getPresentedFiling("349", year, quarter),
       listPendingLiquidaciones(),
       prisma.aeatCommunication.count({ where: { status: "ABIERTA" } }),
+      prisma.registerBook.findMany({
+        where: { year },
+        select: { bookType: true, _count: { select: { lines: true } } },
+      }),
     ]);
   const deadlines = buildUpcomingDeadlines(now);
 
   const expenseCount = summary.expenses.count;
   const marketplaceCount = summary.issued.marketplaceCount;
   const invoiceCount = summary.issued.count;
+
+  const bookIngresos = booksForYear.find((b) => b.bookType === "INGRESOS");
+  const bookGastos = booksForYear.find((b) => b.bookType === "GASTOS");
+  const bookBienes = booksForYear.find((b) => b.bookType === "BIENES");
+  const booksOk = Boolean(
+    bookIngresos &&
+      bookIngresos._count.lines > 0 &&
+      bookGastos &&
+      bookGastos._count.lines > 0
+  );
+  const booksHint = booksOk
+    ? `Ingresos ${bookIngresos!._count.lines} · Gastos ${bookGastos!._count.lines}${
+        bookBienes ? ` · Bienes ${bookBienes._count.lines}` : " · Bienes pendiente"
+      }`
+    : !bookIngresos || !bookGastos
+      ? "Falta generar o importar libros de ingresos y gastos del año"
+      : "Libros sin líneas: regenera desde facturas/gastos";
 
   const checklist = [
     {
@@ -57,9 +78,9 @@ export default async function FiscalGuidePage() {
       href: "/fiscal/expenses",
     },
     {
-      ok: true,
-      label: "Libros registro del año",
-      hint: "Genera ingresos/gastos/bienes antes de presentar",
+      ok: booksOk,
+      label: `Libros registro ${year}`,
+      hint: booksHint,
       href: `/fiscal/books?year=${year}`,
     },
     {

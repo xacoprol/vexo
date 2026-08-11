@@ -59,10 +59,48 @@ const DEFAULT_DIR = path.join(
 );
 
 async function main() {
-  const dir = process.argv[2] || DEFAULT_DIR;
-  const force = process.argv.includes("--force");
+  const argv = process.argv.slice(2);
+  const force = argv.includes("--force");
+  const modelIdx = argv.indexOf("--model");
+  const onlyModel =
+    modelIdx >= 0
+      ? String(argv[modelIdx + 1] ?? "")
+          .trim()
+          .toUpperCase()
+      : "";
+  const minBoxesIdx = argv.indexOf("--min-boxes");
+  const minBoxes =
+    minBoxesIdx >= 0
+      ? parseInt(String(argv[minBoxesIdx + 1] ?? "8"), 10) || 8
+      : force
+        ? 999
+        : 0;
+
+  const skip = new Set<number>();
+  if (modelIdx >= 0) {
+    skip.add(modelIdx);
+    skip.add(modelIdx + 1);
+  }
+  if (minBoxesIdx >= 0) {
+    skip.add(minBoxesIdx);
+    skip.add(minBoxesIdx + 1);
+  }
+  const positional = argv.filter(
+    (a, i) => !a.startsWith("--") && !skip.has(i)
+  );
+  const dir = positional[0] || DEFAULT_DIR;
+
   console.log("OCR gestoría filings desde:", dir);
-  console.log(force ? "Modo --force: reescribe presentados existentes" : "Solo faltantes");
+  console.log(
+    force
+      ? onlyModel
+        ? `Modo --force modelo ${onlyModel}`
+        : "Modo --force: reescribe presentados existentes"
+      : minBoxes > 0
+        ? `Rehace si boxes < ${minBoxes}`
+        : "Solo faltantes"
+  );
+  if (onlyModel) console.log(`Filtro modelo: ${onlyModel}`);
 
   if (!geminiConfigured()) {
     throw new Error("Falta GEMINI_API_KEY");
@@ -82,6 +120,9 @@ async function main() {
   for (const fileName of files) {
     const classified = classifyGestoriaFileName(fileName);
     if (classified.kind !== "filing") {
+      continue;
+    }
+    if (onlyModel && classified.modelType !== onlyModel) {
       continue;
     }
 
@@ -109,11 +150,14 @@ async function main() {
     });
     if (existing && !force) {
       const boxes = Array.isArray(existing.boxes) ? existing.boxes : [];
-      if (boxes.length > 0) {
-        console.log(`ya existe: ${periodKeyHint}`);
+      if (boxes.length >= minBoxes) {
+        console.log(`ya existe: ${periodKeyHint} (boxes=${boxes.length})`);
         skipped += 1;
         continue;
       }
+      console.log(
+        `re-OCR flojo: ${periodKeyHint} (boxes=${boxes.length} < ${minBoxes})`
+      );
     }
 
     const full = path.join(dir, fileName);
