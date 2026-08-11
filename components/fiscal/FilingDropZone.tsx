@@ -146,7 +146,7 @@ export function FilingDropZone({ compact }: Props) {
                 Sube modelos presentados (PDF o imagen)
               </p>
               <p className="text-xs text-ink-muted">
-                303, 130 o 390 · Gemini extrae las casillas para revisarlas
+                303, 130, 390, 347, 349 o 036 · Gemini extrae casillas
               </p>
             </>
           )}

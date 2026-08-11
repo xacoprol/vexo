@@ -18,7 +18,11 @@ import type {
   FiscalModelType,
   FilingBox,
 } from "@/lib/gemini-fiscal-filing";
-import { fiscalFilingPeriodKey } from "@/lib/gemini-fiscal-filing";
+import {
+  fiscalFilingPeriodKey,
+  isAnnualOrCensusModel,
+  FISCAL_MODEL_TYPES,
+} from "@/lib/gemini-fiscal-filing";
 
 type RowStatus = "pending" | "saving" | "saved" | "error";
 
@@ -48,7 +52,7 @@ function toInput(row: Row): FilingDraftInput {
   return {
     modelType: row.modelType,
     year: row.year,
-    quarter: row.modelType === "390" ? null : row.quarter,
+    quarter: isAnnualOrCensusModel(row.modelType) ? null : row.quarter,
     filedAt: row.filedAt,
     result: row.result,
     incomeBase: row.incomeBase,
@@ -265,16 +269,17 @@ export function FilingBatchReview() {
                       const modelType = e.target.value as FiscalModelType;
                       patchRow(row.localId, {
                         modelType,
-                        quarter:
-                          modelType === "390"
-                            ? null
-                            : row.quarter ?? 1,
+                        quarter: isAnnualOrCensusModel(modelType)
+                          ? null
+                          : row.quarter ?? 1,
                       });
                     }}
                   >
-                    <option value="303">303</option>
-                    <option value="130">130</option>
-                    <option value="390">390</option>
+                    {FISCAL_MODEL_TYPES.map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div>
@@ -296,7 +301,7 @@ export function FilingBatchReview() {
                   <select
                     className="input"
                     value={row.quarter ?? ""}
-                    disabled={locked || row.modelType === "390"}
+                    disabled={locked || isAnnualOrCensusModel(row.modelType)}
                     onChange={(e) => {
                       const v = parseInt(e.target.value, 10);
                       patchRow(row.localId, {
@@ -305,8 +310,8 @@ export function FilingBatchReview() {
                       });
                     }}
                   >
-                    {row.modelType === "390" ? (
-                      <option value="">— (anual)</option>
+                    {isAnnualOrCensusModel(row.modelType) ? (
+                      <option value="">— (anual/censo)</option>
                     ) : (
                       <>
                         <option value="1">1T</option>

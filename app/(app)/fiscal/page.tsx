@@ -38,6 +38,15 @@ export default async function FiscalPage({
           <Link href="/fiscal/income" className="btn-secondary">
             Ingresos marketplace
           </Link>
+          <Link href="/fiscal/archive" className="btn-secondary">
+            Archivo
+          </Link>
+          <Link href="/fiscal/books" className="btn-secondary">
+            Libros
+          </Link>
+          <Link href="/fiscal/payments" className="btn-secondary">
+            Liquidaciones
+          </Link>
           <Link
             href={`/fiscal/303?year=${year}&q=${quarter}`}
             className="btn-secondary"
@@ -73,7 +82,8 @@ export default async function FiscalPage({
       <FiscalPeriodNav year={year} quarter={quarter} />
 
       <p className="rounded-lg border border-line bg-accent-soft/40 px-4 py-3 text-sm text-ink-muted">
-        Las facturas W3D entran solas. Los{" "}
+        Trimestre operativo: <span className="font-medium text-ink">3T 2026</span>
+        . Las facturas W3D entran solas. Los{" "}
         <Link href="/fiscal/expenses" className="text-accent underline">
           gastos
         </Link>{" "}
@@ -81,8 +91,20 @@ export default async function FiscalPage({
         <Link href="/fiscal/income" className="text-accent underline">
           ingresos de Amazon/Shopify
         </Link>{" "}
-        hay que importarlos; si no, el IVA y el 130 salen incompletos. Revisa el
-        borrador antes de presentar en la AEAT.
+        hay que importarlos. El paquete de gestoría (modelos, libros, censo,
+        pagos) vive en{" "}
+        <Link href="/fiscal/archive" className="text-accent underline">
+          Archivo
+        </Link>
+        ,{" "}
+        <Link href="/fiscal/books" className="text-accent underline">
+          Libros
+        </Link>{" "}
+        y{" "}
+        <Link href="/fiscal/payments" className="text-accent underline">
+          Liquidaciones
+        </Link>
+        .
       </p>
 
       {summary.expenses.count === 0 ? (

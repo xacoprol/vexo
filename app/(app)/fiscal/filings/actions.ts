@@ -6,9 +6,15 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/session";
 import {
   fiscalFilingPeriodKey,
+  isAnnualOrCensusModel,
+  FISCAL_MODEL_TYPES,
   type FiscalModelType,
   type FilingBox,
 } from "@/lib/gemini-fiscal-filing";
+import {
+  createFiscalDocument,
+  blobConfigured,
+} from "@/lib/fiscal-blob";
 
 export type FilingDraftInput = {
   modelType: FiscalModelType;
@@ -25,6 +31,9 @@ export type FilingDraftInput = {
   confidence: string;
   sourceFileName: string | null;
   rawExtract?: Record<string, unknown> | null;
+  /** PDF en base64 para archivar en Blob (opcional). */
+  fileBase64?: string | null;
+  fileMimeType?: string | null;
 };
 
 function round2(n: number) {
@@ -32,20 +41,39 @@ function round2(n: number) {
 }
 
 function validate(input: FilingDraftInput): string | null {
-  if (!["303", "130", "390"].includes(input.modelType)) {
+  if (!FISCAL_MODEL_TYPES.includes(input.modelType)) {
     return "Tipo de modelo no válido";
   }
   if (!Number.isFinite(input.year) || input.year < 2000 || input.year > 2100) {
     return "Año no válido";
   }
-  if (input.modelType === "390") {
-    if (input.quarter != null) return "El 390 no lleva trimestre";
+  if (isAnnualOrCensusModel(input.modelType)) {
+    if (input.quarter != null) return `${input.modelType} no lleva trimestre`;
   } else {
-    if (input.quarter !== 1 && input.quarter !== 2 && input.quarter !== 3 && input.quarter !== 4) {
+    if (
+      input.quarter !== 1 &&
+      input.quarter !== 2 &&
+      input.quarter !== 3 &&
+      input.quarter !== 4
+    ) {
       return "Trimestre no válido (1–4)";
     }
   }
   return null;
+}
+
+function revalidateFilings() {
+  revalidatePath("/fiscal");
+  revalidatePath("/fiscal/filings");
+  revalidatePath("/fiscal/archive");
+  revalidatePath("/fiscal/303");
+  revalidatePath("/fiscal/130");
+  revalidatePath("/fiscal/390");
+  revalidatePath("/fiscal/347");
+  revalidatePath("/fiscal/349");
+  revalidatePath("/fiscal/036");
+  revalidatePath("/fiscal/annual");
+  revalidatePath("/stats");
 }
 
 export async function upsertFiscalFiling(
@@ -55,7 +83,7 @@ export async function upsertFiscalFiling(
   const err = validate(input);
   if (err) return { ok: false, error: err };
 
-  const quarter = input.modelType === "390" ? null : input.quarter;
+  const quarter = isAnnualOrCensusModel(input.modelType) ? null : input.quarter;
   const periodKey = fiscalFilingPeriodKey(input.modelType, input.year, quarter);
   const filedAt = input.filedAt ? new Date(`${input.filedAt}T12:00:00`) : null;
   const boxes = input.boxes.map((b) => ({
@@ -111,14 +139,32 @@ export async function upsertFiscalFiling(
       },
     });
 
-    revalidatePath("/fiscal");
-    revalidatePath("/fiscal/filings");
-    revalidatePath("/fiscal/303");
-    revalidatePath("/fiscal/130");
-    revalidatePath("/fiscal/390");
-    revalidatePath("/fiscal/annual");
-    revalidatePath("/stats");
+    if (
+      input.fileBase64 &&
+      input.sourceFileName &&
+      blobConfigured()
+    ) {
+      try {
+        const buffer = Buffer.from(input.fileBase64, "base64");
+        await createFiscalDocument({
+          buffer,
+          fileName: input.sourceFileName,
+          mimeType: input.fileMimeType || "application/pdf",
+          category: input.modelType === "036" ? "CENSUS" : "FILING",
+          title: `Modelo ${input.modelType}${
+            quarter ? ` ${quarter}T` : ""
+          } ${input.year}`,
+          year: input.year,
+          quarter,
+          modelType: input.modelType,
+          filingId: row.id,
+        });
+      } catch {
+        // El filing ya está guardado; el archivo puede subirse luego al Archivo
+      }
+    }
 
+    revalidateFilings();
     return { ok: true, id: row.id };
   } catch (e) {
     return {
@@ -131,10 +177,21 @@ export async function upsertFiscalFiling(
 export async function deleteFiscalFiling(id: string) {
   await requireAuth();
   await prisma.fiscalFiling.delete({ where: { id } });
-  revalidatePath("/fiscal");
-  revalidatePath("/fiscal/filings");
-  revalidatePath("/fiscal/303");
-  revalidatePath("/fiscal/130");
-  revalidatePath("/fiscal/390");
-  revalidatePath("/fiscal/annual");
+  revalidateFilings();
+}
+
+/** Borra presentados trimestrales que no sean 3T 2026. */
+export async function cleanupNonCurrentQuarterFilings(): Promise<{
+  ok: true;
+  deleted: number;
+}> {
+  await requireAuth();
+  const result = await prisma.fiscalFiling.deleteMany({
+    where: {
+      quarter: { not: null },
+      NOT: { AND: [{ year: 2026 }, { quarter: 3 }] },
+    },
+  });
+  revalidateFilings();
+  return { ok: true, deleted: result.count };
 }

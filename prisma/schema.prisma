@@ -321,15 +321,47 @@ model Expense {
   @@index([invoiceNumber])
 }
 
+// ─── Fiscal: archivo documental (Vercel Blob) ────────────────────────────────
+
+model FiscalDocument {
+  id             String   @id @default(cuid())
+  /// FILING | BOOK | CENSUS | PAYMENT | AEAT | IRPF | OTHER
+  category       String
+  title          String
+  year           Int?
+  quarter        Int?
+  modelType      String?
+  blobUrl        String
+  pathname       String
+  mimeType       String
+  size           Int
+  sourceFileName String
+  notes          String?
+  filingId       String?
+  filing         FiscalFiling? @relation(fields: [filingId], references: [id], onDelete: SetNull)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  taxPayments        TaxPayment[]
+  aeatCommunications AeatCommunication[]
+  registerBooks      RegisterBook[]
+  investmentAssets   InvestmentAsset[]
+
+  @@index([category])
+  @@index([year, quarter])
+  @@index([modelType])
+  @@index([filingId])
+}
+
 // ─── Fiscal: modelos presentados (gestoría / AEAT) ───────────────────────────
 
 model FiscalFiling {
   id             String    @id @default(cuid())
-  /// Unique key e.g. "303:2026:1" | "130:2026:2" | "390:2025"
+  /// Unique key e.g. "303:2026:1" | "130:2026:2" | "390:2025" | "347:2025" | "349:2026:2" | "036:2024"
   periodKey      String    @unique
-  modelType      String // 303 | 130 | 390
+  modelType      String // 303 | 130 | 390 | 347 | 349 | 036
   year           Int
-  quarter        Int? // 1–4; null for annual (390)
+  quarter        Int? // 1–4; null for annual (390/347) or census (036)
   filedAt        DateTime?
   result         Decimal   @default(0) // resultado a ingresar / clave
   /// Totales oficiales del modelo (histórico ingresos/gastos)
@@ -345,8 +377,129 @@ model FiscalFiling {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
+  documents FiscalDocument[]
+
   @@index([modelType, year])
   @@index([year, quarter])
+}
+
+// ─── Fiscal: libros registro ─────────────────────────────────────────────────
+
+model RegisterBook {
+  id         String   @id @default(cuid())
+  /// INGRESOS | GASTOS | BIENES
+  bookType   String
+  year       Int
+  documentId String?
+  document   FiscalDocument? @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  sourceFile String?
+  importedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  lines RegisterBookLine[]
+
+  @@unique([bookType, year])
+  @@index([year])
+}
+
+model RegisterBookLine {
+  id          String       @id @default(cuid())
+  bookId      String
+  book        RegisterBook @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  sortOrder   Int          @default(0)
+  reference   String?
+  invoiceNumber String?
+  issueDate   DateTime?
+  concept     String?
+  nif         String?
+  counterparty String?
+  base        Decimal      @default(0)
+  vatRate     Float        @default(0)
+  vatAmount   Decimal      @default(0)
+  withholding Decimal      @default(0)
+  total       Decimal      @default(0)
+
+  @@index([bookId])
+  @@index([issueDate])
+}
+
+// ─── Fiscal: bienes de inversión + amortizaciones ───────────────────────────
+
+model InvestmentAsset {
+  id              String   @id @default(cuid())
+  description     String
+  supplierName    String?
+  supplierNif     String?
+  invoiceNumber   String?
+  purchaseDate    DateTime?
+  base            Decimal  @default(0)
+  vatAmount       Decimal  @default(0)
+  usefulLifeYears Int      @default(4)
+  method          String   @default("LINEAL")
+  startYear       Int?
+  notes           String?
+  documentId      String?
+  document        FiscalDocument? @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  amortizations InvestmentAmortization[]
+
+  @@index([purchaseDate])
+  @@index([startYear])
+}
+
+model InvestmentAmortization {
+  id      String          @id @default(cuid())
+  assetId String
+  asset   InvestmentAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  year    Int
+  amount  Decimal
+  notes   String?
+
+  @@unique([assetId, year])
+  @@index([year])
+}
+
+// ─── Fiscal: liquidaciones / pagos AEAT ─────────────────────────────────────
+
+model TaxPayment {
+  id         String   @id @default(cuid())
+  modelType  String?
+  year       Int?
+  quarter    Int?
+  amount     Decimal  @default(0)
+  paidAt     DateTime?
+  nrc        String?
+  status     String   @default("PAGADO") // PAGADO | PENDIENTE | DEVUELTO
+  documentId String?
+  document   FiscalDocument? @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([year, quarter])
+  @@index([modelType])
+  @@index([paidAt])
+}
+
+// ─── Fiscal: comunicaciones AEAT ─────────────────────────────────────────────
+
+model AeatCommunication {
+  id         String   @id @default(cuid())
+  occurredAt DateTime @default(now())
+  /// NOTIFICACION | REQUERIMIENTO | COMUNICACION | OTRO
+  kind       String   @default("COMUNICACION")
+  subject    String
+  summary    String?
+  documentId String?
+  document   FiscalDocument? @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([occurredAt])
+  @@index([kind])
 }
 
 // ─── Fiscal: ingresos marketplace (Amazon / Shopify) ─────────────────────────

@@ -3,7 +3,21 @@
  */
 import { geminiConfigured } from "@/lib/gemini-expense";
 
-export type FiscalModelType = "303" | "130" | "390";
+export type FiscalModelType = "303" | "130" | "390" | "347" | "349" | "036";
+
+export const FISCAL_MODEL_TYPES: FiscalModelType[] = [
+  "303",
+  "130",
+  "390",
+  "347",
+  "349",
+  "036",
+];
+
+/** Modelos anuales o censales (sin trimestre). */
+export function isAnnualOrCensusModel(modelType: FiscalModelType): boolean {
+  return modelType === "390" || modelType === "347" || modelType === "036";
+}
 
 export type FilingBox = {
   code: string;
@@ -172,7 +186,7 @@ export function fiscalFilingPeriodKey(
   year: number,
   quarter: number | null
 ): string {
-  if (modelType === "390" || quarter == null) {
+  if (isAnnualOrCensusModel(modelType) || quarter == null) {
     return `${modelType}:${year}`;
   }
   return `${modelType}:${year}:${quarter}`;
@@ -181,9 +195,21 @@ export function fiscalFilingPeriodKey(
 export { geminiConfigured };
 
 function normalizeModelType(raw: unknown): FiscalModelType {
-  const s = String(raw ?? "").replace(/\D/g, "");
+  const s = String(raw ?? "")
+    .toUpperCase()
+    .replace(/[^\d]/g, "");
   if (s === "130") return "130";
   if (s === "390") return "390";
+  if (s === "347") return "347";
+  if (s === "349") return "349";
+  if (s === "036" || s === "36") return "036";
+  if (s === "303") return "303";
+  const labeled = String(raw ?? "").toUpperCase();
+  if (labeled.includes("347")) return "347";
+  if (labeled.includes("349")) return "349";
+  if (labeled.includes("036") || labeled.includes("037")) return "036";
+  if (labeled.includes("390")) return "390";
+  if (labeled.includes("130")) return "130";
   return "303";
 }
 
@@ -241,7 +267,7 @@ function parseDraftFromText(text: string): ParsedFiscalFilingDraft {
       : new Date().getFullYear();
 
   let quarter: number | null = null;
-  if (modelType !== "390") {
+  if (!isAnnualOrCensusModel(modelType)) {
     const q = parseInt(String(parsed.quarter ?? ""), 10);
     quarter = q === 1 || q === 2 || q === 3 || q === 4 ? q : 1;
   }
@@ -296,11 +322,11 @@ export async function parseFiscalFilingDocument(file: {
     throw new Error("El archivo supera 12 MB");
   }
 
-  const prompt = `Eres un asistente fiscal español. El documento es un modelo tributario YA PRESENTADO (AEAT / gestoría): Modelo 303 (IVA trimestral), Modelo 130 (IRPF fraccionado) o Modelo 390 (resumen anual IVA).
+  const prompt = `Eres un asistente fiscal español. El documento es un modelo tributario YA PRESENTADO (AEAT / gestoría): Modelo 303 (IVA trimestral), 130 (IRPF fraccionado), 390 (resumen anual IVA), 347 (operaciones con terceros), 349 (operaciones intracomunitarias) o 036/037 (censo).
 
 Devuelve SOLO un JSON válido:
 {
-  "modelType": "303" | "130" | "390",
+  "modelType": "303" | "130" | "390" | "347" | "349" | "036",
   "year": 2026,
   "quarter": 1,
   "filedAt": "YYYY-MM-DD" o null,
@@ -317,18 +343,11 @@ Devuelve SOLO un JSON válido:
 }
 
 Reglas:
-- modelType: detecta por título/cabecera (303, 130, 390). Si es resumen anual de IVA → 390.
-- year: ejercicio fiscal del modelo (no el año de presentación si difiere). Ej. 390 de 2025 presentado en ene-2026 → year=2025.
-- quarter: solo para 303 y 130 (1–4). Para 390 usa null.
-- result: importe a ingresar / resultado de la liquidación. Número; negativo si a compensar/devolver.
-- incomeBase: base de ingresos del periodo.
-  · 130 → casilla ingresos computables (suele ser 01).
-  · 303/390 → suma de bases imponibles sujetas / volumen de operaciones si aparece; si no hay base clara, null.
-- expensesBase: base de gastos deducibles.
-  · 130 → casilla gastos (suele ser 02).
-  · 303/390 → null salvo que el documento traiga base de compras (no confundir con cuota IVA).
-- vatRepercutida: total IVA devengado/repercutido (303/390). En 130 → null.
-- vatDeductible: IVA soportado deducible (303/390). En 130 → null.
+- modelType: detecta por título/cabecera. Resumen anual IVA → 390. Operaciones con terceros → 347. Intracomunitarias → 349. Censal alta/modificación → 036.
+- year: ejercicio fiscal del modelo (no el año de presentación si difiere).
+- quarter: solo para 303, 130 y 349 (1–4). Para 390, 347 y 036 usa null.
+- result: importe a ingresar / resultado. Número; negativo si a compensar/devolver. En 347/349/036 puede ser 0.
+- incomeBase / expensesBase / vatRepercutida / vatDeductible: como en 303/130/390; null si no aplica.
 - Usa null si el dato no aparece (no inventes).
 - boxes: casillas numéricas relevantes. Importes en euros con punto decimal.
 - filedAt: fecha de presentación si aparece; si no, null.
