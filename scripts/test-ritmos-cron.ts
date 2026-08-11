@@ -1,10 +1,10 @@
 /**
- * Valida el caso Ritmos: cron simulado en 2026-06-01 genera factura exenta 90€.
+ * Valida el caso Ritmos: cron simulado en 2026-06-01 genera proforma exenta 90€.
  * Usage: npx tsx scripts/test-ritmos-cron.ts
  */
 import { PrismaClient } from "@prisma/client";
 import { calculateDocument } from "../lib/calculations";
-import { allocateInvoiceNumber } from "../lib/numbering";
+import { allocateQuoteNumber } from "../lib/numbering";
 import { advanceDate, type Frequency } from "../lib/recurring";
 
 const prisma = new PrismaClient();
@@ -43,7 +43,8 @@ async function main() {
     vatRate: 0,
     discountPct: l.discountPct,
   }));
-  const totals = calculateDocument(lineInputs, tpl.irpfRate);
+  // Proforma: sin IRPF (se aplica al convertir a factura)
+  const totals = calculateDocument(lineInputs, 0);
   console.log("Totales calculados:", {
     subtotal: totals.subtotal,
     vatAmount: totals.vatAmount,
@@ -56,12 +57,12 @@ async function main() {
     );
   }
 
-  const existing = await prisma.invoice.findFirst({
+  const existing = await prisma.quote.findFirst({
     where: { recurringTemplateId: tpl.id },
     orderBy: { issueDate: "desc" },
   });
   if (existing && dayKey(existing.issueDate) === "2026-06-01") {
-    console.log("Factura ya existía:", existing.fullNumber);
+    console.log("Proforma ya existía:", existing.fullNumber);
     console.log(
       "  base",
       Number(existing.subtotal),
@@ -75,9 +76,12 @@ async function main() {
   }
 
   const issueDate = new Date(2026, 5, 1, 12, 0, 0, 0);
-  const invoice = await prisma.$transaction(async (tx) => {
-    const num = await allocateInvoiceNumber(tx, tpl.seriesId);
-    const inv = await tx.invoice.create({
+  const validUntil = new Date(issueDate);
+  validUntil.setDate(validUntil.getDate() + 30);
+
+  const quote = await prisma.$transaction(async (tx) => {
+    const num = await allocateQuoteNumber(tx);
+    const q = await tx.quote.create({
       data: {
         seriesId: num.seriesId,
         seriesPrefix: num.seriesPrefix,
@@ -85,19 +89,13 @@ async function main() {
         fullNumber: num.fullNumber,
         clientId: tpl.clientId,
         issueDate,
-        dueDate: new Date(2026, 6, 1, 12),
-        status: "PENDIENTE",
-        paymentMethod: tpl.paymentMethod,
-        notes: tpl.notes,
+        validUntil,
+        status: "BORRADOR",
+        isProforma: true,
+        notes: `Generada automáticamente desde periódica «${tpl.name}»`,
         subtotal: totals.subtotal,
         vatAmount: totals.vatAmount,
-        irpfRate: 0,
-        irpfAmount: 0,
         total: totals.total,
-        vatOperationType: tpl.vatOperationType,
-        cashAccounting: tpl.cashAccounting,
-        operationKey: tpl.operationKey,
-        operationKey347: tpl.operationKey347,
         recurringTemplateId: tpl.id,
         lines: {
           create: totals.lines.map((l) => ({
@@ -125,29 +123,29 @@ async function main() {
       where: { id: tpl.id },
       data: { lastRunAt: new Date(), nextRunDate: nextRun },
     });
-    return inv;
+    return q;
   });
 
   const updated = await prisma.recurringInvoiceTemplate.findUnique({
     where: { id: tpl.id },
   });
 
-  console.log("Factura generada:", invoice.fullNumber);
+  console.log("Proforma generada:", quote.fullNumber);
   console.log(
     "  base",
-    Number(invoice.subtotal),
+    Number(quote.subtotal),
     "IVA",
-    Number(invoice.vatAmount),
+    Number(quote.vatAmount),
     "total",
-    Number(invoice.total)
+    Number(quote.total)
   );
-  console.log("  vatOperationType", invoice.vatOperationType);
-  console.log("  recurringTemplateId", invoice.recurringTemplateId);
+  console.log("  isProforma", quote.isProforma);
+  console.log("  recurringTemplateId", quote.recurringTemplateId);
   console.log("  nextRun avanzado a", dayKey(updated!.nextRunDate!));
   if (dayKey(updated!.nextRunDate!) !== "2027-06-01") {
     throw new Error(`nextRun esperado 2027-06-01, got ${dayKey(updated!.nextRunDate!)}`);
   }
-  console.log("OK ✓ caso Ritmos validado");
+  console.log("OK ✓ caso Ritmos validado (proforma)");
 }
 
 main()

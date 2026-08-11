@@ -164,10 +164,14 @@ model Quote {
   lines    QuoteLine[]
   invoice  Invoice?
 
+  recurringTemplateId String?
+  recurringTemplate   RecurringInvoiceTemplate? @relation(fields: [recurringTemplateId], references: [id], onDelete: SetNull)
+
   @@unique([seriesId, number])
   @@index([clientId])
   @@index([status])
   @@index([issueDate])
+  @@index([recurringTemplateId])
 }
 
 model QuoteLine {
@@ -597,6 +601,7 @@ model RecurringInvoiceTemplate {
 
   lines    RecurringLine[]
   invoices Invoice[]
+  quotes   Quote[]
 
   @@index([status])
   @@index([nextRunDate])

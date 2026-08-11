@@ -93,10 +93,10 @@ export default async function RecurringPage({
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">
-            Facturas periódicas
+            Periódicas
           </h1>
           <p className="mt-1 text-sm text-ink-muted">
-            Generación automática vía cron
+            El cron crea proformas; tú las conviertes en factura cuando toque
           </p>
         </div>
         <Link href="/recurring/new" className="btn-primary">
@@ -130,7 +130,7 @@ export default async function RecurringPage({
                 <th className="px-4 py-2 text-left font-medium">Inicio</th>
                 <th className="px-4 py-2 text-left font-medium">Resultado</th>
                 <th className="px-4 py-2 text-right font-medium">Revisadas</th>
-                <th className="px-4 py-2 text-right font-medium">Facturas</th>
+                <th className="px-4 py-2 text-right font-medium">Proformas</th>
               </tr>
             </thead>
             <tbody>

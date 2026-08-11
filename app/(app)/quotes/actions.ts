@@ -161,7 +161,10 @@ export async function convertQuoteToInvoice(quoteId: string) {
   await requireAuth();
   const quote = await prisma.quote.findUnique({
     where: { id: quoteId },
-    include: { lines: { orderBy: { sortOrder: "asc" } } },
+    include: {
+      lines: { orderBy: { sortOrder: "asc" } },
+      recurringTemplate: true,
+    },
   });
   if (!quote) throw new Error("Presupuesto no encontrado");
 
@@ -171,7 +174,8 @@ export async function convertQuoteToInvoice(quoteId: string) {
   if (existing) redirect(`/invoices/${existing.id}`);
 
   const settings = await prisma.companySettings.findFirst();
-  const irpfRate = settings?.defaultIrpfRate ?? 0;
+  const tpl = quote.recurringTemplate;
+  const irpfRate = tpl?.irpfRate ?? settings?.defaultIrpfRate ?? 0;
   const lineInputs = quote.lines.map((l) => ({
     description: l.description,
     quantity: Number(l.quantity),
@@ -184,7 +188,7 @@ export async function convertQuoteToInvoice(quoteId: string) {
   const due = new Date(quote.issueDate);
   due.setDate(due.getDate() + 30);
 
-  const num = await allocateInvoiceNumber(prisma);
+  const num = await allocateInvoiceNumber(prisma, tpl?.seriesId);
   const lastInSeries = await prisma.invoice.findFirst({
     where: { seriesId: num.seriesId, status: { not: "ANULADA" } },
     orderBy: { number: "desc" },
@@ -200,7 +204,8 @@ export async function convertQuoteToInvoice(quoteId: string) {
       issueDate: new Date(),
       dueDate: due,
       status: "PENDIENTE",
-      paymentMethod: "Transferencia",
+      paymentMethod:
+        tpl?.paymentMethod?.trim() || "Transferencia",
       notes: quote.notes,
       subtotal: totals.subtotal,
       vatAmount: totals.vatAmount,
@@ -208,6 +213,11 @@ export async function convertQuoteToInvoice(quoteId: string) {
       irpfAmount: totals.irpfAmount,
       total: totals.total,
       quoteId: quote.id,
+      recurringTemplateId: tpl?.id ?? quote.recurringTemplateId ?? null,
+      vatOperationType: tpl?.vatOperationType ?? "SUJETA",
+      cashAccounting: tpl?.cashAccounting ?? false,
+      operationKey: tpl?.operationKey ?? null,
+      operationKey347: tpl?.operationKey347 ?? null,
       previousInvoiceId: lastInSeries?.id ?? null,
     },
   });

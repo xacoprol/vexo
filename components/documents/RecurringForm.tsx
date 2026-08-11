@@ -95,7 +95,7 @@ export function RecurringForm({
         </div>
         <div>
           <label className="label" htmlFor="seriesId">
-            Serie de factura
+            Serie al convertir en factura
           </label>
           <select
             id="seriesId"

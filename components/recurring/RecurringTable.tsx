@@ -252,7 +252,7 @@ export function RecurringTable({ rows }: { rows: RecurringListRow[] }) {
                   colSpan={activeCols.length + 2}
                   className="px-4 py-10 text-center text-ink-muted"
                 >
-                  Sin facturas periódicas.{" "}
+                  Sin periódicas.{" "}
                   <Link href="/recurring/new" className="text-accent underline">
                     Crear una
                   </Link>

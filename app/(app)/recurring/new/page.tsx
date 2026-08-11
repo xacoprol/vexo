@@ -17,7 +17,7 @@ export default async function NewRecurringPage() {
           ← Periódicas
         </Link>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight">
-          Nueva factura periódica
+          Nueva periódica
         </h1>
       </div>
       <div className="card-panel p-6">

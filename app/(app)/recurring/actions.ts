@@ -239,12 +239,13 @@ export async function deleteRecurring(id: string) {
   });
   if (!template) throw new Error("Plantilla no encontrada");
 
-  // No updateMany (rompe con PrismaNeonHTTP). El FK invoice.recurringTemplateId
-  // es ON DELETE SET NULL: las facturas generadas se conservan.
+  // No updateMany (rompe con PrismaNeonHTTP). Los FK de factura/proforma
+  // (recurringTemplateId) son ON DELETE SET NULL: los documentos se conservan.
   await prisma.recurringInvoiceTemplate.delete({ where: { id } });
 
   revalidatePath("/recurring");
   revalidatePath("/invoices");
+  revalidatePath("/quotes");
   redirect("/recurring");
 }
 
@@ -259,5 +260,6 @@ export async function deleteRecurrings(ids: string[]) {
 
   revalidatePath("/recurring");
   revalidatePath("/invoices");
+  revalidatePath("/quotes");
   return { deleted: result.count };
 }

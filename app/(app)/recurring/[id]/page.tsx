@@ -17,6 +17,7 @@ export default async function RecurringDetailPage({
     include: {
       client: true,
       lines: { orderBy: { sortOrder: "asc" } },
+      quotes: { orderBy: { issueDate: "desc" }, take: 50 },
       invoices: { orderBy: { issueDate: "desc" }, take: 50 },
     },
   });
@@ -40,6 +41,10 @@ export default async function RecurringDetailPage({
               {formatDate(template.nextRunDate)}
             </span>
           </div>
+          <p className="mt-2 text-sm text-ink-muted">
+            Genera proformas automáticamente. Conviértelas en factura desde
+            Presupuestos cuando quieras.
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Link href={`/recurring/${id}/edit`} className="btn-secondary">
@@ -89,18 +94,51 @@ export default async function RecurringDetailPage({
 
       <section className="card-panel overflow-x-auto">
         <div className="border-b border-line px-4 py-3 text-sm font-semibold">
-          Historial de facturas generadas
+          Proformas generadas
         </div>
         <table className="w-full text-sm">
           <tbody>
-            {template.invoices.length === 0 ? (
+            {template.quotes.length === 0 ? (
               <tr>
                 <td className="px-4 py-6 text-center text-ink-muted">
-                  Aún no se ha generado ninguna factura
+                  Aún no se ha generado ninguna proforma
                 </td>
               </tr>
             ) : (
-              template.invoices.map((inv) => (
+              template.quotes.map((q) => (
+                <tr key={q.id} className="border-b border-line/50">
+                  <td className="px-4 py-2">
+                    <Link
+                      href={`/quotes/${q.id}`}
+                      className="font-mono hover:text-accent"
+                    >
+                      {q.fullNumber}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-2 text-ink-muted">
+                    {formatDate(q.issueDate)}
+                  </td>
+                  <td className="px-4 py-2">
+                    <StatusBadge status={q.status} />
+                  </td>
+                  <td className="px-4 py-2 text-right font-mono">
+                    {formatCurrency(Number(q.total))}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </section>
+
+      {template.invoices.length > 0 ? (
+        <section className="card-panel overflow-x-auto">
+          <div className="border-b border-line px-4 py-3 text-sm font-semibold">
+            Facturas convertidas
+          </div>
+          <table className="w-full text-sm">
+            <tbody>
+              {template.invoices.map((inv) => (
                 <tr key={inv.id} className="border-b border-line/50">
                   <td className="px-4 py-2">
                     <Link
@@ -120,11 +158,11 @@ export default async function RecurringDetailPage({
                     {formatCurrency(Number(inv.total))}
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </section>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      ) : null}
     </div>
   );
 }

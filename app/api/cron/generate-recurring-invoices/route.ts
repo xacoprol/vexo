@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { calculateDocument, formatCurrency } from "@/lib/calculations";
-import { allocateInvoiceNumber } from "@/lib/numbering";
+import { allocateQuoteNumber } from "@/lib/numbering";
 import { advanceDate, isZeroVatOperation, type Frequency } from "@/lib/recurring";
 import { isSmtpConfigured, sendMail } from "@/lib/mail";
-import { applyVerifactuSeal } from "@/lib/verifactu-seal";
 import { parseISO, isValid } from "date-fns";
 
 /** Clave de día local YYYY-MM-DD (evita desfases UTC en comparaciones) */
@@ -30,7 +29,7 @@ type GenDetail = {
   name: string;
   clientName?: string;
   clientEmail?: string | null;
-  invoiceId?: string;
+  quoteId?: string;
   fullNumber?: string;
   subtotal?: number;
   vatAmount?: number;
@@ -42,7 +41,7 @@ async function notifyAdminRecurringGenerated(
   asOfKey: string,
   details: GenDetail[]
 ) {
-  const created = details.filter((d) => d.invoiceId && !d.error);
+  const created = details.filter((d) => d.quoteId && !d.error);
   if (!created.length) return { notified: false, reason: "none" };
   if (!isSmtpConfigured()) return { notified: false, reason: "smtp" };
 
@@ -57,14 +56,13 @@ async function notifyAdminRecurringGenerated(
   const base = appBaseUrl();
   const lines = created
     .map((d) => {
-      const total =
-        d.total != null ? formatCurrency(d.total) : "—";
-      const link = d.invoiceId ? `${base}/invoices/${d.invoiceId}` : "";
+      const total = d.total != null ? formatCurrency(d.total) : "—";
+      const link = d.quoteId ? `${base}/quotes/${d.quoteId}` : "";
       return [
         `• ${d.fullNumber ?? "—"} — ${d.clientName ?? "Cliente"} — ${total}`,
         `  Plantilla: ${d.name}`,
         d.clientEmail ? `  Email cliente: ${d.clientEmail}` : null,
-        link ? `  Abrir: ${link}` : null,
+        link ? `  Abrir proforma: ${link}` : null,
       ]
         .filter(Boolean)
         .join("\n");
@@ -73,17 +71,18 @@ async function notifyAdminRecurringGenerated(
 
   const subject =
     created.length === 1
-      ? `Vexo: factura periódica generada (${created[0].fullNumber})`
-      : `Vexo: ${created.length} facturas periódicas generadas`;
+      ? `Vexo: proforma periódica generada (${created[0].fullNumber})`
+      : `Vexo: ${created.length} proformas periódicas generadas`;
 
   const text = [
-    `Se han generado ${created.length} factura(s) periódica(s) el ${asOfKey}.`,
+    `Se han generado ${created.length} proforma(s) periódica(s) el ${asOfKey}.`,
     "",
-    "Revísalas y avisa al cliente cuando corresponda:",
+    "No son facturas fiscales. Revísalas, envíalas al cliente y, cuando toque,",
+    "conviértelas en factura desde el detalle de la proforma.",
     "",
     lines,
     "",
-    `Listado: ${base}/invoices`,
+    `Proformas: ${base}/quotes`,
     `Periódicas: ${base}/recurring`,
   ].join("\n");
 
@@ -92,9 +91,8 @@ async function notifyAdminRecurringGenerated(
 }
 
 /**
- * Genera como máximo UNA factura por plantilla y ejecución.
- * Plantillas con fechaHasta lejana (p.ej. 2040) no pregeneran nada:
- * solo avanzan nextRunDate un ciclo tras emitir.
+ * Genera como máximo UNA proforma por plantilla y ejecución.
+ * No crea factura fiscal ni sello Veri*Factu: eso ocurre al convertir.
  *
  * Query opcional: ?date=2026-06-01 para simular el día de ejecución.
  */
@@ -106,9 +104,13 @@ async function runGeneration(asOf: Date) {
   const asOfKey = dayKey(asOf);
   const details: GenDetail[] = [];
 
-  let invoicesCreated = 0;
-  let adminNotify: { notified: boolean; reason?: string; to?: string; count?: number } =
-    { notified: false };
+  let invoicesCreated = 0; // contador histórico del log (= proformas generadas)
+  let adminNotify: {
+    notified: boolean;
+    reason?: string;
+    to?: string;
+    count?: number;
+  } = { notified: false };
 
   try {
     const candidates = await prisma.recurringInvoiceTemplate.findMany({
@@ -140,18 +142,23 @@ async function runGeneration(asOf: Date) {
           vatRate: forceZeroVat ? 0 : l.vatRate,
           discountPct: l.discountPct,
         }));
-        const totals = calculateDocument(lineInputs, tpl.irpfRate);
+        // Proforma: sin IRPF en el documento (se aplica al convertir a factura)
+        const totals = calculateDocument(lineInputs, 0);
         const issueDate = localNoonFromKey(dayKey(tpl.nextRunDate!));
-        const due = new Date(issueDate);
-        due.setDate(due.getDate() + 30);
+        const validUntil = new Date(issueDate);
+        validUntil.setDate(validUntil.getDate() + 30);
 
-        const num = await allocateInvoiceNumber(prisma, tpl.seriesId);
-        const lastInSeries = await prisma.invoice.findFirst({
-          where: { seriesId: num.seriesId },
-          orderBy: { number: "desc" },
-        });
+        const num = await allocateQuoteNumber(prisma);
 
-        const invoice = await prisma.invoice.create({
+        const noteParts = [
+          tpl.notes?.trim() || null,
+          `Generada automáticamente desde periódica «${tpl.name}»`,
+          tpl.paymentMethod?.trim()
+            ? `Forma de pago prevista: ${tpl.paymentMethod.trim()}`
+            : null,
+        ].filter(Boolean);
+
+        const quote = await prisma.quote.create({
           data: {
             seriesId: num.seriesId,
             seriesPrefix: num.seriesPrefix,
@@ -159,28 +166,21 @@ async function runGeneration(asOf: Date) {
             fullNumber: num.fullNumber,
             clientId: tpl.clientId,
             issueDate,
-            dueDate: due,
-            status: "PENDIENTE",
-            paymentMethod: tpl.paymentMethod,
-            notes: tpl.notes,
+            validUntil,
+            status: "BORRADOR",
+            isProforma: true,
+            notes: noteParts.join(" · ") || null,
             subtotal: totals.subtotal,
             vatAmount: totals.vatAmount,
-            irpfRate: totals.irpfRate,
-            irpfAmount: totals.irpfAmount,
             total: totals.total,
-            vatOperationType: tpl.vatOperationType,
-            cashAccounting: tpl.cashAccounting,
-            operationKey: tpl.operationKey,
-            operationKey347: tpl.operationKey347,
             recurringTemplateId: tpl.id,
-            previousInvoiceId: lastInSeries?.id ?? null,
           },
         });
 
         for (const l of totals.lines) {
-          await prisma.invoiceLine.create({
+          await prisma.quoteLine.create({
             data: {
-              invoiceId: invoice.id,
+              quoteId: quote.id,
               sortOrder: l.sortOrder,
               description: l.description,
               quantity: l.quantity,
@@ -193,8 +193,6 @@ async function runGeneration(asOf: Date) {
             },
           });
         }
-
-        await applyVerifactuSeal(prisma, invoice.id);
 
         const nextRun = advanceDate(
           issueDate,
@@ -222,11 +220,11 @@ async function runGeneration(asOf: Date) {
           name: tpl.name,
           clientName: tpl.client.name,
           clientEmail: tpl.client.email,
-          invoiceId: invoice.id,
-          fullNumber: invoice.fullNumber,
-          subtotal: Number(invoice.subtotal),
-          vatAmount: Number(invoice.vatAmount),
-          total: Number(invoice.total),
+          quoteId: quote.id,
+          fullNumber: quote.fullNumber,
+          subtotal: Number(quote.subtotal),
+          vatAmount: Number(quote.vatAmount),
+          total: Number(quote.total),
         });
       } catch (err) {
         details.push({
@@ -265,7 +263,8 @@ async function runGeneration(asOf: Date) {
       ok: true,
       asOf: asOfKey,
       templatesChecked: templates.length,
-      invoicesCreated,
+      proformasCreated: invoicesCreated,
+      invoicesCreated, // alias retrocompatible
       details,
       adminNotify,
       logId: log.id,
