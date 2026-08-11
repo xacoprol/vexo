@@ -5,13 +5,17 @@ import {
   daysUntil,
   type FilingDeadline,
 } from "@/lib/fiscal-calendar";
+import {
+  buildAeatCommsEmail,
+  buildFiscalDeadlineEmail,
+  type ReminderKind,
+} from "@/lib/fiscal-email";
 import { fiscalFilingPeriodKey } from "@/lib/gemini-fiscal-filing";
 import type { FiscalModelType } from "@/lib/gemini-fiscal-filing";
 import { buildModelo349Draft } from "@/lib/fiscal-347-349";
 import type { FiscalQuarter } from "@/lib/fiscal";
 
 const REMINDER_DAYS = [14, 3, 0] as const;
-type ReminderKind = "14d" | "3d" | "due";
 
 function kindForDays(d: number): ReminderKind | null {
   // Ventana corta: si el cron falla un día, el siguiente sigue enviando
@@ -19,12 +23,6 @@ function kindForDays(d: number): ReminderKind | null {
   if (d >= 2 && d <= 3) return "3d";
   if (d >= -1 && d <= 0) return "due";
   return null;
-}
-
-function kindLabel(kind: ReminderKind): string {
-  if (kind === "14d") return "faltan 14 días";
-  if (kind === "3d") return "faltan 3 días";
-  return "vence hoy";
 }
 
 function appBaseUrl(): string {
@@ -111,35 +109,20 @@ export async function runFiscalDeadlineReminders(now = new Date()) {
       continue;
     }
 
-    const subject = `[Vexo] Modelo ${d.model} ${d.periodLabel} — ${kindLabel(kind)}`;
-    const text = [
-      `Hola,`,
-      ``,
-      `Recordatorio fiscal automático de Vexo:`,
-      ``,
-      `Modelo: ${d.model}`,
-      `Periodo: ${d.periodLabel}`,
-      `Plazo: ${d.dueLabel}`,
-      `Estado: ${kindLabel(kind)}`,
-      ``,
-      `${d.what}`,
-      ``,
-      `1) Revisa gastos e ingresos del periodo.`,
-      `2) Abre la guía y copia las casillas:`,
-      `   ${base}/fiscal/guide`,
-      `3) Presenta en la sede AEAT:`,
-      `   ${d.aeatPath}`,
-      `4) Sube el PDF a Presentados cuando acabes:`,
-      `   ${base}/fiscal/filings`,
-      ``,
-      `Borrador del modelo: ${base}${d.href}`,
-      ``,
-      `— Vexo`,
-    ].join("\n");
+    const mail = buildFiscalDeadlineEmail({
+      deadline: d,
+      kind,
+      baseUrl: base,
+    });
 
-    await sendMail({ to, subject, text });
+    await sendMail({
+      to,
+      subject: mail.subject,
+      text: mail.text,
+      html: mail.html,
+    });
     await prisma.fiscalReminderLog.create({
-      data: { periodKey, kind, toEmail: to, subject },
+      data: { periodKey, kind, toEmail: to, subject: mail.subject },
     });
     sent.push({ periodKey, kind, model: d.model });
   }
@@ -162,25 +145,22 @@ export async function runFiscalDeadlineReminders(now = new Date()) {
       skipped.push(`${periodKey} ${kind} already sent`);
       continue;
     }
-    const subject = `[Vexo] AEAT ${a.kind}: ${a.subject} — ${kindLabel(kind)}`;
-    const text = [
-      `Hola,`,
-      ``,
-      `Tienes una comunicación AEAT abierta con plazo:`,
-      ``,
-      `Asunto: ${a.subject}`,
-      `Tipo: ${a.kind}`,
-      `Plazo: ${a.dueAt.toISOString().slice(0, 10)}`,
-      `Estado: ${kindLabel(kind)}`,
-      ``,
-      `Revisa y responde en la sede (DEHú). Cuando acabes, márcalo en Vexo:`,
-      `${base}/fiscal/aeat`,
-      ``,
-      `— Vexo`,
-    ].join("\n");
-    await sendMail({ to, subject, text });
+    const dueLabel = a.dueAt.toISOString().slice(0, 10);
+    const mail = buildAeatCommsEmail({
+      kind,
+      subjectLabel: a.subject,
+      aeatKind: a.kind,
+      dueLabel,
+      baseUrl: base,
+    });
+    await sendMail({
+      to,
+      subject: mail.subject,
+      text: mail.text,
+      html: mail.html,
+    });
     await prisma.fiscalReminderLog.create({
-      data: { periodKey, kind, toEmail: to, subject },
+      data: { periodKey, kind, toEmail: to, subject: mail.subject },
     });
     sent.push({ periodKey, kind, model: "AEAT" });
   }

@@ -27,6 +27,7 @@ export async function sendMail(opts: {
   to: string;
   subject: string;
   text: string;
+  html?: string;
   attachments?: MailAttachment[];
 }): Promise<void> {
   if (!isSmtpConfigured()) {
@@ -59,6 +60,7 @@ export async function sendMail(opts: {
       to: opts.to,
       subject: opts.subject,
       text: opts.text,
+      html: opts.html,
       attachments: opts.attachments?.map((a) => ({
         filename: a.filename,
         content: a.content,

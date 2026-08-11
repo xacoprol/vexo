@@ -227,11 +227,8 @@ export async function sendFiscalReminderTest(): Promise<FiscalReminderTestState>
   const { isSmtpConfigured, sendMail, smtpConfigHint } = await import(
     "@/lib/mail"
   );
-  const {
-    buildUpcomingDeadlines,
-    daysUntil,
-    urgencyLabel,
-  } = await import("@/lib/fiscal-calendar");
+  const { buildUpcomingDeadlines } = await import("@/lib/fiscal-calendar");
+  const { buildFiscalTestEmail } = await import("@/lib/fiscal-email");
 
   if (!isSmtpConfigured()) {
     return { ok: false, error: smtpConfigHint() };
@@ -252,38 +249,22 @@ export async function sendFiscalReminderTest(): Promise<FiscalReminderTestState>
     };
   }
 
-  const now = new Date();
-  const deadlines = buildUpcomingDeadlines(now);
-  const lines = deadlines.map((d) => {
-    const u = urgencyLabel(d.dueDate, now);
-    return `· ${d.model} ${d.periodLabel} — ${d.dueLabel} (${u.text}, ${daysUntil(d.dueDate, now)} días)`;
-  });
-
   const auth = (process.env.AUTH_URL ?? "").trim().replace(/\/$/, "");
   const vercel = (process.env.VERCEL_URL ?? "").trim().replace(/\/$/, "");
   const base =
     auth || (vercel ? `https://${vercel}` : "https://vexo.wod3d.com");
 
+  const mail = buildFiscalTestEmail({
+    deadlines: buildUpcomingDeadlines(new Date()),
+    baseUrl: base,
+  });
+
   try {
     await sendMail({
       to,
-      subject: "[Vexo] Prueba de recordatorios fiscales",
-      text: [
-        `Hola,`,
-        ``,
-        `Esto es una prueba de los recordatorios fiscales de Vexo.`,
-        `Si lo lees, el SMTP y el destino están bien.`,
-        ``,
-        `Los avisos reales salen 14 días antes, 3 días antes y el día del plazo.`,
-        ``,
-        `Próximos plazos:`,
-        ...(lines.length ? lines : ["· (ninguno ahora)"]),
-        ``,
-        `Guía: ${base}/fiscal/guide`,
-        `Ajustes: ${base}/settings`,
-        ``,
-        `— Vexo`,
-      ].join("\n"),
+      subject: mail.subject,
+      text: mail.text,
+      html: mail.html,
     });
     return { ok: true, to };
   } catch (e) {
