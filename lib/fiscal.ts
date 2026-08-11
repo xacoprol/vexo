@@ -111,6 +111,8 @@ type ExpenseRow = {
    * Las AIB (intracom) se declaran siempre en el 303 (autorrepercusión).
    */
   deductible: boolean;
+  /** IVA interior → casillas 30/31 vía InvestmentAsset; no entra en 28/29 */
+  isInvestment: boolean;
 };
 
 type MarketplaceRow = {
@@ -121,11 +123,12 @@ type MarketplaceRow = {
   vatStatus: string | null;
 };
 
-/** IVA de bienes de inversión en el trimestre de compra → casillas 30/31 del 303. */
+/** IVA de bienes de inversión interiores en el trimestre de compra → 30/31. */
 type AssetVatRow = {
   purchaseDate: Date | null;
   base: unknown;
   vatAmount: unknown;
+  vatOperationType?: string | null;
 };
 
 function parseFilingBoxes(
@@ -746,7 +749,10 @@ function aggregateRows(
   const exps = expenses.filter((e) => inRange(e.issueDate, from, to));
   const mkts = marketplace.filter((m) => inRange(m.issueDate, from, to));
   const assetRows = assets.filter(
-    (a) => a.purchaseDate != null && inRange(a.purchaseDate, from, to)
+    (a) =>
+      a.purchaseDate != null &&
+      inRange(a.purchaseDate, from, to) &&
+      !isExpenseIntracom(a.vatOperationType)
   );
 
   const vatMap = new Map<number, VatBucket>();
@@ -844,10 +850,11 @@ function aggregateRows(
       const rate = e.vatRate > 0 ? e.vatRate : 21;
       const quota = vat > 0 ? vat : round2(sub * (rate / 100));
       aibQuota = round2(aibQuota + quota);
-    } else if (deductibleOk) {
+    } else if (deductibleOk && !e.isInvestment) {
       expenseBaseInterior = round2(expenseBaseInterior + sub);
       expenseVatInterior = round2(expenseVatInterior + vat);
     }
+    // Interior + inversión: casillas 30/31 vía InvestmentAsset (no aquí)
   }
 
   for (const a of assetRows) {
@@ -936,6 +943,7 @@ async function fetchFiscalRows(from: Date, to: Date) {
         total: true,
         vatOperationType: true,
         deductible: true,
+        isInvestment: true,
       },
     }),
     prisma.marketplaceIncome.findMany({
@@ -958,6 +966,7 @@ async function fetchFiscalRows(from: Date, to: Date) {
         purchaseDate: true,
         base: true,
         vatAmount: true,
+        vatOperationType: true,
       },
     }),
   ]);

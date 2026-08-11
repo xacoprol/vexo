@@ -328,10 +328,14 @@ model Expense {
   vatAmount      Decimal
   total          Decimal
   deductible     Boolean  @default(true) // IVA deducible / gasto computable 130
+  /// Si true: IVA interior → casillas 30/31; crea/actualiza InvestmentAsset
+  isInvestment   Boolean  @default(false)
   notes          String?
   /// PDF/imagen/CSV original subido (Vercel Blob vía FiscalDocument)
   documentId     String?
   document       FiscalDocument? @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  investmentAssetId String? @unique
+  investmentAsset   InvestmentAsset? @relation(fields: [investmentAssetId], references: [id], onDelete: SetNull)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -340,6 +344,7 @@ model Expense {
   @@index([supplierName])
   @@index([invoiceNumber])
   @@index([documentId])
+  @@index([isInvestment])
 }
 
 // ─── Fiscal: archivo documental (Vercel Blob) ────────────────────────────────
@@ -460,6 +465,8 @@ model InvestmentAsset {
   purchaseDate    DateTime?
   base            Decimal  @default(0)
   vatAmount       Decimal  @default(0)
+  /// INTERIOR → 303 casillas 30/31; INTRACOMUNITARIA → solo amortización (AIB va en el gasto)
+  vatOperationType String  @default("INTERIOR")
   usefulLifeYears Int      @default(4)
   method          String   @default("LINEAL")
   startYear       Int?
@@ -470,6 +477,7 @@ model InvestmentAsset {
   updatedAt       DateTime @updatedAt
 
   amortizations InvestmentAmortization[]
+  expense       Expense?
 
   @@index([purchaseDate])
   @@index([startYear])

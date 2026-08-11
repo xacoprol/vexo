@@ -242,16 +242,21 @@ export default async function ExpensesPage({
                             </p>
                           ) : null}
                           <span className="mt-1 flex flex-wrap gap-1">
-                            {isExpenseIntracom(e.vatOperationType) ? (
-                              <span className="badge bg-accent-soft text-accent">
-                                Intracom
-                              </span>
-                            ) : null}
-                            {noNif ? (
-                              <span className="badge bg-warning/15 text-warning">
-                                Sin NIF
-                              </span>
-                            ) : null}
+                          {isExpenseIntracom(e.vatOperationType) ? (
+                            <span className="badge bg-accent-soft text-accent">
+                              Intracom
+                            </span>
+                          ) : null}
+                          {e.isInvestment ? (
+                            <span className="badge bg-accent-soft text-accent">
+                              Inversión
+                            </span>
+                          ) : null}
+                          {noNif ? (
+                            <span className="badge bg-warning/15 text-warning">
+                              Sin NIF
+                            </span>
+                          ) : null}
                             {!e.deductible ? (
                               <span className="badge bg-line text-ink-muted">
                                 No deducible

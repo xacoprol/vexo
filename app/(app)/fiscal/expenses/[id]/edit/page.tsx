@@ -9,7 +9,10 @@ export default async function EditExpensePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const expense = await prisma.expense.findUnique({ where: { id } });
+  const expense = await prisma.expense.findUnique({
+    where: { id },
+    include: { investmentAsset: { select: { usefulLifeYears: true } } },
+  });
   if (!expense) notFound();
 
   return (
@@ -25,7 +28,12 @@ export default async function EditExpensePage({
           Editar gasto
         </h1>
       </div>
-      <ExpenseForm expense={expense} />
+      <ExpenseForm
+        expense={expense}
+        defaultUsefulLifeYears={
+          expense.investmentAsset?.usefulLifeYears ?? 4
+        }
+      />
     </div>
   );
 }

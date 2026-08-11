@@ -26,6 +26,7 @@ import { fiscalDocumentHref } from "@/lib/fiscal-blob";
 
 type Props = {
   expense?: Expense;
+  defaultUsefulLifeYears?: number;
 };
 
 function toDateInputValue(d: Date | string) {
@@ -33,7 +34,10 @@ function toDateInputValue(d: Date | string) {
   return date.toISOString().slice(0, 10);
 }
 
-export function ExpenseForm({ expense }: Props) {
+export function ExpenseForm({
+  expense,
+  defaultUsefulLifeYears = 4,
+}: Props) {
   const action = expense
     ? updateExpense.bind(null, expense.id)
     : createExpense;
@@ -66,6 +70,12 @@ export function ExpenseForm({ expense }: Props) {
   const [vatRate, setVatRate] = useState(expense?.vatRate ?? 21);
   const [notes, setNotes] = useState(expense?.notes ?? "");
   const [deductible, setDeductible] = useState(expense?.deductible ?? true);
+  const [isInvestment, setIsInvestment] = useState(
+    expense?.isInvestment ?? false
+  );
+  const [usefulLifeYears, setUsefulLifeYears] = useState(
+    defaultUsefulLifeYears
+  );
   const [dateKey, setDateKey] = useState(0);
   const [parseInfo, setParseInfo] = useState<string | null>(null);
   const [activityFit, setActivityFit] = useState<ActivityFit | null>(null);
@@ -417,6 +427,45 @@ export function ExpenseForm({ expense }: Props) {
           desmarcas (gasto privado), no entra en IRPF ni como IVA deducible.
           Las adquisiciones intracomunitarias siguen declarándose en el 303.
         </label>
+
+        <label className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            name="isInvestment"
+            value="1"
+            checked={isInvestment}
+            onChange={(e) => setIsInvestment(e.target.checked)}
+            className="mt-0.5 rounded border-line"
+          />
+          <span>
+            <span className="font-medium text-ink">Bien de inversión</span>
+            <span className="block text-ink-muted">
+              Equipo / máquina con vida útil &gt; 1 año. Interior → casillas
+              30/31 del 303. Intracom → AIB en el gasto + amortización en el
+              130. Se crea automáticamente en Fiscal → Bienes.
+            </span>
+          </span>
+        </label>
+
+        {isInvestment ? (
+          <div>
+            <label className="label" htmlFor="usefulLifeYears">
+              Años de vida útil
+            </label>
+            <input
+              id="usefulLifeYears"
+              name="usefulLifeYears"
+              type="number"
+              min={1}
+              max={40}
+              className="input w-28"
+              value={usefulLifeYears}
+              onChange={(e) =>
+                setUsefulLifeYears(parseInt(e.target.value, 10) || 4)
+              }
+            />
+          </div>
+        ) : null}
 
         <div>
           <label className="label" htmlFor="notes">

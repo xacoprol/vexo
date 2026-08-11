@@ -3,12 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/session";
 import {
   isExpenseIntracom,
   parseExpenseVatOperationType,
 } from "@/lib/fiscal";
+import { buildLinearAmortization } from "@/lib/investment-amortization";
 
 export type ExpenseFormState = {
   error?: string;
@@ -44,7 +46,6 @@ function parseExpenseForm(formData: FormData) {
   const intracom = isExpenseIntracom(vatOperationType);
   let vatRate =
     parseFloat(String(formData.get("vatRate") ?? "21").replace(",", ".")) || 0;
-  // Intracom nunca a 0 %: hace falta tipo español para casillas 10/11 y 36/37
   if (intracom && vatRate <= 0) vatRate = 21;
   const vatAmountRaw = String(formData.get("vatAmount") ?? "").trim();
   const vatAmount = vatAmountRaw
@@ -55,7 +56,6 @@ function parseExpenseForm(formData: FormData) {
       ? round2(subtotal * (vatRate / 100))
       : vatAmount;
   const totalRaw = String(formData.get("total") ?? "").trim();
-  // Intracom: lo pagado al proveedor suele ser la base (ISP); la cuota 11/37 es autorrepercutida
   const total = totalRaw
     ? parseFloat(totalRaw.replace(",", ".")) || 0
     : intracom
@@ -63,6 +63,10 @@ function parseExpenseForm(formData: FormData) {
       : round2(subtotal + resolvedVatAmount);
 
   const issueDateRaw = String(formData.get("issueDate") ?? "").trim();
+  const usefulLifeRaw = parseInt(
+    String(formData.get("usefulLifeYears") ?? "4"),
+    10
+  );
   return {
     issueDate: issueDateRaw ? new Date(issueDateRaw) : new Date(),
     supplierName: String(formData.get("supplierName") ?? "").trim(),
@@ -80,6 +84,13 @@ function parseExpenseForm(formData: FormData) {
     deductible:
       formData.get("deductible") === "on" ||
       formData.get("deductible") === "1",
+    isInvestment:
+      formData.get("isInvestment") === "on" ||
+      formData.get("isInvestment") === "1",
+    usefulLifeYears:
+      Number.isFinite(usefulLifeRaw) && usefulLifeRaw > 0
+        ? Math.min(40, usefulLifeRaw)
+        : 4,
     notes: String(formData.get("notes") ?? "").trim() || null,
     documentId: String(formData.get("documentId") ?? "").trim() || null,
   };
@@ -99,7 +110,6 @@ function validate(data: ReturnType<typeof parseExpenseForm>) {
   return null;
 }
 
-/** Misma factura del mismo proveedor (por NIF o nombre). */
 async function findDuplicateExpense(
   data: ReturnType<typeof parseExpenseForm>,
   excludeId?: string
@@ -139,6 +149,112 @@ function duplicateMessage(invoiceNumber: string | null) {
 
 type ExpenseWriteData = ReturnType<typeof parseExpenseForm>;
 
+async function rebuildAssetAmortizations(
+  assetId: string,
+  base: number,
+  usefulLifeYears: number,
+  startYear: number
+) {
+  const amort = buildLinearAmortization({
+    base,
+    usefulLifeYears,
+    startYear,
+  });
+  await prisma.investmentAmortization.deleteMany({ where: { assetId } });
+  for (const a of amort) {
+    await prisma.investmentAmortization.create({
+      data: {
+        assetId,
+        year: a.year,
+        amount: new Prisma.Decimal(a.amount),
+      },
+    });
+  }
+}
+
+/**
+ * Crea/actualiza el bien enlazado, o lo borra si se desmarca.
+ * Intracom: el IVA del bien va a 0 en 30/31 (la AIB ya está en el gasto).
+ */
+async function syncInvestmentAsset(
+  expenseId: string,
+  data: ExpenseWriteData,
+  existingAssetId: string | null
+): Promise<string | null> {
+  if (!data.isInvestment) {
+    if (existingAssetId) {
+      await prisma.expense.update({
+        where: { id: expenseId },
+        data: { investmentAssetId: null, isInvestment: false },
+      });
+      await prisma.investmentAsset.delete({ where: { id: existingAssetId } }).catch(() => null);
+    }
+    return null;
+  }
+
+  const intracom = isExpenseIntracom(data.vatOperationType);
+  const description =
+    data.description?.trim() ||
+    `Bien · ${data.supplierName}${data.invoiceNumber ? ` · ${data.invoiceNumber}` : ""}`;
+  const startYear = data.issueDate.getFullYear();
+  // 30/31 solo interiores; AIB autorrepercutida queda en 10/11 y 36/37 del gasto
+  const assetVat = intracom ? 0 : data.vatAmount;
+  const payload = {
+    description,
+    supplierName: data.supplierName,
+    supplierNif: data.supplierNif,
+    invoiceNumber: data.invoiceNumber,
+    purchaseDate: data.issueDate,
+    base: new Prisma.Decimal(data.subtotal),
+    vatAmount: new Prisma.Decimal(assetVat),
+    vatOperationType: data.vatOperationType,
+    usefulLifeYears: data.usefulLifeYears,
+    startYear,
+    documentId: data.documentId || null,
+    notes: data.notes,
+  };
+
+  if (existingAssetId) {
+    await prisma.investmentAsset.update({
+      where: { id: existingAssetId },
+      data: payload,
+    });
+    await rebuildAssetAmortizations(
+      existingAssetId,
+      data.subtotal,
+      data.usefulLifeYears,
+      startYear
+    );
+    await prisma.expense.update({
+      where: { id: expenseId },
+      data: { isInvestment: true, investmentAssetId: existingAssetId },
+    });
+    return existingAssetId;
+  }
+
+  const asset = await prisma.investmentAsset.create({ data: payload });
+  await rebuildAssetAmortizations(
+    asset.id,
+    data.subtotal,
+    data.usefulLifeYears,
+    startYear
+  );
+  await prisma.expense.update({
+    where: { id: expenseId },
+    data: { isInvestment: true, investmentAssetId: asset.id },
+  });
+  return asset.id;
+}
+
+function revalidateExpensePaths(id?: string) {
+  revalidatePath("/fiscal");
+  revalidatePath("/fiscal/expenses");
+  revalidatePath("/fiscal/assets");
+  revalidatePath("/fiscal/303");
+  revalidatePath("/fiscal/130");
+  if (id) revalidatePath(`/fiscal/expenses/${id}/edit`);
+}
+
 async function insertExpense(data: ExpenseWriteData): Promise<
   | { ok: true; id: string }
   | { ok: false; error: string; duplicateId?: string }
@@ -169,12 +285,13 @@ async function insertExpense(data: ExpenseWriteData): Promise<
       vatAmount: data.vatAmount,
       total: data.total,
       deductible: data.deductible,
+      isInvestment: data.isInvestment,
       notes: data.notes,
       documentId: data.documentId || null,
     },
   });
-  revalidatePath("/fiscal");
-  revalidatePath("/fiscal/expenses");
+  await syncInvestmentAsset(created.id, data, null);
+  revalidateExpensePaths();
   return { ok: true, id: created.id };
 }
 
@@ -191,6 +308,8 @@ export type ExpenseDraftInput = {
   vatAmount?: number;
   total?: number;
   deductible?: boolean;
+  isInvestment?: boolean;
+  usefulLifeYears?: number;
   notes?: string | null;
   documentId?: string | null;
 };
@@ -214,6 +333,7 @@ function fromDraftInput(input: ExpenseDraftInput): ExpenseWriteData {
       ? round2(Math.max(0, Number(input.total) || 0))
       : round2(subtotal + vatAmount);
   const issueDateRaw = String(input.issueDate ?? "").trim();
+  const usefulLifeRaw = Number(input.usefulLifeYears) || 4;
 
   return {
     issueDate: issueDateRaw ? new Date(issueDateRaw) : new Date(),
@@ -228,6 +348,11 @@ function fromDraftInput(input: ExpenseDraftInput): ExpenseWriteData {
     vatAmount,
     total,
     deductible: input.deductible !== false,
+    isInvestment: Boolean(input.isInvestment),
+    usefulLifeYears:
+      Number.isFinite(usefulLifeRaw) && usefulLifeRaw > 0
+        ? Math.min(40, Math.floor(usefulLifeRaw))
+        : 4,
     notes: String(input.notes ?? "").trim() || null,
     documentId: String(input.documentId ?? "").trim() || null,
   };
@@ -259,6 +384,7 @@ export async function createExpense(
   try {
     const data = parseExpenseForm(formData);
     data.deductible = formData.has("deductible");
+    data.isInvestment = formData.has("isInvestment");
     const result = await insertExpense(data);
     if (!result.ok) {
       return { error: result.error, duplicateId: result.duplicateId };
@@ -278,6 +404,8 @@ export async function updateExpense(
   await requireAuth();
   try {
     const data = parseExpenseForm(formData);
+    data.deductible = formData.has("deductible");
+    data.isInvestment = formData.has("isInvestment");
     const err = validate(data);
     if (err) return { error: err };
 
@@ -288,6 +416,12 @@ export async function updateExpense(
         duplicateId: dup.id,
       };
     }
+
+    const existing = await prisma.expense.findUnique({
+      where: { id },
+      select: { investmentAssetId: true },
+    });
+    if (!existing) return { error: "Gasto no encontrado" };
 
     await prisma.expense.update({
       where: { id },
@@ -304,13 +438,13 @@ export async function updateExpense(
         vatAmount: data.vatAmount,
         total: data.total,
         notes: data.notes,
-        deductible: formData.has("deductible"),
+        deductible: data.deductible,
+        isInvestment: data.isInvestment,
         ...(data.documentId ? { documentId: data.documentId } : {}),
       },
     });
-    revalidatePath("/fiscal");
-    revalidatePath("/fiscal/expenses");
-    revalidatePath(`/fiscal/expenses/${id}/edit`);
+    await syncInvestmentAsset(id, data, existing.investmentAssetId);
+    revalidateExpensePaths(id);
     redirect("/fiscal/expenses");
   } catch (e) {
     if (isRedirectError(e)) throw e;
@@ -320,8 +454,16 @@ export async function updateExpense(
 
 export async function deleteExpense(id: string) {
   await requireAuth();
+  const existing = await prisma.expense.findUnique({
+    where: { id },
+    select: { investmentAssetId: true },
+  });
   await prisma.expense.delete({ where: { id } });
-  revalidatePath("/fiscal");
-  revalidatePath("/fiscal/expenses");
+  if (existing?.investmentAssetId) {
+    await prisma.investmentAsset
+      .delete({ where: { id: existing.investmentAssetId } })
+      .catch(() => null);
+  }
+  revalidateExpensePaths();
   redirect("/fiscal/expenses");
 }

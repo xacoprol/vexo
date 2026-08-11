@@ -31,6 +31,8 @@ type Row = ExpenseQueueItem & {
   error?: string;
   duplicateId?: string;
   deductible: boolean;
+  isInvestment: boolean;
+  usefulLifeYears: number;
 };
 
 function round2(n: number) {
@@ -85,6 +87,8 @@ function toInput(row: Row): ExpenseDraftInput {
       ? round2(row.subtotal)
       : round2(row.subtotal + vatAmount),
     deductible: row.deductible,
+    isInvestment: row.isInvestment,
+    usefulLifeYears: row.usefulLifeYears,
     notes: row.notes,
     documentId: row.documentId ?? null,
   };
@@ -107,6 +111,8 @@ export function ExpenseBatchReview() {
         activityFitReason: item.activityFitReason ?? null,
         homeOfficeTip: item.homeOfficeTip ?? null,
         deductible: fit !== "suspicious",
+        isInvestment: false,
+        usefulLifeYears: 4,
         status: "pending" as const,
       };
     });
@@ -472,6 +478,36 @@ export function ExpenseBatchReview() {
                 />
                 Deducible IRPF e IVA
               </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={row.isInvestment}
+                  disabled={locked}
+                  onChange={(e) =>
+                    patchRow(row.localId, { isInvestment: e.target.checked })
+                  }
+                  className="rounded border-line"
+                />
+                Bien de inversión
+              </label>
+              {row.isInvestment ? (
+                <div className="max-w-[8rem]">
+                  <label className="label">Años vida útil</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={40}
+                    className="input"
+                    disabled={locked}
+                    value={row.usefulLifeYears}
+                    onChange={(e) =>
+                      patchRow(row.localId, {
+                        usefulLifeYears: parseInt(e.target.value, 10) || 4,
+                      })
+                    }
+                  />
+                </div>
+              ) : null}
               {!row.deductible && !intracom ? (
                 <p className="text-xs text-amber-800">
                   Sin marcar: no entra en el 130 ni como IVA soportado del 303.
