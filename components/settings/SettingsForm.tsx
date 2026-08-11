@@ -10,6 +10,7 @@ import {
 } from "@/app/(app)/settings/actions";
 import { THEME_FIELDS, DEFAULT_THEME } from "@/lib/theme";
 import { LogoUploadField } from "@/components/settings/LogoUploadField";
+import { FiscalReminderTestButton } from "@/components/settings/FiscalReminderTestButton";
 import { ButtonPending } from "@/components/ui/ButtonPending";
 
 type Props = {
@@ -505,6 +506,7 @@ export function SettingsForm({ settings, invoiceSeries, quoteSeries }: Props) {
               Si lo dejas vacío, se usa el email de la empresa de arriba.
             </p>
           </div>
+          <FiscalReminderTestButton />
         </section>
 
         <section className="card-panel space-y-4 p-6">

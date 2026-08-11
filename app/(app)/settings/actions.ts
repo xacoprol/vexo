@@ -215,3 +215,81 @@ export async function createQuoteSeries(formData: FormData) {
   });
   revalidatePath("/settings");
 }
+
+export type FiscalReminderTestState =
+  | { ok: true; to: string }
+  | { ok: false; error: string };
+
+/** Envía un email de prueba (no escribe en FiscalReminderLog). */
+export async function sendFiscalReminderTest(): Promise<FiscalReminderTestState> {
+  await requireAuth();
+
+  const { isSmtpConfigured, sendMail, smtpConfigHint } = await import(
+    "@/lib/mail"
+  );
+  const {
+    buildUpcomingDeadlines,
+    daysUntil,
+    urgencyLabel,
+  } = await import("@/lib/fiscal-calendar");
+
+  if (!isSmtpConfigured()) {
+    return { ok: false, error: smtpConfigHint() };
+  }
+
+  const settings = await prisma.companySettings.findFirst();
+  const to =
+    settings?.fiscalReminderEmail?.trim() ||
+    settings?.email?.trim() ||
+    process.env.SMTP_FROM?.trim() ||
+    process.env.SMTP_USER?.trim() ||
+    "";
+  if (!to || !to.includes("@")) {
+    return {
+      ok: false,
+      error:
+        "Falta email destino. Pon el email de la empresa o el de recordatorios fiscales.",
+    };
+  }
+
+  const now = new Date();
+  const deadlines = buildUpcomingDeadlines(now);
+  const lines = deadlines.map((d) => {
+    const u = urgencyLabel(d.dueDate, now);
+    return `· ${d.model} ${d.periodLabel} — ${d.dueLabel} (${u.text}, ${daysUntil(d.dueDate, now)} días)`;
+  });
+
+  const auth = (process.env.AUTH_URL ?? "").trim().replace(/\/$/, "");
+  const vercel = (process.env.VERCEL_URL ?? "").trim().replace(/\/$/, "");
+  const base =
+    auth || (vercel ? `https://${vercel}` : "https://vexo.wod3d.com");
+
+  try {
+    await sendMail({
+      to,
+      subject: "[Vexo] Prueba de recordatorios fiscales",
+      text: [
+        `Hola,`,
+        ``,
+        `Esto es una prueba de los recordatorios fiscales de Vexo.`,
+        `Si lo lees, el SMTP y el destino están bien.`,
+        ``,
+        `Los avisos reales salen 14 días antes, 3 días antes y el día del plazo.`,
+        ``,
+        `Próximos plazos:`,
+        ...(lines.length ? lines : ["· (ninguno ahora)"]),
+        ``,
+        `Guía: ${base}/fiscal/guide`,
+        `Ajustes: ${base}/settings`,
+        ``,
+        `— Vexo`,
+      ].join("\n"),
+    });
+    return { ok: true, to };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "No se pudo enviar",
+    };
+  }
+}
