@@ -1053,5 +1053,16 @@ async function getPriorYear303Compensation(year: number): Promise<number> {
     const r = Number(presented.result);
     return round2(Math.max(0, -r));
   }
-  return 0;
+  // Sin 4T presentado: calcula cadena 303 del año anterior (sin recursión de compensación)
+  const { to } = yearRange(prev);
+  const yearStart = yearRange(prev).from;
+  const { invoices, expenses, marketplace } = await fetchFiscalRows(
+    yearStart,
+    to
+  );
+  const chain = buildModelo303Chain(prev, invoices, expenses, marketplace, 0);
+  const last = chain[4];
+  return round2(
+    last.carryForward ?? Math.max(0, last.result < 0 ? -last.result : 0)
+  );
 }
