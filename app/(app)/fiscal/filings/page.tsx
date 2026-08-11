@@ -59,7 +59,8 @@ export default async function FiscalFilingsPage() {
             Modelos presentados
           </h1>
           <p className="mt-1 text-sm text-ink-muted">
-            Operativo: 3T 2026. Histórico en{" "}
+            Modelos registrados en Vexo (tras presentar en AEAT). Histórico de
+            PDFs también en{" "}
             <Link href="/fiscal/archive" className="text-accent underline">
               Archivo
             </Link>
@@ -69,8 +70,8 @@ export default async function FiscalFilingsPage() {
       </div>
 
       <p className="rounded-lg border border-line bg-accent-soft/40 px-4 py-3 text-sm text-ink-muted">
-        Gemini lee el PDF. Revisas las casillas y se guarda como oficial. Si el
-        resultado es a ingresar, registra el NRC en{" "}
+        Gemini lee el PDF. Revisas las casillas y se guarda en Vexo (no es la
+        presentación AEAT). Si el resultado es a ingresar, registra el NRC en{" "}
         <Link href="/fiscal/payments" className="text-accent underline">
           Pagos
         </Link>
@@ -90,7 +91,7 @@ export default async function FiscalFilingsPage() {
 
       <section className="card-panel overflow-x-auto">
         <div className="border-b border-line px-4 py-3">
-          <h2 className="text-sm font-semibold">Registrados (operativos)</h2>
+          <h2 className="text-sm font-semibold">Registrados</h2>
         </div>
         {filings.length === 0 ? (
           <p className="px-4 py-8 text-center text-sm text-ink-muted">

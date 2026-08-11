@@ -180,18 +180,11 @@ export async function deleteFiscalFiling(id: string) {
   revalidateFilings();
 }
 
-/** Borra presentados trimestrales que no sean 3T 2026. */
+/** Desactivado: no borrar presentados históricos (riesgo legal). */
 export async function cleanupNonCurrentQuarterFilings(): Promise<{
   ok: true;
   deleted: number;
 }> {
   await requireAuth();
-  const result = await prisma.fiscalFiling.deleteMany({
-    where: {
-      quarter: { not: null },
-      NOT: { AND: [{ year: 2026 }, { quarter: 3 }] },
-    },
-  });
-  revalidateFilings();
-  return { ok: true, deleted: result.count };
+  return { ok: true, deleted: 0 };
 }

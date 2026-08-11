@@ -38,46 +38,20 @@ export default async function FiscalPage({
           <Link href="/fiscal/expenses" className="btn-secondary">
             Gastos
           </Link>
-          <Link href="/fiscal/income" className="btn-secondary">
-            Ingresos marketplace
+          <Link href="/invoices" className="btn-secondary">
+            Facturas
           </Link>
-          <Link href="/fiscal/archive" className="btn-secondary">
-            Archivo
+          <Link href="/fiscal/income" className="btn-secondary">
+            Marketplace
           </Link>
           <Link href="/fiscal/books" className="btn-secondary">
             Libros
           </Link>
           <Link href="/fiscal/payments" className="btn-secondary">
-            Liquidaciones
-          </Link>
-          <Link
-            href={`/fiscal/303?year=${year}&q=${quarter}`}
-            className="btn-secondary"
-          >
-            Modelo 303
-          </Link>
-          {regime !== "131" ? (
-            <Link
-              href={`/fiscal/130?year=${year}&q=${quarter}`}
-              className="btn-secondary"
-            >
-              Modelo 130
-            </Link>
-          ) : null}
-          <Link
-            href={`/fiscal/390?year=${year}`}
-            className="btn-secondary"
-          >
-            Modelo 390
+            Pagos / NRC
           </Link>
           <Link href="/fiscal/filings" className="btn-secondary">
             Presentados
-          </Link>
-          <Link
-            href={`/fiscal/annual?year=${year}`}
-            className="btn-secondary"
-          >
-            Resumen anual
           </Link>
         </div>
       </div>
@@ -85,20 +59,32 @@ export default async function FiscalPage({
       <FiscalPeriodNav year={year} quarter={quarter} />
 
       <p className="rounded-lg border border-line bg-accent-soft/40 px-4 py-3 text-sm text-ink-muted">
-        Trimestre operativo: <span className="font-medium text-ink">3T 2026</span>
+        Periodo a liquidar:{" "}
+        <span className="font-medium text-ink">
+          {quarter}T {year}
+        </span>
         . Empieza por la{" "}
         <Link href="/fiscal/guide" className="text-accent underline">
           Guía de presentación
         </Link>
-        : te dice qué modelo tocar y las casillas a copiar. Sube{" "}
+        : orden 303 → 130 → 349 si aplica, casillas a copiar y subida del PDF.
+        Completa{" "}
         <Link href="/fiscal/expenses" className="text-accent underline">
           gastos
+        </Link>
+        ,{" "}
+        <Link href="/invoices" className="text-accent underline">
+          facturas
         </Link>{" "}
-        e{" "}
+        y{" "}
         <Link href="/fiscal/income" className="text-accent underline">
-          ingresos marketplace
+          marketplace
+        </Link>
+        ; regenera{" "}
+        <Link href="/fiscal/books" className="text-accent underline">
+          libros
         </Link>{" "}
-        y el borrador se recalcula solo.
+        antes de presentar.
       </p>
 
       {summary.expenses.count === 0 ? (

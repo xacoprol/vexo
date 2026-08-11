@@ -42,8 +42,8 @@ export default async function FiscalGuidePage() {
       hint:
         invoiceCount + marketplaceCount > 0
           ? `${invoiceCount} facturas W3D · ${marketplaceCount} marketplace`
-          : "Importa Amazon/Shopify o emite facturas",
-      href: "/fiscal/income",
+          : "Emite facturas y/o importa Amazon/Shopify",
+      href: "/invoices",
     },
     {
       ok: expenseCount > 0,
@@ -53,6 +53,12 @@ export default async function FiscalGuidePage() {
           ? `${expenseCount} gastos · base ${formatCurrency(summary.expenses.base)}`
           : "Sube facturas de gasto (PDF/CSV Amazon)",
       href: "/fiscal/expenses",
+    },
+    {
+      ok: true,
+      label: "Libros registro del año",
+      hint: "Genera ingresos/gastos/bienes antes de presentar",
+      href: `/fiscal/books?year=${year}`,
     },
     {
       ok: Boolean(presented303),
@@ -136,12 +142,20 @@ export default async function FiscalGuidePage() {
             Completa{" "}
             <Link href="/fiscal/expenses" className="text-accent underline">
               gastos
+            </Link>
+            ,{" "}
+            <Link href="/invoices" className="text-accent underline">
+              facturas
             </Link>{" "}
             e{" "}
             <Link href="/fiscal/income" className="text-accent underline">
-              ingresos marketplace
+              marketplace
+            </Link>
+            ; regenera{" "}
+            <Link href={`/fiscal/books?year=${year}`} className="text-accent underline">
+              libros
             </Link>{" "}
-            del trimestre.
+            del año.
           </li>
           <li>Revisa las casillas de abajo (se calculan solas).</li>
           <li>

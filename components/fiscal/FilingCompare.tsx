@@ -23,7 +23,7 @@ export function FilingCompare({
   if (!presented) {
     return (
       <section className="card-panel space-y-2 p-5">
-        <h2 className="form-section-title">Presentado (gestoría)</h2>
+        <h2 className="form-section-title">Presentado en Vexo</h2>
         <p className="text-sm text-ink-muted">
           Aún no hay un {modelLabel} presentado guardado para este periodo.{" "}
           <Link href={filingsHref} className="text-accent underline">
@@ -43,7 +43,7 @@ export function FilingCompare({
         <div>
           <h2 className="form-section-title">Presentado vs borrador</h2>
           <p className="form-section-hint">
-            Oficial guardado
+            Registrado en Vexo
             {presented.sourceFileName
               ? ` · ${presented.sourceFileName}`
               : ""}

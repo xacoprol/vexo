@@ -22,6 +22,7 @@ export type Modelo347Draft = {
   totalDeclared: number;
   salesTotal: number;
   purchasesTotal: number;
+  skippedNoNif: { sales: number; purchases: number };
 };
 
 export type Modelo349Draft = {
@@ -33,6 +34,7 @@ export type Modelo349Draft = {
   totalEntregas: number;
   totalAdquisiciones: number;
   hasOps: boolean;
+  skippedNoNif: { entregas: number; adquisiciones: number };
 };
 
 function round2(n: number): number {
@@ -113,10 +115,15 @@ export async function buildModelo347Draft(year: number): Promise<Modelo347Draft>
   ]);
 
   const map = new Map<string, ThirdPartyOp>();
+  let skippedSales = 0;
+  let skippedPurchases = 0;
 
   for (const inv of invoices) {
     const nif = normalizeTaxId(inv.client.nif);
-    if (!nif) continue;
+    if (!nif) {
+      skippedSales += 1;
+      continue;
+    }
     const cc = (inv.client.countryCode || "ES").toUpperCase();
     // 347 = operaciones con residentes; excluye NIF-IVA UE típicos
     if (cc !== "ES" && countryFromVatId(nif) && countryFromVatId(nif) !== "ES") {
@@ -134,7 +141,10 @@ export async function buildModelo347Draft(year: number): Promise<Modelo347Draft>
 
   for (const e of expenses) {
     const nif = normalizeTaxId(e.supplierNif);
-    if (!nif) continue;
+    if (!nif) {
+      skippedPurchases += 1;
+      continue;
+    }
     mergeOp(map, {
       nif,
       name: e.supplierName,
@@ -165,6 +175,7 @@ export async function buildModelo347Draft(year: number): Promise<Modelo347Draft>
     totalDeclared: round2(salesTotal + purchasesTotal),
     salesTotal,
     purchasesTotal,
+    skippedNoNif: { sales: skippedSales, purchases: skippedPurchases },
   };
 }
 
@@ -203,10 +214,15 @@ export async function buildModelo349Draft(
 
   const entregasMap = new Map<string, ThirdPartyOp>();
   const adquisMap = new Map<string, ThirdPartyOp>();
+  let skippedEntregas = 0;
+  let skippedAdquis = 0;
 
   for (const inv of invoices) {
     const nif = normalizeTaxId(inv.client.nif);
-    if (!nif) continue;
+    if (!nif) {
+      skippedEntregas += 1;
+      continue;
+    }
     const cc =
       (inv.client.countryCode || countryFromVatId(nif) || "").toUpperCase() ||
       null;
@@ -221,7 +237,10 @@ export async function buildModelo349Draft(
 
   for (const e of expenses) {
     const nif = normalizeTaxId(e.supplierNif);
-    if (!nif) continue;
+    if (!nif) {
+      skippedAdquis += 1;
+      continue;
+    }
     mergeOp(adquisMap, {
       nif,
       name: e.supplierName,
@@ -247,5 +266,9 @@ export async function buildModelo349Draft(
     totalEntregas,
     totalAdquisiciones,
     hasOps: entregas.length + adquisiciones.length > 0,
+    skippedNoNif: {
+      entregas: skippedEntregas,
+      adquisiciones: skippedAdquis,
+    },
   };
 }

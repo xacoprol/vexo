@@ -25,8 +25,8 @@ export function ModeloDraft({ title, model, summary }: Props) {
 
   const how =
     model === "303"
-      ? "Se calcula solo con facturas + marketplace + gastos del trimestre."
-      : "Acumulado desde el 1 de enero: 20 % del beneficio − pagos 130 previos − retenciones.";
+      ? "Se calcula solo con facturas + marketplace + gastos del trimestre (IVA/AIB siempre)."
+      : "Acumulado desde el 1 de enero: 20 % del beneficio (gastos IRPF + amortizaciones) − pagos 130 previos − retenciones.";
 
   return (
     <section className="card-panel space-y-4 p-5 sm:p-6">

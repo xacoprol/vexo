@@ -44,6 +44,15 @@ export default async function Modelo349Page({
         presented={presented}
       />
 
+      {draft.skippedNoNif.entregas + draft.skippedNoNif.adquisiciones > 0 ? (
+        <p className="rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
+          Excluidas del 349 por falta de NIF-IVA:{" "}
+          {draft.skippedNoNif.entregas} entrega(s) y{" "}
+          {draft.skippedNoNif.adquisiciones} adquisición(es). Sin VAT ID no se
+          pueden declarar.
+        </p>
+      ) : null}
+
       {!draft.hasOps ? (
         <p className="rounded-lg border border-line bg-accent-soft/40 px-4 py-3 text-sm text-ink-muted">
           No hay operaciones UE en {draft.label}. Si no tuviste ventas

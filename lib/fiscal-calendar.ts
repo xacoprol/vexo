@@ -3,7 +3,10 @@
  * Plazos habituales AEAT (día 20 del mes siguiente al trimestre; anuales en enero).
  */
 
-import type { FiscalQuarter } from "@/lib/fiscal";
+import {
+  currentFiscalPeriod,
+  type FiscalQuarter,
+} from "@/lib/fiscal";
 
 export type GuideModel = "303" | "130" | "349" | "390" | "347";
 
@@ -44,25 +47,12 @@ function periodLabel(year: number, quarter: FiscalQuarter | null): string {
   return `${quarter}T ${year}`;
 }
 
-/** Trimestre que se está liquidando “ahora” según el calendario (no el calendario civil). */
+/** Trimestre a liquidar ahora (misma fuente que el hub fiscal). */
 export function filingTargetPeriod(now = new Date()): {
   year: number;
   quarter: FiscalQuarter;
 } {
-  const m = now.getMonth(); // 0–11
-  const y = now.getFullYear();
-  // Ene–mar: se presenta 4T año anterior (hasta 20 ene) o se prepara 1T
-  // Simplificación operativa: si estamos en el mes de plazo (ene/abr/jul/oct) hasta día 20,
-  // el target es el trimestre que vence; si no, el trimestre en curso para ir preparando.
-  if (m === 0 && now.getDate() <= 20) return { year: y - 1, quarter: 4 };
-  if (m === 3 && now.getDate() <= 20) return { year: y, quarter: 1 };
-  if (m === 6 && now.getDate() <= 20) return { year: y, quarter: 2 };
-  if (m === 9 && now.getDate() <= 20) return { year: y, quarter: 3 };
-
-  if (m <= 2) return { year: y, quarter: 1 };
-  if (m <= 5) return { year: y, quarter: 2 };
-  if (m <= 8) return { year: y, quarter: 3 };
-  return { year: y, quarter: 4 };
+  return currentFiscalPeriod(now);
 }
 
 export function buildUpcomingDeadlines(now = new Date()): FilingDeadline[] {

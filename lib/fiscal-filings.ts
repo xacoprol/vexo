@@ -139,21 +139,20 @@ export async function buildOfficialYearHistory(
     };
   });
 
-  const sumIncome = periods.reduce(
-    (s, p) => (p.incomeBase != null ? round2(s + p.incomeBase) : s),
-    0
-  );
-  const sumExpenses = periods.reduce(
-    (s, p) => (p.expensesBase != null ? round2(s + p.expensesBase) : s),
-    0
-  );
-  const hasQuarterIncome = periods.some((p) => p.incomeBase != null);
-  const hasQuarterExpenses = periods.some((p) => p.expensesBase != null);
+  // 130 bases son YTD: usar el último trimestre disponible (no sumar T1+…+T4)
+  const lastWithIncome = [...periods].reverse().find((p) => p.incomeBase != null);
+  const lastWithExpenses = [...periods]
+    .reverse()
+    .find((p) => p.expensesBase != null);
 
-  let incomeBase: number | null = hasQuarterIncome ? sumIncome : null;
-  let expensesBase: number | null = hasQuarterExpenses ? sumExpenses : null;
-  let incomeSource = hasQuarterIncome ? "Suma 130 trimestrales" : "";
-  let expensesSource = hasQuarterExpenses ? "Suma 130 trimestrales" : "";
+  let incomeBase: number | null = lastWithIncome?.incomeBase ?? null;
+  let expensesBase: number | null = lastWithExpenses?.expensesBase ?? null;
+  let incomeSource = lastWithIncome
+    ? `130 ${lastWithIncome.quarter}T (YTD)`
+    : "";
+  let expensesSource = lastWithExpenses
+    ? `130 ${lastWithExpenses.quarter}T (YTD)`
+    : "";
 
   if (incomeBase == null && row390?.incomeBase != null) {
     incomeBase = Number(row390.incomeBase);

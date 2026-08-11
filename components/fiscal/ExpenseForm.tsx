@@ -383,8 +383,8 @@ export function ExpenseForm({ expense }: Props) {
             onChange={(e) => setDeductible(e.target.checked)}
             className="rounded border-line"
           />
-          Deducible (gasto en modelo 130
-          {intracom ? "; AIB en 303" : " e IVA soportado en 303"})
+          Deducible en IRPF (casilla 02 del 130). El IVA / AIB del 303 se calcula
+          siempre con este gasto.
         </label>
 
         <div>

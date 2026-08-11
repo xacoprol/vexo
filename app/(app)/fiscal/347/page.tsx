@@ -55,6 +55,15 @@ export default async function Modelo347Page({
         presented={presented}
       />
 
+      {draft.skippedNoNif.sales + draft.skippedNoNif.purchases > 0 ? (
+        <p className="rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
+          Excluidas del borrador por falta de NIF:{" "}
+          {draft.skippedNoNif.sales} factura(s) y{" "}
+          {draft.skippedNoNif.purchases} gasto(s). Complétalos en clientes /
+          gastos o el 347 saldrá incompleto.
+        </p>
+      ) : null}
+
       <section className="card-panel space-y-4 p-5">
         <div>
           <h2 className="form-section-title">Declarables · {year}</h2>

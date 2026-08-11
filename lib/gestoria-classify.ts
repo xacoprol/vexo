@@ -35,20 +35,16 @@ export type GestoriaClass =
       category: "OTHER";
     };
 
-const OPERATIVE_YEAR = 2026;
-const OPERATIVE_QUARTER = 3;
-
-/** ¿Se crea FiscalFiling operativo (solo 3T 2026 o anuales vigentes)? */
+/** ¿Se crea FiscalFiling estructurado al importar? Últimos años + anuales. */
 export function shouldUpsertOperativeFiling(
   modelType: string,
   year: number,
-  quarter: number | null
+  _quarter: number | null
 ): boolean {
+  const currentYear = new Date().getFullYear();
   if (modelType === "036") return true;
-  if (modelType === "390" || modelType === "347") {
-    return year >= OPERATIVE_YEAR - 1;
-  }
-  return year === OPERATIVE_YEAR && quarter === OPERATIVE_QUARTER;
+  // Histórico reciente consultable en Presentados (PDFs siguen en Archivo)
+  return year >= currentYear - 2;
 }
 
 export function classifyGestoriaFileName(fileName: string): GestoriaClass {

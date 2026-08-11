@@ -102,6 +102,8 @@ type ExpenseRow = {
   vatRate: number;
   total: unknown;
   vatOperationType: string | null;
+  /** Si false: no computa en casilla 02 del 130; sí puede contar en IVA/AIB del 303. */
+  deductible: boolean;
 };
 
 type MarketplaceRow = {
@@ -136,9 +138,19 @@ export function currentFiscalPeriod(now = new Date()): {
   year: number;
   quarter: FiscalQuarter;
 } {
-  const month = now.getMonth();
-  const quarter = (Math.floor(month / 3) + 1) as FiscalQuarter;
-  return { year: now.getFullYear(), quarter };
+  const m = now.getMonth(); // 0–11
+  const y = now.getFullYear();
+  // En mes de plazo (ene/abr/jul/oct) hasta día 20: trimestre que vence.
+  // Fuera de esa ventana: trimestre civil en curso (para ir preparando).
+  if (m === 0 && now.getDate() <= 20) return { year: y - 1, quarter: 4 };
+  if (m === 3 && now.getDate() <= 20) return { year: y, quarter: 1 };
+  if (m === 6 && now.getDate() <= 20) return { year: y, quarter: 2 };
+  if (m === 9 && now.getDate() <= 20) return { year: y, quarter: 3 };
+
+  if (m <= 2) return { year: y, quarter: 1 };
+  if (m <= 5) return { year: y, quarter: 2 };
+  if (m <= 8) return { year: y, quarter: 3 };
+  return { year: y, quarter: 4 };
 }
 
 export function parseFiscalPeriod(sp: {
@@ -605,15 +617,17 @@ function buildModelo130(
 }
 
 /**
- * Cadena oficial del 130: cada trimestre usa YTD (1 ene → fin T)
- * y casilla 05 = suma de resultados positivos de trimestres previos.
+ * Cadena del 130: YTD (1 ene → fin T). Casilla 05 = pagos presentados previos
+ * si existen; si no, resultados positivos de borradores previos.
  */
-function buildModelo130Chain(
+async function buildModelo130Chain(
   year: number,
   invoices: InvoiceRow[],
   expenses: ExpenseRow[],
-  marketplace: MarketplaceRow[]
-): Record<FiscalQuarter, ModeloBoxes> {
+  marketplace: MarketplaceRow[],
+  amortizationYearTotal: number,
+  presentedPriorByQuarter: Partial<Record<FiscalQuarter, number>>
+): Promise<Record<FiscalQuarter, ModeloBoxes>> {
   const yearStart = yearRange(year).from;
   let priorPayments = 0;
   const out = {} as Record<FiscalQuarter, ModeloBoxes>;
@@ -621,14 +635,21 @@ function buildModelo130Chain(
   for (const q of [1, 2, 3, 4] as FiscalQuarter[]) {
     const { to } = quarterRange(year, q);
     const agg = aggregateRows(invoices, expenses, marketplace, yearStart, to);
+    const amortYtd = round2((amortizationYearTotal * q) / 4);
     const draft = buildModelo130(
       agg.issued.incomeBase,
-      agg.expenses.base,
+      round2(agg.expenses.base + amortYtd),
       agg.issued.irpfWithheld,
       priorPayments
     );
     out[q] = draft;
-    priorPayments = round2(priorPayments + Math.max(0, draft.result));
+    const presentedPrior = presentedPriorByQuarter[q];
+    if (presentedPrior != null && Number.isFinite(presentedPrior)) {
+      // Tras este T, el siguiente usa el resultado presentado si ya está guardado
+      priorPayments = round2(priorPayments + Math.max(0, presentedPrior));
+    } else {
+      priorPayments = round2(priorPayments + Math.max(0, draft.result));
+    }
   }
 
   return out;
@@ -733,8 +754,12 @@ function aggregateRows(
     const sub = Number(e.subtotal);
     const vat = Number(e.vatAmount);
     const tot = Number(e.total);
-    expenseBase = round2(expenseBase + sub);
-    expenseTotal = round2(expenseTotal + tot);
+    const irpfOk = e.deductible !== false;
+    if (irpfOk) {
+      expenseBase = round2(expenseBase + sub);
+      expenseTotal = round2(expenseTotal + tot);
+    }
+    // IVA 303: siempre (incl. AIB), aunque no compute en IRPF
     if (isExpenseIntracom(e.vatOperationType)) {
       aibBase = round2(aibBase + sub);
       const rate = e.vatRate > 0 ? e.vatRate : 21;
@@ -816,7 +841,6 @@ async function fetchFiscalRows(from: Date, to: Date) {
     prisma.expense.findMany({
       where: {
         issueDate: { gte: from, lte: to },
-        deductible: true,
       },
       select: {
         issueDate: true,
@@ -825,6 +849,7 @@ async function fetchFiscalRows(from: Date, to: Date) {
         vatRate: true,
         total: true,
         vatOperationType: true,
+        deductible: true,
       },
     }),
     prisma.marketplaceIncome.findMany({
@@ -847,6 +872,30 @@ async function fetchFiscalRows(from: Date, to: Date) {
   };
 }
 
+async function fetchYearAmortizationTotal(year: number): Promise<number> {
+  const rows = await prisma.investmentAmortization.findMany({
+    where: { year },
+    select: { amount: true },
+  });
+  return round2(rows.reduce((s, r) => s + Number(r.amount), 0));
+}
+
+async function fetchPresented130Results(
+  year: number
+): Promise<Partial<Record<FiscalQuarter, number>>> {
+  const rows = await prisma.fiscalFiling.findMany({
+    where: { modelType: "130", year, quarter: { not: null } },
+    select: { quarter: true, result: true },
+  });
+  const out: Partial<Record<FiscalQuarter, number>> = {};
+  for (const r of rows) {
+    if (r.quarter === 1 || r.quarter === 2 || r.quarter === 3 || r.quarter === 4) {
+      out[r.quarter as FiscalQuarter] = Number(r.result);
+    }
+  }
+  return out;
+}
+
 /** Agrega facturas emitidas + gastos del trimestre para libros y borradores 303/130. */
 export async function buildFiscalPeriodSummary(
   year: number,
@@ -856,13 +905,26 @@ export async function buildFiscalPeriodSummary(
   const label = `${quarter}T ${year}`;
   // 303 = solo el trimestre; 130 = YTD desde 1 ene (necesita filas de todo el año hasta fin T)
   const yearStart = yearRange(year).from;
-  const [{ invoices, expenses, marketplace }, priorYearCompensation] =
-    await Promise.all([
-      fetchFiscalRows(yearStart, to),
-      getPriorYear303Compensation(year),
-    ]);
+  const [
+    { invoices, expenses, marketplace },
+    priorYearCompensation,
+    amortYear,
+    presented130,
+  ] = await Promise.all([
+    fetchFiscalRows(yearStart, to),
+    getPriorYear303Compensation(year),
+    fetchYearAmortizationTotal(year),
+    fetchPresented130Results(year),
+  ]);
   const quarterAgg = aggregateRows(invoices, expenses, marketplace, from, to);
-  const chain130 = buildModelo130Chain(year, invoices, expenses, marketplace);
+  const chain130 = await buildModelo130Chain(
+    year,
+    invoices,
+    expenses,
+    marketplace,
+    amortYear,
+    presented130
+  );
   const chain303 = buildModelo303Chain(
     year,
     invoices,
@@ -870,6 +932,10 @@ export async function buildFiscalPeriodSummary(
     marketplace,
     priorYearCompensation
   );
+
+  const amortYtd = round2((amortYear * quarter) / 4);
+  const modelo130 = chain130[quarter];
+  void amortYtd;
 
   return {
     year,
@@ -880,7 +946,7 @@ export async function buildFiscalPeriodSummary(
     issued: quarterAgg.issued,
     expenses: quarterAgg.expenses,
     modelo303: chain303[quarter],
-    modelo130: chain130[quarter],
+    modelo130,
   };
 }
 
@@ -892,13 +958,26 @@ export async function buildFiscalYearSummary(
   year: number
 ): Promise<FiscalYearSummary> {
   const { from, to } = yearRange(year);
-  const [{ invoices, expenses, marketplace }, priorYearCompensation] =
-    await Promise.all([
-      fetchFiscalRows(from, to),
-      getPriorYear303Compensation(year),
-    ]);
+  const [
+    { invoices, expenses, marketplace },
+    priorYearCompensation,
+    amortYear,
+    presented130,
+  ] = await Promise.all([
+    fetchFiscalRows(from, to),
+    getPriorYear303Compensation(year),
+    fetchYearAmortizationTotal(year),
+    fetchPresented130Results(year),
+  ]);
   const yearAgg = aggregateRows(invoices, expenses, marketplace, from, to);
-  const chain130 = buildModelo130Chain(year, invoices, expenses, marketplace);
+  const chain130 = await buildModelo130Chain(
+    year,
+    invoices,
+    expenses,
+    marketplace,
+    amortYear,
+    presented130
+  );
   const chain303 = buildModelo303Chain(
     year,
     invoices,
@@ -917,11 +996,12 @@ export async function buildFiscalYearSummary(
         range.from,
         range.to
       );
+      const amortYtd = round2((amortYear * q) / 4);
       return {
         quarter: q,
         label: `${q}T ${year}`,
         incomeBase: agg.issued.incomeBase,
-        expensesBase: agg.expenses.base,
+        expensesBase: round2(agg.expenses.base + amortYtd),
         irpfWithheld: agg.issued.irpfWithheld,
         modelo303Result: chain303[q].result,
         modelo130Result: chain130[q].result,
