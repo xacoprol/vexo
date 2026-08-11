@@ -49,6 +49,7 @@ function badge(text: string, tone: "soon" | "due" | "ok" | "test"): string {
 }
 
 function shell(opts: {
+  baseUrl: string;
   preheader: string;
   title: string;
   badgeHtml: string;
@@ -56,6 +57,7 @@ function shell(opts: {
   footerNote?: string;
 }): string {
   const pre = esc(opts.preheader);
+  const logoSrc = `${opts.baseUrl.replace(/\/$/, "")}/brand/logo.png`;
   return `<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -73,8 +75,12 @@ function shell(opts: {
           <td style="padding:22px 28px 10px 28px;">
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
               <tr>
-                <td style="font-size:18px;font-weight:700;letter-spacing:-0.02em;color:${BRAND.ink};">Vexo</td>
-                <td align="right">${opts.badgeHtml}</td>
+                <td style="vertical-align:middle;">
+                  <a href="${esc(opts.baseUrl)}" style="text-decoration:none;">
+                    <img src="${esc(logoSrc)}" alt="Vexo" width="180" height="30" style="display:block;width:180px;height:30px;border:0;outline:none;text-decoration:none;" />
+                  </a>
+                </td>
+                <td align="right" style="vertical-align:middle;">${opts.badgeHtml}</td>
               </tr>
             </table>
           </td>
@@ -215,6 +221,7 @@ export function buildFiscalDeadlineEmail(opts: {
   `;
 
   const html = shell({
+    baseUrl,
     preheader: `${status}: modelo ${d.model} ${d.periodLabel} · ${d.dueLabel}`,
     title: subject,
     badgeHtml: badge(status, urgencyTone(kind)),
@@ -277,6 +284,7 @@ export function buildAeatCommsEmail(opts: {
   `;
 
   const html = shell({
+    baseUrl: opts.baseUrl,
     preheader: `${status}: ${opts.aeatKind} · ${opts.subjectLabel}`,
     title: subject,
     badgeHtml: badge(status, urgencyTone(opts.kind)),
@@ -367,6 +375,7 @@ export function buildFiscalTestEmail(opts: {
   `;
 
   const html = shell({
+    baseUrl: opts.baseUrl,
     preheader: "Prueba OK: SMTP y destino de recordatorios fiscales",
     title: subject,
     badgeHtml: badge("Prueba", "test"),
