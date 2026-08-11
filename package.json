@@ -13,6 +13,8 @@
     "db:reset": "prisma migrate reset",
     "import:gestoria": "tsx scripts/import-gestoria-pack.ts",
     "import:gestoria:prod": "vercel env run -e production -- npx tsx scripts/import-gestoria-pack.ts",
+    "ocr:gestoria-filings": "tsx scripts/ocr-gestoria-filings.ts",
+    "ocr:gestoria-filings:prod": "vercel env run -e production -- npx tsx scripts/ocr-gestoria-filings.ts",
     "icons:generate": "tsx scripts/generate-icons.ts"
   },
   "dependencies": {

@@ -2,7 +2,10 @@
  * Importa el paquete de gestoría:
  * - Sube todos los archivos a Vercel Blob (FiscalDocument)
  * - Importa Excel → libros registro (+ bienes/amortizaciones)
- * - OCR Gemini → FiscalFiling solo 3T 2026 o anuales vigentes
+ * - OCR Gemini → FiscalFiling (años recientes; ver shouldUpsertOperativeFiling)
+ *
+ * Para rellenar Presentados desde PDFs ya en Archivo / carpeta:
+ *   npm run ocr:gestoria-filings
  *
  * Uso:
  *   npx tsx scripts/import-gestoria-pack.ts [ruta-carpeta]
