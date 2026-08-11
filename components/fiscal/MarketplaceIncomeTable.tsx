@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { formatCurrency, formatDate } from "@/lib/calculations";
 import {
@@ -167,14 +168,22 @@ export function MarketplaceIncomeTable({ rows, emptyHint }: Props) {
                     {formatCurrency(r.vatAmount)}
                   </td>
                   <td className="sticky right-0 z-10 bg-bg-elevated px-2 py-3 group-hover:bg-accent-soft/20 sm:static sm:bg-transparent sm:px-4">
-                    <form action={deleteMarketplaceIncome.bind(null, r.id)}>
-                      <button
-                        type="submit"
-                        className="btn-ghost px-2 py-1 text-xs text-danger"
+                    <div className="flex flex-wrap items-center justify-end gap-1">
+                      <Link
+                        href={`/fiscal/income/${r.id}/edit`}
+                        className="btn-ghost px-2 py-1 text-xs"
                       >
-                        Borrar
-                      </button>
-                    </form>
+                        Editar
+                      </Link>
+                      <form action={deleteMarketplaceIncome.bind(null, r.id)}>
+                        <button
+                          type="submit"
+                          className="btn-ghost px-2 py-1 text-xs text-danger"
+                        >
+                          Borrar
+                        </button>
+                      </form>
+                    </div>
                   </td>
                 </tr>
               ))

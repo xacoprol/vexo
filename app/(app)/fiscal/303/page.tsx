@@ -40,7 +40,15 @@ export default async function Modelo303Page({
       />
       <FilingCompare
         modelLabel="303"
+        modelType="303"
+        year={year}
+        quarter={quarter}
         draftResult={summary.modelo303.result}
+        draftBoxes={summary.modelo303.boxes}
+        incomeBase={summary.issued.incomeBase}
+        expensesBase={summary.expenses.base}
+        vatRepercutida={summary.issued.quotaRepercutida}
+        vatDeductible={summary.expenses.vatDeductible}
         presented={presented}
       />
       <ModeloDraft title="Casillas orientativas" model="303" summary={summary} />

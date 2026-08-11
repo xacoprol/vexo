@@ -94,7 +94,15 @@ export default async function Modelo390Page({
 
       <FilingCompare
         modelLabel="390"
+        modelType="390"
+        year={year}
+        quarter={null}
         draftResult={draft.result}
+        draftBoxes={draft.boxes}
+        incomeBase={summary.issued.incomeBase}
+        expensesBase={summary.expenses.base}
+        vatRepercutida={summary.issued.quotaRepercutida}
+        vatDeductible={summary.expenses.vatDeductible}
         presented={presented}
       />
 

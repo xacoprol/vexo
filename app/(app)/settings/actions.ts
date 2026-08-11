@@ -196,3 +196,22 @@ export async function createInvoiceSeries(formData: FormData) {
   });
   revalidatePath("/settings");
 }
+
+export async function createQuoteSeries(formData: FormData) {
+  await requireAuth();
+  const prefix = String(formData.get("prefix") ?? "").trim();
+  const name = String(formData.get("name") ?? "").trim();
+  if (!prefix || !name) return;
+  const yearEnabled = formData.get("useYear") === "on";
+  await prisma.quoteSeries.create({
+    data: {
+      prefix,
+      name,
+      nextNumber: 1,
+      year: yearEnabled ? new Date().getFullYear() : null,
+      padLength: 3,
+      isDefault: false,
+    },
+  });
+  revalidatePath("/settings");
+}

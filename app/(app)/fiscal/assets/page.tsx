@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { formatCurrency, formatDate } from "@/lib/calculations";
+import { InvestmentAssetForm } from "@/components/fiscal/InvestmentAssetForm";
 import {
   deleteInvestmentAsset,
   updateInvestmentAsset,
@@ -24,15 +25,17 @@ export default async function FiscalAssetsPage() {
           Bienes de inversión
         </h1>
         <p className="mt-1 text-sm text-ink-muted">
-          Altas desde gastos (check «Bien de inversión») o libro de bienes.
-          El 130 prorratea por meses desde la fecha de alta y corta al final de
-          la vida útil.
+          Alta manual, desde un gasto (check «Bien de inversión») o importación
+          histórica. El 130 prorratea por meses desde la fecha de alta.
         </p>
       </div>
 
+      <InvestmentAssetForm />
+
       {assets.length === 0 ? (
         <p className="card-panel px-4 py-8 text-center text-sm text-ink-muted">
-          No hay bienes. Importa el libro de bienes de inversión en{" "}
+          No hay bienes. Usa <strong>Nuevo bien</strong>, marca un gasto como
+          inversión, o importa un Excel histórico en{" "}
           <Link href="/fiscal/books" className="text-accent underline">
             Libros registro
           </Link>
@@ -50,6 +53,9 @@ export default async function FiscalAssetsPage() {
                     {a.invoiceNumber ? ` · ${a.invoiceNumber}` : ""}
                     {a.purchaseDate
                       ? ` · ${formatDate(a.purchaseDate)}`
+                      : ""}
+                    {a.vatOperationType === "INTRACOMUNITARIA"
+                      ? " · Intracom"
                       : ""}
                   </p>
                   <p className="mt-1 font-mono text-sm">

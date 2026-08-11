@@ -5,6 +5,7 @@ import type { CompanySettings, InvoiceSeries, QuoteSeries } from "@prisma/client
 import {
   updateSettings,
   createInvoiceSeries,
+  createQuoteSeries,
   type SettingsState,
 } from "@/app/(app)/settings/actions";
 import { THEME_FIELDS, DEFAULT_THEME } from "@/lib/theme";
@@ -625,18 +626,39 @@ export function SettingsForm({ settings, invoiceSeries, quoteSeries }: Props) {
           </div>
           <div>
             <h3 className="mb-2 text-sm font-medium">Presupuestos</h3>
-            <ul className="space-y-1 text-sm">
+            <ul className="mb-4 space-y-1 text-sm">
               {quoteSeries.map((s) => (
                 <li key={s.id} className="flex justify-between font-mono text-xs">
                   <span>
                     {s.prefix}
                     {s.year ? `${s.year}-` : ""}
                     {String(s.nextNumber).padStart(s.padLength, "0")}
+                    {s.isDefault ? " ★" : ""}
                   </span>
                   <span className="text-ink-muted">{s.name}</span>
                 </li>
               ))}
             </ul>
+            <form action={createQuoteSeries} className="flex flex-wrap gap-2">
+              <input
+                name="prefix"
+                className="input w-24"
+                placeholder="PRE-"
+                required
+              />
+              <input
+                name="name"
+                className="input flex-1"
+                placeholder="Nombre serie"
+                required
+              />
+              <label className="flex items-center gap-1 text-xs text-ink-muted">
+                <input type="checkbox" name="useYear" defaultChecked /> Año
+              </label>
+              <button type="submit" className="btn-secondary">
+                Añadir
+              </button>
+            </form>
           </div>
         </div>
       </section>

@@ -1,10 +1,20 @@
 import Link from "next/link";
 import { formatCurrency } from "@/lib/calculations";
 import type { FilingBox } from "@/lib/gemini-fiscal-filing";
+import type { FiscalModelType } from "@/lib/gemini-fiscal-filing";
+import { MarkPresentedForm } from "@/components/fiscal/MarkPresentedForm";
 
 type Props = {
   modelLabel: string;
+  modelType: FiscalModelType;
+  year: number;
+  quarter: number | null;
   draftResult: number;
+  draftBoxes: FilingBox[];
+  incomeBase?: number | null;
+  expensesBase?: number | null;
+  vatRepercutida?: number | null;
+  vatDeductible?: number | null;
   presented: {
     result: number;
     boxes: FilingBox[];
@@ -16,20 +26,41 @@ type Props = {
 
 export function FilingCompare({
   modelLabel,
+  modelType,
+  year,
+  quarter,
   draftResult,
+  draftBoxes,
+  incomeBase = null,
+  expensesBase = null,
+  vatRepercutida = null,
+  vatDeductible = null,
   presented,
   filingsHref = "/fiscal/filings",
 }: Props) {
   if (!presented) {
     return (
-      <section className="card-panel space-y-2 p-5">
+      <section className="card-panel space-y-3 p-5">
         <h2 className="form-section-title">Presentado en Vexo</h2>
         <p className="text-sm text-ink-muted">
-          Aún no hay un {modelLabel} presentado guardado para este periodo.{" "}
+          Aún no hay un {modelLabel} presentado para este periodo. Tras
+          enviarlo en la sede AEAT, márcalo aquí o{" "}
           <Link href={filingsHref} className="text-accent underline">
-            Subir modelo
+            sube el PDF
           </Link>
+          .
         </p>
+        <MarkPresentedForm
+          modelType={modelType}
+          year={year}
+          quarter={quarter}
+          draftResult={draftResult}
+          boxes={draftBoxes}
+          incomeBase={incomeBase}
+          expensesBase={expensesBase}
+          vatRepercutida={vatRepercutida}
+          vatDeductible={vatDeductible}
+        />
       </section>
     );
   }

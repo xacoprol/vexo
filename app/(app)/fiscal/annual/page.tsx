@@ -123,7 +123,15 @@ export default async function FiscalAnnualPage({
 
       <FilingCompare
         modelLabel="390"
+        modelType="390"
+        year={year}
+        quarter={null}
         draftResult={summary.modelo390.result}
+        draftBoxes={summary.modelo390.boxes}
+        incomeBase={summary.issued.incomeBase}
+        expensesBase={summary.expenses.base}
+        vatRepercutida={summary.issued.quotaRepercutida}
+        vatDeductible={summary.expenses.vatDeductible}
         presented={presented390}
       />
 

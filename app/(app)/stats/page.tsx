@@ -157,7 +157,7 @@ export default async function StatsPage({
         <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 className="text-sm font-semibold">
-              Histórico gestoría ({year})
+              Histórico presentado ({year})
             </h2>
             <p className="mt-0.5 text-xs text-ink-muted">
               Totales de modelos presentados guardados en Vexo (no son la sede AEAT)
@@ -173,8 +173,8 @@ export default async function StatsPage({
 
         {!official.hasData ? (
           <p className="text-sm text-ink-muted">
-            Aún no hay modelos presentados para {year}. Sube el 390 / 303 / 130
-            de la gestoría para rellenar este histórico.
+            Aún no hay modelos presentados para {year}. Márcalos desde el
+            borrador 303/130 o sube el PDF de la sede AEAT.
           </p>
         ) : (
           <>
@@ -218,7 +218,7 @@ export default async function StatsPage({
 
             {panelVsOfficial != null ? (
               <p className="mt-3 text-xs text-ink-muted">
-                Panel vs gestoría (ingresos):{" "}
+                Panel vs presentado (ingresos):{" "}
                 <span
                   className={
                     Math.abs(panelVsOfficial) < 1

@@ -59,19 +59,21 @@ export default async function FiscalFilingsPage() {
             Modelos presentados
           </h1>
           <p className="mt-1 text-sm text-ink-muted">
-            Modelos registrados en Vexo (tras presentar en AEAT). Histórico de
-            PDFs también en{" "}
+            Modelos registrados en Vexo (tras presentar en AEAT). Puedes
+            marcarlos desde el borrador 303/130, editarlos aquí o subir el PDF.
+            Histórico también en{" "}
             <Link href="/fiscal/archive" className="text-accent underline">
               Archivo
             </Link>
-            . Sube 303, 130, 390, 347, 349 o 036.
+            .
           </p>
         </div>
       </div>
 
       <p className="rounded-lg border border-line bg-accent-soft/40 px-4 py-3 text-sm text-ink-muted">
-        Gemini lee el PDF. Revisas las casillas y se guarda en Vexo (no es la
-        presentación AEAT). Si el resultado es a ingresar, registra el NRC en{" "}
+        Opcional: Gemini lee el PDF y revisas casillas. También puedes marcar
+        presentado desde el borrador del modelo. Si hay que ingresar, registra
+        el NRC en{" "}
         <Link href="/fiscal/payments" className="text-accent underline">
           Pagos
         </Link>
@@ -180,14 +182,22 @@ export default async function FiscalFilingsPage() {
                       )}
                     </td>
                     <td className="px-4 py-2 text-right">
-                      <form action={deleteFiscalFiling.bind(null, f.id)}>
-                        <button
-                          type="submit"
-                          className="text-xs text-danger hover:underline"
+                      <div className="flex flex-wrap items-center justify-end gap-2">
+                        <Link
+                          href={`/fiscal/filings/${f.id}/edit`}
+                          className="text-xs text-accent hover:underline"
                         >
-                          Borrar
-                        </button>
-                      </form>
+                          Editar
+                        </Link>
+                        <form action={deleteFiscalFiling.bind(null, f.id)}>
+                          <button
+                            type="submit"
+                            className="text-xs text-danger hover:underline"
+                          >
+                            Borrar
+                          </button>
+                        </form>
+                      </div>
                     </td>
                   </tr>
                 );

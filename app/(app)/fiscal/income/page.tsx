@@ -137,10 +137,13 @@ export default async function MarketplaceIncomePage({
             Ingresos marketplace
           </h1>
           <p className="mt-1 text-sm text-ink-muted">
-            Amazon (CSV) y Shopify (API, CSV o Informe IVA) · no usan la serie
-            W3D
+            Amazon (CSV) y Shopify (API, CSV o Informe IVA) · alta manual si
+            hace falta · no usan la serie W3D
           </p>
         </div>
+        <Link href="/fiscal/income/new" className="btn-primary text-sm">
+          Nuevo ingreso
+        </Link>
       </div>
 
       <ShopifySyncCard
@@ -165,7 +168,7 @@ export default async function MarketplaceIncomePage({
         emptyHint={
           query || channel || vat || Number.isFinite(year)
             ? "No hay ingresos con estos filtros."
-            : "No hay ingresos importados. Sube un CSV o sincroniza Shopify."
+            : "No hay ingresos. Importa CSV, sincroniza Shopify o crea uno a mano."
         }
       />
 

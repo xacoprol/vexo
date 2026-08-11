@@ -49,7 +49,19 @@ export default async function Modelo130Page({
       ) : null}
       <FilingCompare
         modelLabel="130"
+        modelType="130"
+        year={year}
+        quarter={quarter}
         draftResult={summary.modelo130.result}
+        draftBoxes={summary.modelo130.boxes}
+        incomeBase={
+          summary.modelo130.boxes.find((b) => b.code === "01")?.value ??
+          summary.issued.incomeBase
+        }
+        expensesBase={
+          summary.modelo130.boxes.find((b) => b.code === "02")?.value ??
+          summary.expenses.base
+        }
         presented={presented}
       />
       <ModeloDraft title="Casillas orientativas" model="130" summary={summary} />

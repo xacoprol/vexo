@@ -331,6 +331,148 @@ export async function importMarketplaceIncomeRows(
   }
 }
 
+export type MarketplaceIncomeFormState = { error?: string };
+
+const VAT_STATUSES = new Set([
+  "TAXABLE",
+  "EXEMPT",
+  "MARKETPLACE_COLLECTED",
+]);
+
+function parseMarketplaceForm(formData: FormData) {
+  const channelRaw = String(formData.get("channel") ?? "SHOPIFY")
+    .toUpperCase()
+    .trim();
+  const channel =
+    channelRaw === "AMAZON" || channelRaw === "SHOPIFY"
+      ? channelRaw
+      : "SHOPIFY";
+  const issueRaw = String(formData.get("issueDate") ?? "").trim();
+  const issueDate = issueRaw
+    ? new Date(`${issueRaw}T12:00:00`)
+    : new Date();
+  const vatStatusRaw = String(formData.get("vatStatus") ?? "TAXABLE")
+    .toUpperCase()
+    .trim();
+  const vatStatus = VAT_STATUSES.has(vatStatusRaw)
+    ? vatStatusRaw
+    : "TAXABLE";
+  const subtotal = round2(
+    Number(String(formData.get("subtotal") ?? "0").replace(",", ".")) || 0
+  );
+  const vatAmount = round2(
+    Number(String(formData.get("vatAmount") ?? "0").replace(",", ".")) || 0
+  );
+  const totalRaw = String(formData.get("total") ?? "").trim();
+  const total =
+    totalRaw === ""
+      ? round2(subtotal + vatAmount)
+      : round2(Number(totalRaw.replace(",", ".")) || 0);
+  const externalKeyRaw = String(formData.get("externalKey") ?? "").trim();
+  const externalRef =
+    String(formData.get("externalRef") ?? "").trim() || null;
+
+  return {
+    channel,
+    issueDate,
+    externalKey: externalKeyRaw,
+    externalRef,
+    orderId: String(formData.get("orderId") ?? "").trim() || null,
+    sku: String(formData.get("sku") ?? "").trim() || null,
+    description: String(formData.get("description") ?? "").trim() || null,
+    transactionType:
+      String(formData.get("transactionType") ?? "SHIPMENT").trim() ||
+      "SHIPMENT",
+    vatStatus,
+    vatRate: Number(String(formData.get("vatRate") ?? "0")) || 0,
+    subtotal,
+    vatAmount,
+    total,
+    shipToCountry:
+      String(formData.get("shipToCountry") ?? "").trim().toUpperCase() ||
+      null,
+    notes: String(formData.get("notes") ?? "").trim() || null,
+  };
+}
+
+function revalidateMarketplaceIncome() {
+  revalidatePath("/fiscal");
+  revalidatePath("/fiscal/income");
+  revalidatePath("/fiscal/303");
+  revalidatePath("/fiscal/130");
+  revalidatePath("/fiscal/349");
+}
+
+export async function createMarketplaceIncome(
+  _prev: MarketplaceIncomeFormState,
+  formData: FormData
+): Promise<MarketplaceIncomeFormState> {
+  await requireAuth();
+  const data = parseMarketplaceForm(formData);
+  if (Number.isNaN(data.issueDate.getTime())) {
+    return { error: "Fecha no válida" };
+  }
+  const externalKey =
+    data.externalKey ||
+    `MANUAL-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
+  try {
+    await prisma.marketplaceIncome.create({
+      data: {
+        ...data,
+        externalKey,
+        sourceFile: "manual",
+      },
+    });
+  } catch (err) {
+    if (isUniqueMarketplaceIncomeError(err)) {
+      return { error: "Ya existe un ingreso con esa clave externa en el canal" };
+    }
+    return {
+      error: err instanceof Error ? err.message : "No se pudo guardar",
+    };
+  }
+
+  revalidateMarketplaceIncome();
+  redirect("/fiscal/income");
+}
+
+export async function updateMarketplaceIncome(
+  id: string,
+  _prev: MarketplaceIncomeFormState,
+  formData: FormData
+): Promise<MarketplaceIncomeFormState> {
+  await requireAuth();
+  const existing = await prisma.marketplaceIncome.findUnique({ where: { id } });
+  if (!existing) return { error: "Ingreso no encontrado" };
+
+  const data = parseMarketplaceForm(formData);
+  if (Number.isNaN(data.issueDate.getTime())) {
+    return { error: "Fecha no válida" };
+  }
+  const externalKey = data.externalKey || existing.externalKey;
+
+  try {
+    await prisma.marketplaceIncome.update({
+      where: { id },
+      data: {
+        ...data,
+        externalKey,
+      },
+    });
+  } catch (err) {
+    if (isUniqueMarketplaceIncomeError(err)) {
+      return { error: "Ya existe un ingreso con esa clave externa en el canal" };
+    }
+    return {
+      error: err instanceof Error ? err.message : "No se pudo guardar",
+    };
+  }
+
+  revalidateMarketplaceIncome();
+  redirect("/fiscal/income");
+}
+
 export async function deleteMarketplaceIncome(id: string) {
   await requireAuth();
   await prisma.marketplaceIncome.delete({ where: { id } });

@@ -51,7 +51,17 @@ export default async function Modelo347Page({
 
       <FilingCompare
         modelLabel="347"
+        modelType="347"
+        year={year}
+        quarter={null}
         draftResult={draft.totalDeclared}
+        draftBoxes={[
+          {
+            code: "total",
+            label: "Importe total declarado",
+            value: draft.totalDeclared,
+          },
+        ]}
         presented={presented}
       />
 

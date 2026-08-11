@@ -40,7 +40,22 @@ export default async function Modelo349Page({
 
       <FilingCompare
         modelLabel="349"
+        modelType="349"
+        year={year}
+        quarter={quarter}
         draftResult={draft.totalEntregas + draft.totalAdquisiciones}
+        draftBoxes={[
+          {
+            code: "E",
+            label: "Total entregas intracomunitarias",
+            value: draft.totalEntregas,
+          },
+          {
+            code: "A",
+            label: "Total adquisiciones intracomunitarias",
+            value: draft.totalAdquisiciones,
+          },
+        ]}
         presented={presented}
       />
 
@@ -111,32 +126,6 @@ export default async function Modelo349Page({
           emptyText="Sin adquisiciones UE este trimestre."
           keyLabels={{ A: "adquisiciones" }}
         />
-      </section>
-
-      <section className="card-panel p-5">
-        <h2 className="form-section-title">Presentados</h2>
-        <p className="mt-1 text-xs text-ink-muted">
-          Tras presentar en la AEAT, sube el PDF en{" "}
-          <Link href="/fiscal/filings" className="text-accent underline">
-            Presentados
-          </Link>
-          .
-        </p>
-        {presented ? (
-          <p className="mt-3 text-sm">
-            {presented.quarter}T {presented.year} ·{" "}
-            <span className="font-mono">
-              {formatCurrency(presented.result)}
-            </span>
-            {presented.sourceFileName
-              ? ` · ${presented.sourceFileName}`
-              : ""}
-          </p>
-        ) : (
-          <p className="mt-3 text-sm text-ink-muted">
-            Aún no hay 349 de {draft.label} en Presentados.
-          </p>
-        )}
       </section>
 
       <p className="text-xs text-ink-muted">
