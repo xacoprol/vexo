@@ -164,8 +164,6 @@ async function main() {
   }
 
   // Segunda pasada: enlazar huérfanos por importe = resultado presentado
-  const { spawnSync } = await import("child_process");
-  void spawnSync;
   const orphans = await prisma.taxPayment.findMany({
     where: {
       amount: { gt: 0 },
