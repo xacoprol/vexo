@@ -10,20 +10,24 @@ import {
   filingTargetPeriod,
   urgencyLabel,
 } from "@/lib/fiscal-calendar";
+import { buildModelo349Draft } from "@/lib/fiscal-347-349";
 import { CopyableBoxes } from "@/components/fiscal/CopyableBoxes";
+import { ThirdPartyOpsTable } from "@/components/fiscal/ThirdPartyOpsTable";
 
 export default async function FiscalGuidePage() {
   const now = new Date();
   const target = filingTargetPeriod(now);
   const year = target.year;
   const quarter = target.quarter as FiscalQuarter;
-  const summary = await buildFiscalPeriodSummary(year, quarter);
+  const [summary, draft349, presented303, presented130, presented349] =
+    await Promise.all([
+      buildFiscalPeriodSummary(year, quarter),
+      buildModelo349Draft(year, quarter),
+      getPresentedFiling("303", year, quarter),
+      getPresentedFiling("130", year, quarter),
+      getPresentedFiling("349", year, quarter),
+    ]);
   const deadlines = buildUpcomingDeadlines(now);
-
-  const [presented303, presented130] = await Promise.all([
-    getPresentedFiling("303", year, quarter),
-    getPresentedFiling("130", year, quarter),
-  ]);
 
   const expenseCount = summary.expenses.count;
   const marketplaceCount = summary.issued.marketplaceCount;
@@ -64,6 +68,18 @@ export default async function FiscalGuidePage() {
         : "Igual: presenta y sube el justificante",
       href: "/fiscal/filings",
     },
+    {
+      ok: !draft349.hasOps || Boolean(presented349),
+      label: draft349.hasOps
+        ? `349 ${quarter}T ${year} presentado`
+        : `349 ${quarter}T ${year} (no aplica)`,
+      hint: draft349.hasOps
+        ? presented349
+          ? `Guardado · ${formatCurrency(presented349.result)}`
+          : `Hay ops UE · entregas ${formatCurrency(draft349.totalEntregas)} · adquis. ${formatCurrency(draft349.totalAdquisiciones)}`
+        : "Sin ops intracomunitarias este trimestre",
+      href: `/fiscal/349?year=${year}&q=${quarter}`,
+    },
   ];
 
   return (
@@ -89,8 +105,14 @@ export default async function FiscalGuidePage() {
             {quarter}T {year}
           </span>
           . Primero el <strong>303 (IVA)</strong>, luego el{" "}
-          <strong>130 (IRPF)</strong>. Si tuviste compras/ventas en la UE, el{" "}
-          <strong>349</strong>.
+          <strong>130 (IRPF)</strong>
+          {draft349.hasOps ? (
+            <>
+              , después el <strong>349</strong> (ops UE)
+            </>
+          ) : null}
+          . En enero también el <strong>347</strong> / <strong>390</strong> del
+          año anterior.
         </p>
         <ol className="list-decimal space-y-2 pl-5 text-sm text-ink-muted">
           <li>
@@ -128,7 +150,9 @@ export default async function FiscalGuidePage() {
       </section>
 
       <section className="card-panel space-y-3 p-5">
-        <h2 className="form-section-title">Checklist {quarter}T {year}</h2>
+        <h2 className="form-section-title">
+          Checklist {quarter}T {year}
+        </h2>
         <ul className="space-y-2">
           {checklist.map((c) => (
             <li
@@ -162,9 +186,14 @@ export default async function FiscalGuidePage() {
                 ? presented303
                 : d.model === "130"
                   ? presented130
-                  : null;
+                  : d.model === "349"
+                    ? presented349
+                    : null;
             return (
-              <div key={`${d.model}-${d.periodLabel}`} className="card-panel p-4">
+              <div
+                key={`${d.model}-${d.periodLabel}`}
+                className="card-panel p-4"
+              >
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <p className="font-mono text-lg font-semibold">{d.model}</p>
@@ -184,7 +213,10 @@ export default async function FiscalGuidePage() {
                 <p className="mt-1 text-xs">
                   Límite: <span className="font-medium">{d.dueLabel}</span>
                 </p>
-                <Link href={d.href} className="btn-secondary mt-3 inline-flex text-xs">
+                <Link
+                  href={d.href}
+                  className="btn-secondary mt-3 inline-flex text-xs"
+                >
                   Ver casillas
                 </Link>
               </div>
@@ -208,7 +240,10 @@ export default async function FiscalGuidePage() {
           result={summary.modelo303.result}
           resultLabel="A ingresar / compensar (casilla resultado)"
         />
-        <Link href={`/fiscal/303?year=${year}&q=${quarter}`} className="text-sm text-accent underline">
+        <Link
+          href={`/fiscal/303?year=${year}&q=${quarter}`}
+          className="text-sm text-accent underline"
+        >
           Abrir página completa del 303
         </Link>
       </section>
@@ -228,16 +263,47 @@ export default async function FiscalGuidePage() {
           result={summary.modelo130.result}
           resultLabel="Resultado pago fraccionado"
         />
-        <Link href={`/fiscal/130?year=${year}&q=${quarter}`} className="text-sm text-accent underline">
+        <Link
+          href={`/fiscal/130?year=${year}&q=${quarter}`}
+          className="text-sm text-accent underline"
+        >
           Abrir página completa del 130
+        </Link>
+      </section>
+
+      <section className="card-panel space-y-4 p-5">
+        <div>
+          <h2 className="form-section-title">
+            349 · {quarter}T {year}
+          </h2>
+          <p className="form-section-hint">
+            Operadores UE. Si la lista está vacía, normalmente no presentas.
+          </p>
+        </div>
+        <ThirdPartyOpsTable
+          title="Entregas"
+          ops={draft349.entregas}
+          emptyText="Sin entregas UE."
+          keyLabels={{ E: "entregas" }}
+        />
+        <ThirdPartyOpsTable
+          title="Adquisiciones"
+          ops={draft349.adquisiciones}
+          emptyText="Sin adquisiciones UE."
+          keyLabels={{ A: "adquisiciones" }}
+        />
+        <Link
+          href={`/fiscal/349?year=${year}&q=${quarter}`}
+          className="text-sm text-accent underline"
+        >
+          Abrir página completa del 349
         </Link>
       </section>
 
       <p className="rounded-lg border border-line bg-line/20 px-4 py-3 text-xs text-ink-muted">
         Esto es una guía orientativa a partir de tus datos en Vexo. No sustituye
         a un asesor ni a la declaración oficial. Si algo no cuadra (Amazon OSS,
-        intracom, prorrateos), revisa con tu gestoría o pregunta aquí antes de
-        presentar.
+        intracom, prorrateos), revisa con cuidado antes de presentar.
       </p>
 
       <p className="text-xs text-ink-muted">

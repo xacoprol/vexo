@@ -103,7 +103,7 @@ export function buildUpcomingDeadlines(now = new Date()): FilingDeadline[] {
       dueLabel: formatEs(due),
       what: "Operaciones intracomunitarias (compras/ventas UE). Si no hay, a veces no aplica.",
       aeatPath: "https://sede.agenciatributaria.gob.es/",
-      href: `/fiscal/349`,
+      href: `/fiscal/349?year=${year}&q=${quarter}`,
     },
   ];
 
@@ -133,7 +133,7 @@ export function buildUpcomingDeadlines(now = new Date()): FilingDeadline[] {
         dueLabel: formatEs(annualDue),
         what: "Operaciones con terceros > 3.005,06 €/año (clientes/proveedores).",
         aeatPath: "https://sede.agenciatributaria.gob.es/",
-        href: `/fiscal/347`,
+        href: `/fiscal/347?year=${annualYear}`,
       }
     );
   }
