@@ -413,11 +413,28 @@ const styles = StyleSheet.create({
 
   footer: {
     position: "absolute",
-    bottom: 24,
+    bottom: 18,
     left: 40,
     right: 40,
     flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: "flex-end",
+    gap: 12,
+    fontSize: 6.5,
+    color: MUTED,
+  },
+  footerLegal: {
+    flex: 1,
+    flexDirection: "column",
+    gap: 2,
+    paddingRight: 8,
+  },
+  footerLine: {
+    fontSize: 6.5,
+    color: MUTED,
+    lineHeight: 1.35,
+  },
+  footerPage: {
     fontSize: 7,
     color: MUTED,
   },
@@ -706,11 +723,21 @@ export function InvoicePdfDocument(props: InvoicePdfProps) {
         </View>
 
         <View style={styles.footer} fixed>
-          <Text>
-            De acuerdo con la LOPD los datos serán de uso exclusivo de la
-            empresa.
-          </Text>
+          <View style={styles.footerLegal}>
+            <Text style={styles.footerLine}>
+              De acuerdo con la LOPD los datos serán de uso exclusivo de la
+              empresa.
+            </Text>
+            {title.toUpperCase() === "FACTURA" ? (
+              <Text style={styles.footerLine}>
+                Factura no remitida al sistema Veri*Factu de la AEAT. Documento
+                emitido con software de facturación pendiente de adaptación
+                plena al RRSIF (obligación autónomos: 1 jul 2027).
+              </Text>
+            ) : null}
+          </View>
           <Text
+            style={styles.footerPage}
             render={({ pageNumber, totalPages }) =>
               `PÁGINA ${pageNumber} de ${totalPages}`
             }
