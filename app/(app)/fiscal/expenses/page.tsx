@@ -126,25 +126,32 @@ export default async function ExpensesPage({
 
       <ExpenseDropZone />
 
-      {missingNifCount + missingIntracomNif > 0 ? (
-        <p className="rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
-          {missingNifCount > 0
-            ? `${missingNifCount} gasto(s) interior(es) sin NIF (afectan al 347). `
-            : null}
-          {missingIntracomNif > 0
-            ? `${missingIntracomNif} intracom sin NIF-IVA (afectan al 349). `
-            : null}
-          Complétalos antes de presentar.{" "}
+      {missingIntracomNif > 0 ? (
+        <p className="rounded-lg border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning">
+          {missingIntracomNif} compra(s) UE sin NIF-IVA: afectan al{" "}
+          <strong>349</strong> (y el 303 ya puede llevarlas). Complétalas antes
+          de presentar.{" "}
+          <Link href="/fiscal/expenses?missingNif=1" className="underline">
+            Ver solo sin NIF
+          </Link>
+        </p>
+      ) : null}
+
+      {missingNifCount > 0 ? (
+        <p className="rounded-lg border border-line bg-line/30 px-4 py-3 text-sm text-ink-muted">
+          {missingNifCount} gasto(s) interior(es) sin NIF. Solo importan para el{" "}
+          <strong className="text-ink">347</strong> si el mismo proveedor supera
+          3.005,06 €/año. AliExpress/China barato: no urgente.{" "}
           {missingNifOnly ? (
-            <Link href="/fiscal/expenses" className="underline">
+            <Link href="/fiscal/expenses" className="text-accent underline">
               Ver todos
             </Link>
           ) : (
             <Link
               href="/fiscal/expenses?missingNif=1"
-              className="underline"
+              className="text-accent underline"
             >
-              Ver solo sin NIF
+              Ver sin NIF
             </Link>
           )}
         </p>

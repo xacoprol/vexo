@@ -49,15 +49,25 @@ export default async function Modelo349Page({
           Excluidas del 349 por falta de NIF-IVA:{" "}
           {draft.skippedNoNif.entregas} entrega(s) y{" "}
           {draft.skippedNoNif.adquisiciones} adquisición(es). Sin VAT ID no se
-          pueden declarar.
+          pueden declarar — y el 303 sí puede llevar esas AIB.{" "}
+          <Link href="/fiscal/expenses?missingNif=1" className="underline">
+            Completar NIF
+          </Link>
         </p>
       ) : null}
 
-      {!draft.hasOps ? (
+      {!draft.needsAttention ? (
         <p className="rounded-lg border border-line bg-accent-soft/40 px-4 py-3 text-sm text-ink-muted">
           No hay operaciones UE en {draft.label}. Si no tuviste ventas
-          intracomunitarias ni compras AIB (Bambu, etc.), normalmente no hace
-          falta presentar el 349 este trimestre.
+          intracomunitarias ni compras AIB (Bambu, etc.), no hace falta
+          presentar el 349 este trimestre.
+        </p>
+      ) : null}
+
+      {draft.incompleteNif && !draft.hasOps ? (
+        <p className="rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
+          Hay operaciones UE sin NIF: el 349 <strong>sí aplica</strong> en
+          cuanto completes los VAT ID. No lo des por no aplicable.
         </p>
       ) : null}
 

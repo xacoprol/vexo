@@ -121,7 +121,7 @@ type MarketplaceRow = {
   vatStatus: string | null;
 };
 
-/** IVA de bienes de inversión en el trimestre de compra → casillas 28/29 del 303. */
+/** IVA de bienes de inversión en el trimestre de compra → casillas 30/31 del 303. */
 type AssetVatRow = {
   purchaseDate: Date | null;
   base: unknown;
@@ -271,6 +271,9 @@ type Modelo303Input = {
   vatBuckets: VatBucket[];
   expenseBase: number;
   expenseVat: number;
+  /** Bienes de inversión (casillas 30/31) */
+  investmentBase?: number;
+  investmentVat?: number;
   /** Adquisiciones intracomunitarias (compras UE / ISP) */
   aibBase?: number;
   aibQuota?: number;
@@ -292,6 +295,8 @@ function buildModelo303(input: Modelo303Input): ModeloBoxes {
     vatBuckets,
     expenseBase,
     expenseVat,
+    investmentBase = 0,
+    investmentVat = 0,
     aibBase = 0,
     aibQuota = 0,
     baseExenta,
@@ -330,9 +335,11 @@ function buildModelo303(input: Modelo303Input): ModeloBoxes {
   const box27 = round2(quotaRepercutida + box11);
   const box28 = round2(Math.max(0, expenseBase));
   const box29 = round2(Math.max(0, expenseVat));
+  const box30 = round2(Math.max(0, investmentBase));
+  const box31 = round2(Math.max(0, investmentVat));
   const box36 = box10;
   const box37 = box11;
-  const box45 = round2(box29 + box37);
+  const box45 = round2(box29 + box31 + box37);
   const box46 = round2(box27 - box45);
 
   const box110 = round2(Math.max(0, priorCompensation));
@@ -366,13 +373,13 @@ function buildModelo303(input: Modelo303Input): ModeloBoxes {
       ...(otherQuota > 0 || otherBase > 0
         ? [
             {
-              code: "—",
-              label: "Otras bases sujetas (tipos distintos)",
+              code: "revisar",
+              label: "Otras bases sujetas (tipos distintos) — revisar en sede",
               value: otherBase,
             },
             {
-              code: "—",
-              label: "Otras cuotas repercutidas",
+              code: "revisar",
+              label: "Otras cuotas repercutidas — revisar en sede",
               value: otherQuota,
             },
           ]
@@ -387,6 +394,16 @@ function buildModelo303(input: Modelo303Input): ModeloBoxes {
         code: "29",
         label: "Cuota deducible (gastos corrientes)",
         value: box29,
+      },
+      {
+        code: "30",
+        label: "Base bienes de inversión (ops. interiores)",
+        value: box30,
+      },
+      {
+        code: "31",
+        label: "Cuota deducible bienes de inversión",
+        value: box31,
       },
       {
         code: "36",
@@ -415,8 +432,8 @@ function buildModelo303(input: Modelo303Input): ModeloBoxes {
         value: box60,
       },
       {
-        code: "—",
-        label: "Otras operaciones exentas (revisar en sede)",
+        code: "revisar",
+        label: "Otras operaciones exentas — revisar en sede",
         value: round2(baseExenta),
       },
       {
@@ -807,6 +824,8 @@ function aggregateRows(
   let expenseBase = 0;
   let expenseVatInterior = 0;
   let expenseBaseInterior = 0;
+  let investmentBase = 0;
+  let investmentVat = 0;
   let aibBase = 0;
   let aibQuota = 0;
   let expenseTotal = 0;
@@ -832,8 +851,8 @@ function aggregateRows(
   }
 
   for (const a of assetRows) {
-    expenseBaseInterior = round2(expenseBaseInterior + Number(a.base));
-    expenseVatInterior = round2(expenseVatInterior + Number(a.vatAmount));
+    investmentBase = round2(investmentBase + Number(a.base));
+    investmentVat = round2(investmentVat + Number(a.vatAmount));
   }
 
   return {
@@ -856,7 +875,7 @@ function aggregateRows(
     expenses: {
       count: exps.length,
       base: expenseBase,
-      vatDeductible: expenseVatInterior,
+      vatDeductible: round2(expenseVatInterior + investmentVat),
       aibBase,
       aibQuota,
       total: expenseTotal,
@@ -865,6 +884,8 @@ function aggregateRows(
       vatBuckets,
       expenseBase: expenseBaseInterior,
       expenseVat: expenseVatInterior,
+      investmentBase,
+      investmentVat,
       aibBase,
       aibQuota,
       baseExenta,

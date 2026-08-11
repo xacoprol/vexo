@@ -4,8 +4,14 @@ import { formatCurrency } from "@/lib/calculations";
 import {
   buildFiscalPeriodSummary,
   parseFiscalPeriod,
+  type FiscalQuarter,
 } from "@/lib/fiscal";
+import { getPresentedFiling } from "@/lib/fiscal-filings";
+import { buildModelo349Draft } from "@/lib/fiscal-347-349";
+import { listPendingLiquidaciones } from "@/lib/fiscal-payments";
+import { resolveFiscalNextStep } from "@/lib/fiscal-next-step";
 import { FiscalPeriodNav } from "@/components/fiscal/FiscalPeriodNav";
+import { FiscalNextStepCard } from "@/components/fiscal/FiscalNextStepCard";
 import { ModeloDraft } from "@/components/fiscal/ModeloDraft";
 
 export default async function FiscalPage({
@@ -15,9 +21,54 @@ export default async function FiscalPage({
 }) {
   const sp = await searchParams;
   const { year, quarter } = parseFiscalPeriod(sp);
-  const summary = await buildFiscalPeriodSummary(year, quarter);
-  const settings = await prisma.companySettings.findFirst();
+  const q = quarter as FiscalQuarter;
+
+  const [
+    summary,
+    settings,
+    draft349,
+    presented303,
+    presented130,
+    presented349,
+    pendingPay,
+    aeatOpenCount,
+    booksForYear,
+  ] = await Promise.all([
+    buildFiscalPeriodSummary(year, q),
+    prisma.companySettings.findFirst(),
+    buildModelo349Draft(year, q),
+    getPresentedFiling("303", year, q),
+    getPresentedFiling("130", year, q),
+    getPresentedFiling("349", year, q),
+    listPendingLiquidaciones(),
+    prisma.aeatCommunication.count({ where: { status: "ABIERTA" } }),
+    prisma.registerBook.findMany({
+      where: { year },
+      select: { bookType: true, _count: { select: { lines: true } } },
+    }),
+  ]);
   const regime = settings?.fiscalRegime ?? "130";
+  const skip130 = regime === "131";
+  const booksOk = Boolean(
+    booksForYear.find((b) => b.bookType === "INGRESOS" && b._count.lines > 0) &&
+      booksForYear.find((b) => b.bookType === "GASTOS" && b._count.lines > 0)
+  );
+  const nextStep = resolveFiscalNextStep({
+    year,
+    quarter: q,
+    hasIncome:
+      summary.issued.count > 0 || summary.issued.marketplaceCount > 0,
+    hasExpenses: summary.expenses.count > 0,
+    booksOk,
+    presented303: Boolean(presented303),
+    presented130: Boolean(presented130),
+    has349Ops: draft349.hasOps,
+    incomplete349Nif: draft349.incompleteNif,
+    presented349: Boolean(presented349),
+    pendingNrcCount: pendingPay.length,
+    aeatOpenCount,
+    skip130,
+  });
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
@@ -25,10 +76,11 @@ export default async function FiscalPage({
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Fiscal</h1>
           <p className="mt-1 text-sm text-ink-muted">
-            Resumen trimestral IVA / IRPF y borradores de modelos · Régimen{" "}
+            Borradores IVA / IRPF · Régimen{" "}
             <span className="font-medium text-ink">
               {regime === "131" ? "131 (módulos)" : "130 (estimación directa)"}
             </span>
+            . Presentación real = sede AEAT con Cl@ve.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -58,34 +110,7 @@ export default async function FiscalPage({
 
       <FiscalPeriodNav year={year} quarter={quarter} />
 
-      <p className="rounded-lg border border-line bg-accent-soft/40 px-4 py-3 text-sm text-ink-muted">
-        Periodo a liquidar:{" "}
-        <span className="font-medium text-ink">
-          {quarter}T {year}
-        </span>
-        . Empieza por la{" "}
-        <Link href="/fiscal/guide" className="text-accent underline">
-          Guía de presentación
-        </Link>
-        : orden 303 → 130 → 349 si aplica, casillas a copiar y subida del PDF.
-        Completa{" "}
-        <Link href="/fiscal/expenses" className="text-accent underline">
-          gastos
-        </Link>
-        ,{" "}
-        <Link href="/invoices" className="text-accent underline">
-          facturas
-        </Link>{" "}
-        y{" "}
-        <Link href="/fiscal/income" className="text-accent underline">
-          marketplace
-        </Link>
-        ; regenera{" "}
-        <Link href="/fiscal/books" className="text-accent underline">
-          libros
-        </Link>{" "}
-        antes de presentar.
-      </p>
+      <FiscalNextStepCard step={nextStep} />
 
       {summary.expenses.count === 0 ? (
         <p className="rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">

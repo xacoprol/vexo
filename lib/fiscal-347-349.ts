@@ -33,7 +33,12 @@ export type Modelo349Draft = {
   adquisiciones: ThirdPartyOp[];
   totalEntregas: number;
   totalAdquisiciones: number;
+  /** Operadores con NIF listos para declarar */
   hasOps: boolean;
+  /** Hay ops UE sin NIF-IVA (el 303 puede llevarlas; el 349 no) */
+  incompleteNif: boolean;
+  /** hasOps o incompleteNif → no digas «no aplica» */
+  needsAttention: boolean;
   skippedNoNif: { entregas: number; adquisiciones: number };
 };
 
@@ -264,6 +269,8 @@ export async function buildModelo349Draft(
   const totalAdquisiciones = round2(
     adquisiciones.reduce((s, o) => s + o.amount, 0)
   );
+  const hasOps = entregas.length + adquisiciones.length > 0;
+  const incompleteNif = skippedEntregas + skippedAdquis > 0;
 
   return {
     year,
@@ -273,7 +280,9 @@ export async function buildModelo349Draft(
     adquisiciones,
     totalEntregas,
     totalAdquisiciones,
-    hasOps: entregas.length + adquisiciones.length > 0,
+    hasOps,
+    incompleteNif,
+    needsAttention: hasOps || incompleteNif,
     skippedNoNif: {
       entregas: skippedEntregas,
       adquisiciones: skippedAdquis,

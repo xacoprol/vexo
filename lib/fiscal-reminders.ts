@@ -97,7 +97,7 @@ export async function runFiscalDeadlineReminders(now = new Date()) {
         d.year,
         d.quarter as FiscalQuarter
       );
-      if (!draft349.hasOps) {
+      if (!draft349.needsAttention) {
         skipped.push(`${periodKey} no intracom ops`);
         continue;
       }

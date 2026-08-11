@@ -13,29 +13,42 @@ import {
 } from "@/lib/fiscal-calendar";
 import { buildModelo349Draft } from "@/lib/fiscal-347-349";
 import { listPendingLiquidaciones } from "@/lib/fiscal-payments";
+import { resolveFiscalNextStep } from "@/lib/fiscal-next-step";
 import { CopyableBoxes } from "@/components/fiscal/CopyableBoxes";
 import { ThirdPartyOpsTable } from "@/components/fiscal/ThirdPartyOpsTable";
+import { FiscalNextStepCard } from "@/components/fiscal/FiscalNextStepCard";
 
 export default async function FiscalGuidePage() {
   const now = new Date();
   const target = filingTargetPeriod(now);
   const year = target.year;
   const quarter = target.quarter as FiscalQuarter;
-  const [summary, draft349, presented303, presented130, presented349, pendingPay, aeatOpenCount, booksForYear] =
-    await Promise.all([
-      buildFiscalPeriodSummary(year, quarter),
-      buildModelo349Draft(year, quarter),
-      getPresentedFiling("303", year, quarter),
-      getPresentedFiling("130", year, quarter),
-      getPresentedFiling("349", year, quarter),
-      listPendingLiquidaciones(),
-      prisma.aeatCommunication.count({ where: { status: "ABIERTA" } }),
-      prisma.registerBook.findMany({
-        where: { year },
-        select: { bookType: true, _count: { select: { lines: true } } },
-      }),
-    ]);
+  const [
+    summary,
+    draft349,
+    presented303,
+    presented130,
+    presented349,
+    pendingPay,
+    aeatOpenCount,
+    booksForYear,
+    settings,
+  ] = await Promise.all([
+    buildFiscalPeriodSummary(year, quarter),
+    buildModelo349Draft(year, quarter),
+    getPresentedFiling("303", year, quarter),
+    getPresentedFiling("130", year, quarter),
+    getPresentedFiling("349", year, quarter),
+    listPendingLiquidaciones(),
+    prisma.aeatCommunication.count({ where: { status: "ABIERTA" } }),
+    prisma.registerBook.findMany({
+      where: { year },
+      select: { bookType: true, _count: { select: { lines: true } } },
+    }),
+    prisma.companySettings.findFirst({ select: { fiscalRegime: true } }),
+  ]);
   const deadlines = buildUpcomingDeadlines(now);
+  const skip130 = (settings?.fiscalRegime ?? "130") === "131";
 
   const expenseCount = summary.expenses.count;
   const marketplaceCount = summary.issued.marketplaceCount;
@@ -57,6 +70,22 @@ export default async function FiscalGuidePage() {
     : !bookIngresos || !bookGastos
       ? "Falta generar o importar libros de ingresos y gastos del año"
       : "Libros sin líneas: regenera desde facturas/gastos";
+
+  const nextStep = resolveFiscalNextStep({
+    year,
+    quarter,
+    hasIncome: invoiceCount > 0 || marketplaceCount > 0,
+    hasExpenses: expenseCount > 0,
+    booksOk,
+    presented303: Boolean(presented303),
+    presented130: Boolean(presented130),
+    has349Ops: draft349.hasOps,
+    incomplete349Nif: draft349.incompleteNif,
+    presented349: Boolean(presented349),
+    pendingNrcCount: pendingPay.length,
+    aeatOpenCount,
+    skip130,
+  });
 
   const checklist = [
     {
@@ -88,28 +117,40 @@ export default async function FiscalGuidePage() {
       label: `303 ${quarter}T ${year} presentado`,
       hint: presented303
         ? `Guardado · resultado ${formatCurrency(presented303.result)}`
-        : "Cuando lo presentes en la AEAT, sube el PDF a Presentados",
-      href: "/fiscal/filings",
+        : "Copia casillas → Cl@ve en sede → sube PDF a Presentados",
+      href: `/fiscal/303?year=${year}&q=${quarter}`,
     },
     {
-      ok: Boolean(presented130),
-      label: `130 ${quarter}T ${year} presentado`,
-      hint: presented130
-        ? `Guardado · resultado ${formatCurrency(presented130.result)}`
-        : "Igual: presenta y sube el justificante",
-      href: "/fiscal/filings",
+      ok: skip130 || Boolean(presented130),
+      label: skip130
+        ? `130 ${quarter}T ${year} (régimen 131: no aplica)`
+        : `130 ${quarter}T ${year} presentado`,
+      hint: skip130
+        ? "Estás en módulos; no presentas 130"
+        : presented130
+          ? `Guardado · resultado ${formatCurrency(presented130.result)}`
+          : "Presenta aunque el resultado sea 0 o negativo; luego sube el PDF",
+      href: `/fiscal/130?year=${year}&q=${quarter}`,
     },
     {
-      ok: !draft349.hasOps || Boolean(presented349),
-      label: draft349.hasOps
-        ? `349 ${quarter}T ${year} presentado`
-        : `349 ${quarter}T ${year} (no aplica)`,
-      hint: draft349.hasOps
-        ? presented349
-          ? `Guardado · ${formatCurrency(presented349.result)}`
-          : `Hay ops UE · entregas ${formatCurrency(draft349.totalEntregas)} · adquis. ${formatCurrency(draft349.totalAdquisiciones)}`
-        : "Sin ops intracomunitarias este trimestre",
-      href: `/fiscal/349?year=${year}&q=${quarter}`,
+      ok: draft349.incompleteNif
+        ? false
+        : !draft349.hasOps || Boolean(presented349),
+      label: draft349.incompleteNif
+        ? `349 ${quarter}T ${year}: faltan NIF-IVA`
+        : draft349.hasOps
+          ? `349 ${quarter}T ${year} presentado`
+          : `349 ${quarter}T ${year} (no aplica)`,
+      hint: draft349.incompleteNif
+        ? `${draft349.skippedNoNif.adquisiciones + draft349.skippedNoNif.entregas} ops UE sin VAT ID — complétalas antes de presentar`
+        : draft349.hasOps
+          ? presented349
+            ? `Guardado · ${formatCurrency(presented349.result)}`
+            : `Hay ops UE · entregas ${formatCurrency(draft349.totalEntregas)} · adquis. ${formatCurrency(draft349.totalAdquisiciones)}`
+          : "Sin ops intracomunitarias este trimestre",
+      href: draft349.incompleteNif
+        ? "/fiscal/expenses?missingNif=1"
+        : `/fiscal/349?year=${year}&q=${quarter}`,
     },
     {
       ok: pendingPay.length === 0,
@@ -150,53 +191,48 @@ export default async function FiscalGuidePage() {
           Guía de presentación
         </h1>
         <p className="mt-1 text-sm text-ink-muted">
-          Te digo qué modelo toca, con qué casillas y en qué orden. Tú solo
-          copias en la sede de la AEAT.
+          Un solo camino: datos → casillas → Cl@ve en la AEAT → PDF en
+          Presentados. Periodo:{" "}
+          <span className="font-medium text-ink">
+            {quarter}T {year}
+          </span>
+          .
         </p>
       </div>
 
+      <FiscalNextStepCard step={nextStep} />
+
       <section className="card-panel space-y-3 p-5">
-        <h2 className="form-section-title">Ahora mismo</h2>
-        <p className="text-sm text-ink">
-          Periodo a liquidar:{" "}
-          <span className="font-semibold">
-            {quarter}T {year}
-          </span>
-          . Primero el <strong>303 (IVA)</strong>, luego el{" "}
-          <strong>130 (IRPF)</strong>
-          {draft349.hasOps ? (
-            <>
-              , después el <strong>349</strong> (ops UE)
-            </>
-          ) : null}
-          . En enero también el <strong>347</strong> / <strong>390</strong> del
-          año anterior; en primavera el <strong>100</strong> (renta) y revisa el{" "}
-          <Link href="/fiscal/036" className="text-accent underline">
-            censo 036
-          </Link>
-          .
-        </p>
+        <h2 className="form-section-title">Cómo se presenta (siempre igual)</h2>
         <ol className="list-decimal space-y-2 pl-5 text-sm text-ink-muted">
           <li>
-            Completa{" "}
-            <Link href="/fiscal/expenses" className="text-accent underline">
-              gastos
-            </Link>
-            ,{" "}
-            <Link href="/invoices" className="text-accent underline">
-              facturas
+            Datos del trimestre al día: facturas, marketplace, gastos. Las{" "}
+            <Link href="/recurring" className="text-accent underline">
+              periódicas
             </Link>{" "}
-            e{" "}
-            <Link href="/fiscal/income" className="text-accent underline">
-              marketplace
-            </Link>
-            ; regenera{" "}
-            <Link href={`/fiscal/books?year=${year}`} className="text-accent underline">
+            generan proformas: conviértelas en factura si deben entrar en el IVA.
+          </li>
+          <li>
+            Regenera{" "}
+            <Link
+              href={`/fiscal/books?year=${year}`}
+              className="text-accent underline"
+            >
               libros
             </Link>{" "}
-            del año.
+            (archivo formal; no cambian las casillas del borrador).
           </li>
-          <li>Revisa las casillas de abajo (se calculan solas).</li>
+          <li>
+            Orden: <strong className="text-ink">303</strong> →{" "}
+            <strong className="text-ink">130</strong>
+            {draft349.needsAttention ? (
+              <>
+                {" "}
+                → <strong className="text-ink">349</strong>
+              </>
+            ) : null}
+            . Copia casillas abajo o en cada página del modelo.
+          </li>
           <li>
             Entra en la{" "}
             <a
@@ -206,15 +242,19 @@ export default async function FiscalGuidePage() {
               className="text-accent underline"
             >
               sede AEAT
-            </a>
-            , abre el modelo y pega casilla a casilla.
+            </a>{" "}
+            con Cl@ve, abre el modelo y pega casilla a casilla.
           </li>
           <li>
-            Cuando acabes, sube el PDF en{" "}
+            Sube el PDF en{" "}
             <Link href="/fiscal/filings" className="text-accent underline">
               Presentados
-            </Link>{" "}
-            para no perder el justificante.
+            </Link>
+            . Si hay que pagar, anota el NRC en{" "}
+            <Link href="/fiscal/payments" className="text-accent underline">
+              Pagos
+            </Link>
+            .
           </li>
         </ol>
       </section>
@@ -282,6 +322,12 @@ export default async function FiscalGuidePage() {
                 <p className="mt-2 text-xs text-ink-muted">{d.what}</p>
                 <p className="mt-1 text-xs">
                   Límite: <span className="font-medium">{d.dueLabel}</span>
+                  {d.model === "303" || d.model === "130" ? (
+                    <span className="text-ink-muted">
+                      {" "}
+                      (domiciliación suele ser ~día 15)
+                    </span>
+                  ) : null}
                 </p>
                 <Link
                   href={d.href}
@@ -324,8 +370,9 @@ export default async function FiscalGuidePage() {
             Casillas 130 · {quarter}T {year}
           </h2>
           <p className="form-section-hint">
-            Acumulado desde el 1 de enero. Si el resultado es negativo o cero,
-            suele no haber que ingresar (marca la opción que indique la AEAT).
+            Acumulado desde el 1 de enero. Aunque el resultado sea 0 o negativo,
+            en estimación directa suele haber que presentar (elige la opción que
+            indique la AEAT).
           </p>
         </div>
         <CopyableBoxes
@@ -341,48 +388,38 @@ export default async function FiscalGuidePage() {
         </Link>
       </section>
 
-      <section className="card-panel space-y-4 p-5">
-        <div>
-          <h2 className="form-section-title">
-            349 · {quarter}T {year}
-          </h2>
-          <p className="form-section-hint">
-            Operadores UE. Si la lista está vacía, normalmente no presentas.
-          </p>
-        </div>
-        <ThirdPartyOpsTable
-          title="Entregas"
-          ops={draft349.entregas}
-          emptyText="Sin entregas UE."
-          keyLabels={{ E: "entregas" }}
-        />
-        <ThirdPartyOpsTable
-          title="Adquisiciones"
-          ops={draft349.adquisiciones}
-          emptyText="Sin adquisiciones UE."
-          keyLabels={{ A: "adquisiciones" }}
-        />
-        <Link
-          href={`/fiscal/349?year=${year}&q=${quarter}`}
-          className="text-sm text-accent underline"
-        >
-          Abrir página completa del 349
-        </Link>
-      </section>
-
-      <p className="rounded-lg border border-line bg-line/20 px-4 py-3 text-xs text-ink-muted">
-        Esto es una guía orientativa a partir de tus datos en Vexo. No sustituye
-        a un asesor ni a la declaración oficial. Si algo no cuadra (Amazon OSS,
-        intracom, prorrateos), revisa con cuidado antes de presentar.
-      </p>
-
-      <p className="text-xs text-ink-muted">
-        Recordatorios por email (14 días, 3 días y el día del plazo) → activa en{" "}
-        <Link href="/settings" className="text-accent underline">
-          Ajustes
-        </Link>{" "}
-        y asegúrate de tener el email de la empresa relleno.
-      </p>
+      {draft349.needsAttention ? (
+        <section className="card-panel space-y-4 p-5">
+          <div>
+            <h2 className="form-section-title">
+              349 · {quarter}T {year}
+            </h2>
+            <p className="form-section-hint">
+              {draft349.incompleteNif
+                ? "Hay operaciones UE sin NIF-IVA: complétalas antes de presentar."
+                : "Operadores a declarar en la sede AEAT."}
+            </p>
+          </div>
+          <ThirdPartyOpsTable
+            title="Entregas"
+            ops={draft349.entregas}
+            emptyText="Sin entregas UE"
+            keyLabels={{ E: "entregas" }}
+          />
+          <ThirdPartyOpsTable
+            title="Adquisiciones"
+            ops={draft349.adquisiciones}
+            emptyText="Sin adquisiciones UE"
+            keyLabels={{ A: "adquisiciones" }}
+          />
+          <Link
+            href={`/fiscal/349?year=${year}&q=${quarter}`}
+            className="text-sm text-accent underline"
+          >
+            Abrir 349 completo
+          </Link>
+        </section>
+      ) : null}
     </div>
   );
 }
