@@ -150,6 +150,9 @@ export async function buildModelo347Draft(year: number): Promise<Modelo347Draft>
       skippedPurchases += 1;
       continue;
     }
+    // 347 = residentes ES; NIF-IVA UE (IE…, DE…, LU…) no se declaran aquí
+    const vatCc = countryFromVatId(nif);
+    if (vatCc && vatCc !== "ES") continue;
     mergeOp(map, {
       nif,
       name: e.supplierName,

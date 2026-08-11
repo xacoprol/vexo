@@ -9,6 +9,7 @@ import { Pagination } from "@/components/ui/Pagination";
 import { LiveSearch } from "@/components/ui/LiveSearch";
 import { ExpenseDropZone } from "@/components/fiscal/ExpenseDropZone";
 import { deleteExpense } from "./actions";
+import type { Prisma } from "@prisma/client";
 
 const categoryLabel = (id: string) =>
   EXPENSE_CATEGORIES.find((c) => c.id === id)?.label ?? id;
@@ -27,16 +28,23 @@ function monthLabel(date: Date): string {
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
+const MISSING_NIF_WHERE: Prisma.ExpenseWhereInput = {
+  OR: [{ supplierNif: null }, { supplierNif: "" }],
+  vatOperationType: { in: ["INTERIOR", "INTRACOMUNITARIA"] },
+};
+
 export default async function ExpensesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; page?: string }>;
+  searchParams: Promise<{ q?: string; page?: string; missingNif?: string }>;
 }) {
   const sp = await searchParams;
   const query = sp.q?.trim();
   const page = parsePage(sp.page);
+  const missingNifOnly =
+    sp.missingNif === "1" || sp.missingNif === "true" || sp.missingNif === "on";
 
-  const where = query
+  const searchWhere: Prisma.ExpenseWhereInput | undefined = query
     ? {
         OR: [
           { supplierName: { contains: query, mode: "insensitive" as const } },
@@ -46,6 +54,14 @@ export default async function ExpensesPage({
         ],
       }
     : undefined;
+
+  const where: Prisma.ExpenseWhereInput | undefined = (() => {
+    if (missingNifOnly && searchWhere) {
+      return { AND: [MISSING_NIF_WHERE, searchWhere] };
+    }
+    if (missingNifOnly) return MISSING_NIF_WHERE;
+    return searchWhere;
+  })();
 
   const total = await prisma.expense.count({ where });
   const meta = paginationMeta(total, page);
@@ -86,6 +102,11 @@ export default async function ExpensesPage({
     }
   }
 
+  const filterParams = {
+    q: query,
+    missingNif: missingNifOnly ? "1" : undefined,
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -113,8 +134,31 @@ export default async function ExpensesPage({
           {missingIntracomNif > 0
             ? `${missingIntracomNif} intracom sin NIF-IVA (afectan al 349). `
             : null}
-          Complétalos antes de presentar.
+          Complétalos antes de presentar.{" "}
+          {missingNifOnly ? (
+            <Link href="/fiscal/expenses" className="underline">
+              Ver todos
+            </Link>
+          ) : (
+            <Link
+              href="/fiscal/expenses?missingNif=1"
+              className="underline"
+            >
+              Ver solo sin NIF
+            </Link>
+          )}
         </p>
+      ) : null}
+
+      {missingNifOnly ? (
+        <div className="flex flex-wrap items-center gap-3 text-sm">
+          <span className="rounded-md bg-warning/15 px-2.5 py-1 text-warning">
+            Filtro: sin NIF ({total})
+          </span>
+          <Link href="/fiscal/expenses" className="text-ink-muted hover:text-accent">
+            Quitar filtro
+          </Link>
+        </div>
       ) : null}
 
       <Suspense fallback={<InlineSkeleton />}>
@@ -148,13 +192,21 @@ export default async function ExpensesPage({
                   colSpan={8}
                   className="px-4 py-10 text-center text-ink-muted"
                 >
-                  No hay gastos{query ? " con ese criterio" : ""}.{" "}
-                  <Link
-                    href="/fiscal/expenses/new"
-                    className="text-accent underline"
-                  >
-                    Registrar el primero
-                  </Link>
+                  {missingNifOnly
+                    ? "No quedan gastos sin NIF."
+                    : `No hay gastos${query ? " con ese criterio" : ""}.`}{" "}
+                  {!missingNifOnly ? (
+                    <Link
+                      href="/fiscal/expenses/new"
+                      className="text-accent underline"
+                    >
+                      Registrar el primero
+                    </Link>
+                  ) : (
+                    <Link href="/fiscal/expenses" className="text-accent underline">
+                      Volver al listado
+                    </Link>
+                  )}
                 </td>
               </tr>
             ) : (
@@ -168,69 +220,77 @@ export default async function ExpensesPage({
                       {section.label}
                     </td>
                   </tr>
-                  {section.items.map((e) => (
-                    <tr key={e.id} className="group border-b border-line/50">
-                      <td className="px-4 py-3 text-ink-muted">
-                        {formatDate(e.issueDate)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="font-medium">{e.supplierName}</span>
-                        {e.description ? (
-                          <p className="mt-0.5 line-clamp-1 text-xs text-ink-muted">
-                            {e.description}
-                          </p>
-                        ) : null}
-                        <span className="mt-1 flex flex-wrap gap-1">
-                          {isExpenseIntracom(e.vatOperationType) ? (
-                            <span className="badge bg-accent-soft text-accent">
-                              Intracom
-                            </span>
+                  {section.items.map((e) => {
+                    const noNif = !e.supplierNif?.trim();
+                    return (
+                      <tr key={e.id} className="group border-b border-line/50">
+                        <td className="px-4 py-3 text-ink-muted">
+                          {formatDate(e.issueDate)}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="font-medium">{e.supplierName}</span>
+                          {e.description ? (
+                            <p className="mt-0.5 line-clamp-1 text-xs text-ink-muted">
+                              {e.description}
+                            </p>
                           ) : null}
-                          {!e.deductible ? (
-                            <span className="badge bg-line text-ink-muted">
-                              No deducible
-                            </span>
-                          ) : null}
-                        </span>
-                      </td>
-                      <td className="hidden px-4 py-3 font-mono text-ink-muted md:table-cell">
-                        {e.invoiceNumber ?? "—"}
-                      </td>
-                      <td className="hidden px-4 py-3 text-ink-muted sm:table-cell">
-                        {categoryLabel(e.category)}
-                      </td>
-                      <td className="px-4 py-3 text-right font-mono">
-                        {formatCurrency(Number(e.subtotal))}
-                      </td>
-                      <td className="px-4 py-3 text-right font-mono">
-                        {formatCurrency(Number(e.vatAmount))}
-                        <span className="ml-1 text-xs text-ink-muted">
-                          ({e.vatRate}%)
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-right font-mono">
-                        {formatCurrency(Number(e.total))}
-                      </td>
-                      <td className="sticky right-0 z-10 bg-bg-elevated px-2 py-3 group-hover:bg-accent-soft/20 sm:static sm:bg-transparent sm:px-4">
-                        <div className="flex flex-col items-end gap-1 sm:flex-row sm:justify-end">
-                          <Link
-                            href={`/fiscal/expenses/${e.id}/edit`}
-                            className="btn-ghost px-2 py-1 text-xs"
-                          >
-                            Editar
-                          </Link>
-                          <form action={deleteExpense.bind(null, e.id)}>
-                            <button
-                              type="submit"
-                              className="btn-ghost px-2 py-1 text-xs text-danger"
+                          <span className="mt-1 flex flex-wrap gap-1">
+                            {isExpenseIntracom(e.vatOperationType) ? (
+                              <span className="badge bg-accent-soft text-accent">
+                                Intracom
+                              </span>
+                            ) : null}
+                            {noNif ? (
+                              <span className="badge bg-warning/15 text-warning">
+                                Sin NIF
+                              </span>
+                            ) : null}
+                            {!e.deductible ? (
+                              <span className="badge bg-line text-ink-muted">
+                                No deducible
+                              </span>
+                            ) : null}
+                          </span>
+                        </td>
+                        <td className="hidden px-4 py-3 font-mono text-ink-muted md:table-cell">
+                          {e.invoiceNumber ?? "—"}
+                        </td>
+                        <td className="hidden px-4 py-3 text-ink-muted sm:table-cell">
+                          {categoryLabel(e.category)}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono">
+                          {formatCurrency(Number(e.subtotal))}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono">
+                          {formatCurrency(Number(e.vatAmount))}
+                          <span className="ml-1 text-xs text-ink-muted">
+                            ({e.vatRate}%)
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono">
+                          {formatCurrency(Number(e.total))}
+                        </td>
+                        <td className="sticky right-0 z-10 bg-bg-elevated px-2 py-3 group-hover:bg-accent-soft/20 sm:static sm:bg-transparent sm:px-4">
+                          <div className="flex flex-col items-end gap-1 sm:flex-row sm:justify-end">
+                            <Link
+                              href={`/fiscal/expenses/${e.id}/edit`}
+                              className="btn-ghost px-2 py-1 text-xs"
                             >
-                              Borrar
-                            </button>
-                          </form>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                              Editar
+                            </Link>
+                            <form action={deleteExpense.bind(null, e.id)}>
+                              <button
+                                type="submit"
+                                className="btn-ghost px-2 py-1 text-xs text-danger"
+                              >
+                                Borrar
+                              </button>
+                            </form>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </Fragment>
               ))
             )}
@@ -240,7 +300,7 @@ export default async function ExpensesPage({
 
       <Pagination
         basePath="/fiscal/expenses"
-        params={{ q: query }}
+        params={filterParams}
         page={meta.page}
         totalPages={meta.totalPages}
         total={meta.total}
