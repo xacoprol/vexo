@@ -1,6 +1,7 @@
 /**
  * Calendario fiscal simplificado para autónomo (estimación directa + IVA).
- * Plazos habituales AEAT (día 20 del mes siguiente al trimestre; anuales en enero).
+ * Plazos habituales AEAT: trimestre día 20 del mes siguiente;
+ * 390 a 30 de enero; 347 a fin de febrero.
  */
 
 import {
@@ -97,35 +98,41 @@ export function buildUpcomingDeadlines(now = new Date()): FilingDeadline[] {
     },
   ];
 
-  // Anuales: visibles en nov–ene (390/347) y feb–jun (renta 100)
-  const showAnnual = now.getMonth() >= 10 || now.getMonth() === 0;
-  if (showAnnual) {
-    const annualYear = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
-    const annualDue = new Date(annualYear + 1, 0, 30, 23, 59, 59);
-    quarterly.push(
-      {
-        model: "390",
-        year: annualYear,
-        quarter: null,
-        periodLabel: periodLabel(annualYear, null),
-        dueDate: annualDue,
-        dueLabel: formatEs(annualDue),
-        what: "Resumen anual de IVA (recapitula los 303 del año).",
-        aeatPath: "https://sede.agenciatributaria.gob.es/",
-        href: `/fiscal/390?year=${annualYear}`,
-      },
-      {
-        model: "347",
-        year: annualYear,
-        quarter: null,
-        periodLabel: periodLabel(annualYear, null),
-        dueDate: annualDue,
-        dueLabel: formatEs(annualDue),
-        what: "Operaciones con terceros > 3.005,06 €/año (clientes/proveedores).",
-        aeatPath: "https://sede.agenciatributaria.gob.es/",
-        href: `/fiscal/347?year=${annualYear}`,
-      }
-    );
+  // 390: nov–ene (plazo 30 ene). 347: nov–feb (plazo último día de febrero).
+  const month = now.getMonth();
+  const annualYear = month <= 1 ? now.getFullYear() - 1 : now.getFullYear();
+  const show390 = month >= 10 || month === 0;
+  const show347 = month >= 10 || month === 0 || month === 1;
+
+  if (show390) {
+    const due390 = new Date(annualYear + 1, 0, 30, 23, 59, 59);
+    quarterly.push({
+      model: "390",
+      year: annualYear,
+      quarter: null,
+      periodLabel: periodLabel(annualYear, null),
+      dueDate: due390,
+      dueLabel: formatEs(due390),
+      what: "Resumen anual de IVA (recapitula los 303 del año).",
+      aeatPath: "https://sede.agenciatributaria.gob.es/",
+      href: `/fiscal/390?year=${annualYear}`,
+    });
+  }
+
+  if (show347) {
+    // Día 0 de marzo = último día de febrero (28/29).
+    const due347 = new Date(annualYear + 1, 2, 0, 23, 59, 59);
+    quarterly.push({
+      model: "347",
+      year: annualYear,
+      quarter: null,
+      periodLabel: periodLabel(annualYear, null),
+      dueDate: due347,
+      dueLabel: formatEs(due347),
+      what: "Operaciones con terceros > 3.005,06 €/año (clientes/proveedores).",
+      aeatPath: "https://sede.agenciatributaria.gob.es/",
+      href: `/fiscal/347?year=${annualYear}`,
+    });
   }
 
   // Renta (modelo 100): visible feb–30 jun del año siguiente

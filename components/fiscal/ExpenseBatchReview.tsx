@@ -489,6 +489,9 @@ export function ExpenseBatchReview() {
                   className="rounded border-line"
                 />
                 Bien de inversión
+                <span className="block text-xs text-ink-muted">
+                  El 130 amortiza; no descuenta la compra entera.
+                </span>
               </label>
               {row.isInvestment ? (
                 <div className="max-w-[8rem]">

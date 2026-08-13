@@ -477,8 +477,8 @@ export function SettingsForm({ settings, invoiceSeries, quoteSeries }: Props) {
           </h2>
           <p className="text-xs text-ink-muted">
             Email automático 14 días antes, 3 días antes y el día del plazo
-            (303, 130, 349, 390, 347). No se envía si el modelo ya está en
-            Presentados. Cron diario a las 09:00 UTC.
+            (303, 130, 349, 390 a 30 ene, 347 a fin de febrero). No se envía
+            si el modelo ya está en Presentados. Cron diario a las 09:00 UTC.
           </p>
           <label className="flex items-center gap-2 text-sm">
             <input

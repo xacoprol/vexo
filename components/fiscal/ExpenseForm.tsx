@@ -440,9 +440,10 @@ export function ExpenseForm({
           <span>
             <span className="font-medium text-ink">Bien de inversión</span>
             <span className="block text-ink-muted">
-              Equipo / máquina con vida útil &gt; 1 año. Interior → casillas
-              30/31 del 303. Intracom → AIB en el gasto + amortización en el
-              130. Se crea automáticamente en Fiscal → Bienes.
+              Equipo / máquina con vida útil &gt; 1 año. El 130 no descuenta
+              la compra entera: solo la amortización anual. Interior →
+              casillas 30/31 del 303. Intracom → AIB en el gasto. Se crea
+              en Fiscal → Bienes.
             </span>
           </span>
         </label>

@@ -67,10 +67,11 @@ export default async function Modelo130Page({
       <ModeloDraft title="Casillas orientativas" model="130" summary={summary} />
       <p className="text-xs text-ink-muted">
         El 130 es <strong>acumulado desde el 1 de enero</strong> hasta el fin
-        del trimestre (como pide AEAT). Casilla 05 = pagos fraccionados ya
-        calculados en trimestres anteriores del mismo año (solo importes a
-        ingresar). Casilla 06 = retenciones YTD. El 303 sigue siendo solo del
-        trimestre.
+        del trimestre (como pide AEAT). Casilla 02 = gastos corrientes +
+        amortizaciones (un bien de inversión no se gasta entero el año de
+        compra). Casilla 05 = pagos fraccionados ya calculados en trimestres
+        anteriores del mismo año (solo importes a ingresar). Casilla 06 =
+        retenciones YTD. El 303 sigue siendo solo del trimestre.
       </p>
     </div>
   );

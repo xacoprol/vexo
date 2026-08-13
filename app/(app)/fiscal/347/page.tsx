@@ -33,7 +33,8 @@ export default async function Modelo347Page({
         </h1>
         <p className="mt-1 text-sm text-ink-muted">
           Declaración anual de operaciones con terceras personas (borrador).
-          Umbral {formatCurrency(MODELO_347_THRESHOLD)} por tercero.
+          Umbral {formatCurrency(MODELO_347_THRESHOLD)} por tercero. Plazo
+          habitual: último día de febrero del año siguiente.
         </p>
       </div>
 

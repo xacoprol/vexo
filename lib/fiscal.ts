@@ -45,6 +45,7 @@ export type FiscalPeriodSummary = {
   };
   expenses: {
     count: number;
+    /** Base IRPF de gastos corrientes (sin bienes de inversión; esos van por amortización) */
     base: number;
     /** IVA soportado compras interiores (casillas 28/29) */
     vatDeductible: number;
@@ -658,7 +659,8 @@ function buildModelo130(
       },
       {
         code: "02",
-        label: "Gastos deducibles (desde 1 de enero)",
+        label:
+          "Gastos deducibles (corrientes + amortizaciones, desde 1 de enero)",
         value: expenseBase,
       },
       {
@@ -841,8 +843,12 @@ function aggregateRows(
     const tot = Number(e.total);
     const deductibleOk = e.deductible !== false;
     if (deductibleOk) {
-      expenseBase = round2(expenseBase + sub);
       expenseTotal = round2(expenseTotal + tot);
+      // IRPF: el bien de inversión no se gasta entero el año de compra;
+      // entra por amortización (buildModelo130Chain suma amortYtd).
+      if (!e.isInvestment) {
+        expenseBase = round2(expenseBase + sub);
+      }
     }
     // AIB: siempre en 303 (autorrepercusión). Interior: solo si deducible.
     if (isExpenseIntracom(e.vatOperationType)) {
