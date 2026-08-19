@@ -1,6 +1,7 @@
 import {
   EXPENSE_CATEGORIES,
   parseExpenseVatOperationType,
+  isExpenseReverseCharge,
   type ExpenseVatOperationType,
 } from "@/lib/fiscal";
 import {
@@ -11,12 +12,16 @@ import {
 } from "@/lib/gemini-client";
 
 /** Perfil de actividad WOD3D para valorar si un gasto encaja. */
-export const WOD3D_ACTIVITY_PROFILE = `WOD3D (autónomo/pyme) fabrica y vende:
+export const WOD3D_ACTIVITY_PROFILE = `WOD3D: autónomo en Actividad profesional.
+Alta censal / CNAE: 3299 — Otras industrias manufactureras n.c.o.p.
+Fabrica y vende (encaje natural con 3299):
 - Impresión 3D (filamentos PLA/PETG/ABS, resina, impresoras, boquillas, piezas)
-- Grabado láser (máquinas láser, lentes, materiales grabables, metacrilato, madera, acero)
+- Grabado láser (máquinas láser tipo xTool/Makeblock, lentes, materiales grabables, metacrilato, madera, acero)
 - Joyería grabada a láser y llaveros personalizados en PLA
 - Parches con velcro para mochilas / merchandising textil
-- Software, hosting, marketplace (Amazon/Shopify), packaging, envíos, publicidad online
+- Utillaje, consumibles industriales, embalaje de producto, envíos, publicidad online
+- Software, hosting, marketplace (Amazon/Shopify)
+Bienes de inversión típicos: impresoras 3D, cortadoras/grabadoras láser, Mac/PC afectos, utillaje.
 Trabaja desde casa (home office): suministros del hogar (luz, agua, internet, gas, comunidad) PUEDEN ser parcialmente deducibles (solo el % afecto a la actividad), no marcarlos como sospechosos totales; sí avisar de prorrateo.
 NO es actividad típica: restauración/ocio personal, moda no relacionada, viajes vacacionales, gimnasio, mascotas personales, electrónica de consumo sin vínculo (TV, consolas), reformas estéticas de vivienda no afectas, etc.`;
 
@@ -29,7 +34,7 @@ export type ParsedExpenseDraft = {
   invoiceNumber: string | null;
   description: string | null;
   category: string;
-  /** INTERIOR | INTRACOMUNITARIA */
+  /** INTERIOR | INTRACOMUNITARIA | SERVICIO_EXTRACOMUNITARIO */
   vatOperationType: ExpenseVatOperationType;
   subtotal: number;
   vatRate: number;
@@ -122,17 +127,17 @@ function parseDraftFromText(text: string): ParsedExpenseDraft {
   const vatOperationType = parseExpenseVatOperationType(
     parsed.vatOperationType
   );
-  const intracom = vatOperationType === "INTRACOMUNITARIA";
+  const reverseCharge = isExpenseReverseCharge(vatOperationType);
   let vatRate = normalizeVatRate(parsed.vatRate);
-  if (intracom && vatRate === 0) vatRate = 21;
+  if (reverseCharge && vatRate === 0) vatRate = 21;
   let vatAmount = round2(Math.max(0, Number(parsed.vatAmount) || 0));
   let total = round2(Math.max(0, Number(parsed.total) || 0));
 
-  if (intracom) {
+  if (reverseCharge) {
     if (!vatAmount && subtotal) {
       vatAmount = round2(subtotal * (vatRate / 100));
     }
-    // Lo pagado al proveedor UE suele ser la base (sin IVA ES)
+    // Lo pagado al proveedor (UE/EEUU) suele ser la base sin IVA ES
     if (!total || Math.abs(total - (subtotal + vatAmount)) < 0.05) {
       total = subtotal;
     }
@@ -218,7 +223,7 @@ Devuelve SOLO un JSON válido con esta forma exacta:
   "invoiceNumber": "número de factura del proveedor o null",
   "description": "concepto breve en español o null",
   "category": "una de: ${categories}",
-  "vatOperationType": "INTERIOR" | "INTRACOMUNITARIA",
+  "vatOperationType": "INTERIOR" | "INTRACOMUNITARIA" | "SERVICIO_EXTRACOMUNITARIO",
   "subtotal": 0,
   "vatRate": 21,
   "vatAmount": 0,
@@ -232,12 +237,14 @@ Devuelve SOLO un JSON válido con esta forma exacta:
 
 Reglas de extracción:
 - Importes en euros (número, no string). Usa punto decimal.
-- subtotal = base imponible (sin IVA). vatAmount = cuota IVA. total = a pagar.
+- Si la factura está en USD u otra divisa: convierte a EUR con un tipo de cambio razonable (≈ BCE del mes) y anota el importe original en notes (p. ej. "Original: 60 USD").
+- subtotal = base imponible en EUR (sin IVA español). vatAmount = cuota IVA a autorrepercutir. total = lo pagado al proveedor (normalmente = subtotal).
 - invoiceNumber = nº de factura/ticket del emisor (Factura nº, Nº, Invoice #…). Si no se lee, null.
 - Si hay varios tipos de IVA, usa el predominante o el del total; anótalo en notes.
-- Si no hay IVA (exento interior), vatRate=0, vatAmount=0, total=subtotal.
-- vatOperationType = INTRACOMUNITARIA si: proveedor UE (VAT ID no español), "reverse charge", "inversión del sujeto pasivo", "intra-community", Bambu Lab / EU supplier sin IVA español, o factura 0% IVA con mención ISP/AIB. En ese caso: subtotal = importe factura, vatRate = tipo español aplicable (casi siempre 21), vatAmount = subtotal×tipo/100 (cuota a autorrepercutir), total = subtotal.
-- Si no hay indicios claros de intracom → INTERIOR.
+- Si no hay IVA en factura interior española, vatRate=0, vatAmount=0, total=subtotal.
+- vatOperationType = INTRACOMUNITARIA si: proveedor en la UE (VAT ID europeo DE/IE/FR/IT…), compra de bienes/servicios UE sin IVA español, "intra-community", AIB. subtotal = importe factura, vatRate = 21 (casi siempre), vatAmount = subtotal×21/100, total = subtotal. supplierNif = VAT ID UE.
+- vatOperationType = SERVICIO_EXTRACOMUNITARIO si: proveedor fuera de la UE (EEUU, UK post-Brexit sin VAT UE, etc.), factura en USD, EIN/TIN en lugar de VAT, o texto "reverse charge" / "tax to be paid on reverse charge" sin VAT ID europeo (p. ej. Cursor/Anysphere, SaaS USA). Misma lógica numérica que intracom (base + 21% cuota, total = base). supplierNif = EIN/TIN si aparece, o null. NO es intracomunitaria UE.
+- Si no hay indicios claros de intracom ni extracom → INTERIOR.
 - No inventes NIF: si no se lee claramente, null.
 - La fecha es la de la factura/ticket, no la de hoy.
 - category: elige la más razonable (SOFTWARE, SUMINISTROS, MATERIAL, DIETAS, PROFESIONALES, OTROS).

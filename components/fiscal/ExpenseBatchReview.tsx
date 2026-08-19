@@ -8,6 +8,7 @@ import {
   EXPENSE_CATEGORIES,
   EXPENSE_VAT_OPERATION_TYPES,
   isExpenseIntracom,
+  isExpenseReverseCharge,
   parseExpenseVatOperationType,
 } from "@/lib/fiscal";
 import { DateInput } from "@/components/ui/DateInput";
@@ -83,7 +84,7 @@ function toInput(row: Row): ExpenseDraftInput {
     subtotal: row.subtotal,
     vatRate: row.vatRate,
     vatAmount,
-    total: isExpenseIntracom(vatOperationType)
+    total: isExpenseReverseCharge(vatOperationType)
       ? round2(row.subtotal)
       : round2(row.subtotal + vatAmount),
     deductible: row.deductible,
@@ -234,8 +235,9 @@ export function ExpenseBatchReview() {
       <ul className="space-y-4">
         {rows.map((row, index) => {
           const vatAmount = round2(row.subtotal * (row.vatRate / 100));
+          const reverseCharge = isExpenseReverseCharge(row.vatOperationType);
           const intracom = isExpenseIntracom(row.vatOperationType);
-          const total = intracom
+          const total = reverseCharge
             ? round2(row.subtotal)
             : round2(row.subtotal + vatAmount);
           const locked = row.status === "saved" || row.status === "saving";
@@ -403,7 +405,7 @@ export function ExpenseBatchReview() {
                       patchRow(row.localId, {
                         vatOperationType: next,
                         vatRate:
-                          isExpenseIntracom(next) && row.vatRate === 0
+                          isExpenseReverseCharge(next) && row.vatRate === 0
                             ? 21
                             : row.vatRate,
                       });
@@ -434,11 +436,11 @@ export function ExpenseBatchReview() {
                 </div>
                 <div>
                   <label className="label">
-                    {intracom ? "Tipo IVA español" : "IVA %"}
+                    {reverseCharge ? "Tipo IVA español" : "IVA %"}
                   </label>
                   <select
                     className="input"
-                    value={intracom && row.vatRate <= 0 ? 21 : row.vatRate}
+                    value={reverseCharge && row.vatRate <= 0 ? 21 : row.vatRate}
                     disabled={locked}
                     onChange={(e) =>
                       patchRow(row.localId, {
@@ -446,7 +448,7 @@ export function ExpenseBatchReview() {
                       })
                     }
                   >
-                    {(intracom ? VAT_RATES.filter((r) => r > 0) : VAT_RATES).map(
+                    {(reverseCharge ? VAT_RATES.filter((r) => r > 0) : VAT_RATES).map(
                       (r) => (
                         <option key={r} value={r}>
                           {r}%
@@ -511,7 +513,7 @@ export function ExpenseBatchReview() {
                   />
                 </div>
               ) : null}
-              {!row.deductible && !intracom ? (
+              {!row.deductible && !reverseCharge ? (
                 <p className="text-xs text-amber-800">
                   Sin marcar: no entra en el 130 ni como IVA soportado del 303.
                 </p>

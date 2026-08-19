@@ -3,7 +3,7 @@ import { Fragment, Suspense } from "react";
 import { InlineSkeleton } from "@/components/ui/PageSkeleton";
 import { prisma } from "@/lib/prisma";
 import { formatCurrency, formatDate } from "@/lib/calculations";
-import { EXPENSE_CATEGORIES, isExpenseIntracom } from "@/lib/fiscal";
+import { EXPENSE_CATEGORIES, isExpenseImportService, isExpenseIntracom } from "@/lib/fiscal";
 import { parsePage, paginationMeta } from "@/lib/pagination";
 import { Pagination } from "@/components/ui/Pagination";
 import { LiveSearch } from "@/components/ui/LiveSearch";
@@ -245,6 +245,11 @@ export default async function ExpensesPage({
                           {isExpenseIntracom(e.vatOperationType) ? (
                             <span className="badge bg-accent-soft text-accent">
                               Intracom
+                            </span>
+                          ) : null}
+                          {isExpenseImportService(e.vatOperationType) ? (
+                            <span className="badge bg-accent-soft text-accent">
+                              Extracom
                             </span>
                           ) : null}
                           {e.isInvestment ? (

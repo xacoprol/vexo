@@ -53,6 +53,10 @@ export type FiscalPeriodSummary = {
     aibBase: number;
     /** Adquisiciones intracomunitarias: cuota autorrepercutida (11 / 37) */
     aibQuota: number;
+    /** Servicios desde terceros países (EEUU…): base (16) */
+    importServiceBase: number;
+    /** Servicios extracomunitarios: cuota ISP (17) */
+    importServiceQuota: number;
     total: number;
   };
   modelo303: ModeloBoxes;
@@ -109,7 +113,7 @@ type ExpenseRow = {
   vatOperationType: string | null;
   /**
    * Si false: no computa en IRPF (130) ni en IVA soportado interior (303).
-   * Las AIB (intracom) se declaran siempre en el 303 (autorrepercusión).
+   * AIB (intracom) y servicios extracomunitarios se declaran siempre en el 303.
    */
   deductible: boolean;
   /** IVA interior → casillas 30/31 vía InvestmentAsset; no entra en 28/29 */
@@ -236,6 +240,10 @@ export const EXPENSE_VAT_OPERATION_TYPES = [
     value: "INTRACOMUNITARIA",
     label: "Intracomunitaria UE (inversión sujeto pasivo)",
   },
+  {
+    value: "SERVICIO_EXTRACOMUNITARIO",
+    label: "Servicio extracom. (EEUU, factura 0 % IVA)",
+  },
 ] as const;
 
 export type ExpenseVatOperationType =
@@ -245,14 +253,36 @@ export function parseExpenseVatOperationType(
   raw: unknown
 ): ExpenseVatOperationType {
   const v = String(raw ?? "INTERIOR").toUpperCase().trim();
-  if (v === "INTRACOMUNITARIA" || v === "INTRACOM" || v === "AIB" || v === "ISP") {
+  if (
+    v === "SERVICIO_EXTRACOMUNITARIO" ||
+    v === "IMPORTACION_SERVICIOS" ||
+    v === "EXTRACOMUNITARIA" ||
+    v === "TERCER_PAIS" ||
+    v === "EEUU" ||
+    v === "USA" ||
+    v === "IMPORT_SERVICE"
+  ) {
+    return "SERVICIO_EXTRACOMUNITARIO";
+  }
+  if (v === "INTRACOMUNITARIA" || v === "INTRACOM" || v === "AIB") {
     return "INTRACOMUNITARIA";
   }
+  // "ISP" solo: sin contexto UE → servicio extracom (p. ej. Cursor EEUU)
+  if (v === "ISP") return "SERVICIO_EXTRACOMUNITARIO";
   return "INTERIOR";
 }
 
 export function isExpenseIntracom(op: string | null | undefined): boolean {
   return parseExpenseVatOperationType(op) === "INTRACOMUNITARIA";
+}
+
+export function isExpenseImportService(op: string | null | undefined): boolean {
+  return parseExpenseVatOperationType(op) === "SERVICIO_EXTRACOMUNITARIO";
+}
+
+/** Compras con inversión del sujeto pasivo (UE o terceros países). */
+export function isExpenseReverseCharge(op: string | null | undefined): boolean {
+  return isExpenseIntracom(op) || isExpenseImportService(op);
 }
 
 function addBucket(
@@ -278,9 +308,12 @@ type Modelo303Input = {
   /** Bienes de inversión (casillas 30/31) */
   investmentBase?: number;
   investmentVat?: number;
-  /** Adquisiciones intracomunitarias (compras UE / ISP) */
+  /** Adquisiciones intracomunitarias (compras UE) */
   aibBase?: number;
   aibQuota?: number;
+  /** Servicios recibidos desde terceros países (casillas 16/17) */
+  importServiceBase?: number;
+  importServiceQuota?: number;
   baseExenta: number;
   baseIntracom: number;
   baseExport: number;
@@ -303,6 +336,8 @@ function buildModelo303(input: Modelo303Input): ModeloBoxes {
     investmentVat = 0,
     aibBase = 0,
     aibQuota = 0,
+    importServiceBase = 0,
+    importServiceQuota = 0,
     baseExenta,
     baseIntracom,
     baseExport,
@@ -336,7 +371,9 @@ function buildModelo303(input: Modelo303Input): ModeloBoxes {
 
   const box10 = round2(Math.max(0, aibBase));
   const box11 = round2(Math.max(0, aibQuota));
-  const box27 = round2(quotaRepercutida + box11);
+  const box16 = round2(Math.max(0, importServiceBase));
+  const box17 = round2(Math.max(0, importServiceQuota));
+  const box27 = round2(quotaRepercutida + box11 + box17);
   const box28 = round2(Math.max(0, expenseBase));
   const box29 = round2(Math.max(0, expenseVat));
   const box30 = round2(Math.max(0, investmentBase));
@@ -373,6 +410,16 @@ function buildModelo303(input: Modelo303Input): ModeloBoxes {
         code: "11",
         label: "Adquisiciones intracomunitarias (cuota)",
         value: box11,
+      },
+      {
+        code: "16",
+        label: "Adquisiciones servicios terceros países (base)",
+        value: box16,
+      },
+      {
+        code: "17",
+        label: "Adquisiciones servicios terceros países (cuota)",
+        value: box17,
       },
       ...(otherQuota > 0 || otherBase > 0
         ? [
@@ -836,12 +883,16 @@ function aggregateRows(
   let investmentVat = 0;
   let aibBase = 0;
   let aibQuota = 0;
+  let importServiceBase = 0;
+  let importServiceQuota = 0;
   let expenseTotal = 0;
   for (const e of exps) {
     const sub = Number(e.subtotal);
     const vat = Number(e.vatAmount);
     const tot = Number(e.total);
     const deductibleOk = e.deductible !== false;
+    const rate = e.vatRate > 0 ? e.vatRate : 21;
+    const reverseQuota = vat > 0 ? vat : round2(sub * (rate / 100));
     if (deductibleOk) {
       expenseTotal = round2(expenseTotal + tot);
       // IRPF: el bien de inversión no se gasta entero el año de compra;
@@ -850,12 +901,16 @@ function aggregateRows(
         expenseBase = round2(expenseBase + sub);
       }
     }
-    // AIB: siempre en 303 (autorrepercusión). Interior: solo si deducible.
+    // AIB UE: casillas 10/11 + deducción 36/37. Servicios extracom: 16/17 + deducción 29.
     if (isExpenseIntracom(e.vatOperationType)) {
       aibBase = round2(aibBase + sub);
-      const rate = e.vatRate > 0 ? e.vatRate : 21;
-      const quota = vat > 0 ? vat : round2(sub * (rate / 100));
-      aibQuota = round2(aibQuota + quota);
+      aibQuota = round2(aibQuota + reverseQuota);
+    } else if (isExpenseImportService(e.vatOperationType)) {
+      importServiceBase = round2(importServiceBase + sub);
+      importServiceQuota = round2(importServiceQuota + reverseQuota);
+      if (deductibleOk && !e.isInvestment) {
+        expenseVatInterior = round2(expenseVatInterior + reverseQuota);
+      }
     } else if (deductibleOk && !e.isInvestment) {
       expenseBaseInterior = round2(expenseBaseInterior + sub);
       expenseVatInterior = round2(expenseVatInterior + vat);
@@ -891,6 +946,8 @@ function aggregateRows(
       vatDeductible: round2(expenseVatInterior + investmentVat),
       aibBase,
       aibQuota,
+      importServiceBase,
+      importServiceQuota,
       total: expenseTotal,
     },
     modelo303: buildModelo303({
@@ -901,6 +958,8 @@ function aggregateRows(
       investmentVat,
       aibBase,
       aibQuota,
+      importServiceBase,
+      importServiceQuota,
       baseExenta,
       baseIntracom,
       baseExport,

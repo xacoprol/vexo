@@ -31,7 +31,48 @@ function isBambulab(name: string): boolean {
   return /bambulab/i.test(name);
 }
 
+function isAnysphere(name: string): boolean {
+  return /anysphere|cursor/i.test(name);
+}
+
+async function reclassifyImportServices() {
+  const rows = await prisma.expense.findMany({
+    where: {
+      OR: [
+        { supplierName: { contains: "Anysphere", mode: "insensitive" } },
+        { supplierName: { contains: "Cursor", mode: "insensitive" } },
+      ],
+      vatOperationType: "INTERIOR",
+    },
+  });
+  let n = 0;
+  for (const e of rows) {
+    if (!isAnysphere(e.supplierName)) continue;
+    const sub = Number(e.subtotal) || Number(e.total);
+    const vatRate = 21;
+    const vatAmount = round2(sub * (vatRate / 100));
+    await prisma.expense.update({
+      where: { id: e.id },
+      data: {
+        vatOperationType: "SERVICIO_EXTRACOMUNITARIO",
+        vatRate,
+        vatAmount,
+        total: round2(sub),
+        category: e.category === "OTROS" ? "SOFTWARE" : e.category,
+        deductible: true,
+      },
+    });
+    n += 1;
+    console.log(
+      `Extracom → ${e.issueDate.toISOString().slice(0, 10)} ${e.supplierName} base=${sub} cuota=${vatAmount}: ${e.id}`
+    );
+  }
+  return n;
+}
+
 async function main() {
+  const importServices = await reclassifyImportServices();
+
   const missing = await prisma.expense.findMany({
     where: {
       OR: [{ supplierNif: null }, { supplierNif: "" }],
@@ -92,6 +133,7 @@ async function main() {
   });
 
   console.log("\nResumen:");
+  console.log(`  Cursor/Anysphere → extracom: ${importServices}`);
   console.log(`  Apple (IE): ${apple}`);
   console.log(`  Bambulab (DE): ${bambu} (AIB corregido: ${bambuVatFixed})`);
   console.log(`  Siguen sin NIF: ${still}`);

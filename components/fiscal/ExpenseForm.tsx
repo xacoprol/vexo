@@ -7,7 +7,9 @@ import { VAT_RATES } from "@/lib/calculations";
 import {
   EXPENSE_CATEGORIES,
   EXPENSE_VAT_OPERATION_TYPES,
+  isExpenseImportService,
   isExpenseIntracom,
+  isExpenseReverseCharge,
   parseExpenseVatOperationType,
   type ExpenseVatOperationType,
 } from "@/lib/fiscal";
@@ -88,24 +90,26 @@ export function ExpenseForm({
   );
 
   const intracom = isExpenseIntracom(vatOperationType);
-  const rateOptions = intracom
+  const importService = isExpenseImportService(vatOperationType);
+  const reverseCharge = isExpenseReverseCharge(vatOperationType);
+  const rateOptions = reverseCharge
     ? VAT_RATES.filter((r) => r > 0)
     : VAT_RATES;
   const effectiveVatRate =
-    intracom && vatRate <= 0 ? 21 : vatRate;
+    reverseCharge && vatRate <= 0 ? 21 : vatRate;
   const vatAmount = useMemo(
     () => Math.round(subtotal * (effectiveVatRate / 100) * 100) / 100,
     [subtotal, effectiveVatRate]
   );
   const total = useMemo(
     () =>
-      Math.round((intracom ? subtotal : subtotal + vatAmount) * 100) / 100,
-    [subtotal, vatAmount, intracom]
+      Math.round((reverseCharge ? subtotal : subtotal + vatAmount) * 100) / 100,
+    [subtotal, vatAmount, reverseCharge]
   );
 
   useEffect(() => {
-    if (intracom && vatRate <= 0) setVatRate(21);
-  }, [intracom, vatRate]);
+    if (reverseCharge && vatRate <= 0) setVatRate(21);
+  }, [reverseCharge, vatRate]);
 
   function applyDraft(draft: ParsedExpenseDraft) {
     setIssueDate(draft.issueDate);
@@ -119,7 +123,7 @@ export function ExpenseForm({
     const op = parseExpenseVatOperationType(draft.vatOperationType);
     setVatOperationType(op);
     setVatRate(
-      isExpenseIntracom(op) ? draft.vatRate || 21 : draft.vatRate
+      isExpenseReverseCharge(op) ? draft.vatRate || 21 : draft.vatRate
     );
     setNotes(draft.notes ?? "");
     setActivityFit(draft.activityFit ?? "ok");
@@ -328,7 +332,7 @@ export function ExpenseForm({
             onChange={(e) => {
               const next = parseExpenseVatOperationType(e.target.value);
               setVatOperationType(next);
-              if (isExpenseIntracom(next) && vatRate === 0) setVatRate(21);
+              if (isExpenseReverseCharge(next) && vatRate === 0) setVatRate(21);
             }}
           >
             {EXPENSE_VAT_OPERATION_TYPES.map((t) => (
@@ -344,13 +348,25 @@ export function ExpenseForm({
               para que el 303 declare la misma cuota en 10/11 (devengo) y 36/37
               (deducción): neto IVA = 0. No es un cobro extra al proveedor.
             </p>
+          ) : importService ? (
+            <p className="mt-1 text-xs text-ink-muted">
+              La factura EEUU viene <strong>sin IVA</strong> (0 %). En España tú
+              autoliquidas el 21 % en el modelo <strong>303</strong> (casillas{" "}
+              <strong>16/17</strong>) y lo deduces en la <strong>29</strong> si
+              el gasto es deducible: <strong>no pagas ese IVA a Cursor</strong>,
+              solo lo declaras (efecto neto ≈ 0). Base en € si venía en USD.
+            </p>
           ) : null}
         </div>
 
         <div className="grid gap-4 sm:grid-cols-3">
           <div>
             <label className="label" htmlFor="subtotal">
-              {intracom ? "Importe factura UE (base)" : "Base imponible"}
+              {reverseCharge
+                ? importService
+                  ? "Importe en € (convertido si venía en USD)"
+                  : "Importe factura UE (base)"
+                : "Base imponible"}
             </label>
             <input
               id="subtotal"
@@ -366,7 +382,7 @@ export function ExpenseForm({
           </div>
           <div>
             <label className="label" htmlFor="vatRate">
-              {intracom ? "Tipo IVA español" : "IVA %"}
+              {reverseCharge ? "Tipo IVA español" : "IVA %"}
             </label>
             <select
               id="vatRate"
@@ -384,7 +400,11 @@ export function ExpenseForm({
           </div>
           <div>
             <label className="label" htmlFor="vatAmount">
-              {intracom ? "Cuota a declarar en el 303" : "Cuota IVA"}
+              {importService
+                ? "Cuota a autorrepercutir (no va en la factura)"
+                : reverseCharge
+                  ? "Cuota a declarar en el 303"
+                  : "Cuota IVA"}
             </label>
             <input
               id="vatAmount"
@@ -401,7 +421,11 @@ export function ExpenseForm({
 
         <div>
           <label className="label" htmlFor="total">
-            {intracom ? "Lo que pagas a Bambu / proveedor" : "Total"}
+            {reverseCharge
+              ? importService
+                ? "Lo que pagas al proveedor (USD→€)"
+                : "Lo que pagas a Bambu / proveedor"
+              : "Total"}
           </label>
           <input
             id="total"

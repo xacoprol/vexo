@@ -171,7 +171,7 @@ async function buildExpenseLines(
     issueDate: e.issueDate,
     concept:
       e.description?.trim() ||
-      `${e.category}${e.vatOperationType === "INTRACOMUNITARIA" ? " · Intracom" : ""}`,
+      `${e.category}${e.vatOperationType === "INTRACOMUNITARIA" ? " · Intracom" : e.vatOperationType === "SERVICIO_EXTRACOMUNITARIO" ? " · Extracom" : ""}`,
     nif: e.supplierNif,
     counterparty: e.supplierName,
     base: round2(num(e.subtotal)),

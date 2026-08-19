@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/session";
 import {
   isExpenseIntracom,
+  isExpenseReverseCharge,
   parseExpenseVatOperationType,
 } from "@/lib/fiscal";
 import { buildLinearAmortization } from "@/lib/investment-amortization";
@@ -43,22 +44,22 @@ function parseExpenseForm(formData: FormData) {
   const vatOperationType = parseExpenseVatOperationType(
     formData.get("vatOperationType")
   );
-  const intracom = isExpenseIntracom(vatOperationType);
+  const reverseCharge = isExpenseReverseCharge(vatOperationType);
   let vatRate =
     parseFloat(String(formData.get("vatRate") ?? "21").replace(",", ".")) || 0;
-  if (intracom && vatRate <= 0) vatRate = 21;
+  if (reverseCharge && vatRate <= 0) vatRate = 21;
   const vatAmountRaw = String(formData.get("vatAmount") ?? "").trim();
   const vatAmount = vatAmountRaw
     ? parseFloat(vatAmountRaw.replace(",", ".")) || 0
     : round2(subtotal * (vatRate / 100));
   const resolvedVatAmount =
-    intracom && vatAmount <= 0
+    reverseCharge && vatAmount <= 0
       ? round2(subtotal * (vatRate / 100))
       : vatAmount;
   const totalRaw = String(formData.get("total") ?? "").trim();
   const total = totalRaw
     ? parseFloat(totalRaw.replace(",", ".")) || 0
-    : intracom
+    : reverseCharge
       ? round2(subtotal)
       : round2(subtotal + resolvedVatAmount);
 
@@ -80,7 +81,7 @@ function parseExpenseForm(formData: FormData) {
     subtotal,
     vatRate,
     vatAmount: resolvedVatAmount,
-    total: intracom ? round2(subtotal) : total,
+    total: reverseCharge ? round2(subtotal) : total,
     deductible:
       formData.get("deductible") === "on" ||
       formData.get("deductible") === "1",
@@ -192,13 +193,13 @@ async function syncInvestmentAsset(
     return null;
   }
 
-  const intracom = isExpenseIntracom(data.vatOperationType);
+  const reverseCharge = isExpenseReverseCharge(data.vatOperationType);
   const description =
     data.description?.trim() ||
     `Bien · ${data.supplierName}${data.invoiceNumber ? ` · ${data.invoiceNumber}` : ""}`;
   const startYear = data.issueDate.getFullYear();
-  // 30/31 solo interiores; AIB autorrepercutida queda en 10/11 y 36/37 del gasto
-  const assetVat = intracom ? 0 : data.vatAmount;
+  // 30/31 solo interiores; AIB/extracom queda en el gasto (10/11 o 16/17)
+  const assetVat = reverseCharge ? 0 : data.vatAmount;
   const payload = {
     description,
     supplierName: data.supplierName,
@@ -317,17 +318,17 @@ export type ExpenseDraftInput = {
 function fromDraftInput(input: ExpenseDraftInput): ExpenseWriteData {
   const subtotal = round2(Math.max(0, Number(input.subtotal) || 0));
   const vatOperationType = parseExpenseVatOperationType(input.vatOperationType);
-  const intracom = isExpenseIntracom(vatOperationType);
+  const reverseCharge = isExpenseReverseCharge(vatOperationType);
   let vatRate = Number(input.vatRate) || 0;
-  if (intracom && vatRate <= 0) vatRate = 21;
+  if (reverseCharge && vatRate <= 0) vatRate = 21;
   let vatAmount =
     input.vatAmount != null
       ? round2(Math.max(0, Number(input.vatAmount) || 0))
       : round2(subtotal * (vatRate / 100));
-  if (intracom && vatAmount <= 0) {
+  if (reverseCharge && vatAmount <= 0) {
     vatAmount = round2(subtotal * (vatRate / 100));
   }
-  const total = intracom
+  const total = reverseCharge
     ? subtotal
     : input.total != null
       ? round2(Math.max(0, Number(input.total) || 0))
