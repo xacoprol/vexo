@@ -8,6 +8,7 @@ import {
 } from "date-fns";
 import { es } from "date-fns/locale";
 import { prisma } from "@/lib/prisma";
+import { marketplaceIncomeNotInvoicedWhere } from "@/lib/marketplace-invoice";
 
 function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
@@ -83,7 +84,10 @@ export async function buildYearStats(year: number): Promise<StatsSummary> {
         select: { paidAt: true, amount: true },
       }),
       prisma.marketplaceIncome.findMany({
-        where: { issueDate: { gte: from, lte: to } },
+        where: {
+          issueDate: { gte: from, lte: to },
+          ...marketplaceIncomeNotInvoicedWhere,
+        },
         select: {
           issueDate: true,
           channel: true,
@@ -249,7 +253,10 @@ export async function buildRecentMonthTotals(monthsBack = 6): Promise<
       select: { paidAt: true, amount: true },
     }),
     prisma.marketplaceIncome.findMany({
-      where: { issueDate: { gte: from, lte: to } },
+      where: {
+        issueDate: { gte: from, lte: to },
+        ...marketplaceIncomeNotInvoicedWhere,
+      },
       select: { issueDate: true, subtotal: true },
     }),
   ]);

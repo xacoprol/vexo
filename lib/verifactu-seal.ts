@@ -1,10 +1,10 @@
 /**
  * Persistencia Veri*Factu al emitir factura (hash + QR, sin remisión AEAT).
  */
-import type { PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 import { sealVerifactuRecord } from "@/lib/verifactu";
 
-type Db = PrismaClient;
+type Db = PrismaClient | Prisma.TransactionClient;
 
 export async function applyVerifactuSeal(
   db: Db,

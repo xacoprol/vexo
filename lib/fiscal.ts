@@ -5,6 +5,7 @@ import {
   sumAmortizationYtd,
   type AmortizationPeriodInput,
 } from "@/lib/investment-amortization";
+import { marketplaceIncomeNotInvoicedWhere } from "@/lib/marketplace-invoice";
 
 export type FiscalQuarter = 1 | 2 | 3 | 4;
 
@@ -1014,6 +1015,7 @@ async function fetchFiscalRows(from: Date, to: Date) {
     prisma.marketplaceIncome.findMany({
       where: {
         issueDate: { gte: from, lte: to },
+        ...marketplaceIncomeNotInvoicedWhere,
       },
       select: {
         issueDate: true,

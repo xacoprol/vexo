@@ -24,6 +24,9 @@ export default async function InvoiceDetailPage({
       lines: { orderBy: { sortOrder: "asc" } },
       quote: true,
       recurringTemplate: true,
+      marketplaceIncome: {
+        select: { id: true, externalRef: true, externalKey: true, channel: true },
+      },
       payments: { orderBy: { paidAt: "desc" } },
     },
   });
@@ -70,6 +73,21 @@ export default async function InvoiceDetailPage({
                 className="text-sm text-accent hover:underline"
               >
                 Origen: {invoice.quote.fullNumber}
+              </Link>
+            )}
+            {invoice.marketplaceIncome && (
+              <Link
+                href={`/fiscal/income/${invoice.marketplaceIncome.id}/edit`}
+                className="text-sm text-accent hover:underline"
+              >
+                Origen:{" "}
+                {invoice.marketplaceIncome.channel === "SHOPIFY"
+                  ? "Shopify"
+                  : invoice.marketplaceIncome.channel === "AMAZON"
+                    ? "Amazon"
+                    : invoice.marketplaceIncome.channel}{" "}
+                {invoice.marketplaceIncome.externalRef ??
+                  invoice.marketplaceIncome.externalKey}
               </Link>
             )}
           </div>

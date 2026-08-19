@@ -7,7 +7,9 @@ import { formatCurrency, formatDate } from "@/lib/calculations";
 import {
   deleteMarketplaceIncome,
   deleteMarketplaceIncomes,
+  convertMarketplaceIncomeToInvoice,
 } from "@/app/(app)/fiscal/income/actions";
+import { canConvertMarketplaceIncome } from "@/lib/marketplace-invoice";
 import {
   BulkDeleteConfirmModal,
   BulkSelectionBar,
@@ -35,6 +37,8 @@ export type MarketplaceIncomeListRow = {
   vatRate: number;
   subtotal: number;
   vatAmount: number;
+  invoiceId: string | null;
+  invoiceFullNumber: string | null;
 };
 
 type Props = {
@@ -108,6 +112,9 @@ export function MarketplaceIncomeTable({ rows, emptyHint }: Props) {
               </th>
               <th className="px-4 py-3 text-right font-medium">Base</th>
               <th className="px-4 py-3 text-right font-medium">Cuota</th>
+              <th className="hidden px-4 py-3 font-medium sm:table-cell">
+                Factura
+              </th>
               <th className="sticky right-0 z-10 bg-line/20 px-2 py-3 text-right font-medium sm:static sm:bg-transparent sm:px-4">
                 Acciones
               </th>
@@ -117,14 +124,20 @@ export function MarketplaceIncomeTable({ rows, emptyHint }: Props) {
             {rows.length === 0 ? (
               <tr>
                 <td
-                  colSpan={8}
+                  colSpan={9}
                   className="px-4 py-10 text-center text-ink-muted"
                 >
                   {emptyHint ?? "No hay ingresos con estos filtros."}
                 </td>
               </tr>
             ) : (
-              rows.map((r) => (
+              rows.map((r) => {
+                const convertCheck = canConvertMarketplaceIncome({
+                  invoiceId: r.invoiceId,
+                  subtotal: r.subtotal,
+                  transactionType: r.transactionType,
+                });
+                return (
                 <tr
                   key={r.id}
                   className={`group border-b border-line/50 ${
@@ -167,14 +180,39 @@ export function MarketplaceIncomeTable({ rows, emptyHint }: Props) {
                   <td className="px-4 py-3 text-right font-mono">
                     {formatCurrency(r.vatAmount)}
                   </td>
+                  <td className="hidden px-4 py-3 sm:table-cell">
+                    {r.invoiceId && r.invoiceFullNumber ? (
+                      <Link
+                        href={`/invoices/${r.invoiceId}`}
+                        className="font-mono text-xs text-accent hover:underline"
+                      >
+                        {r.invoiceFullNumber}
+                      </Link>
+                    ) : (
+                      <span className="text-xs text-ink-muted">—</span>
+                    )}
+                  </td>
                   <td className="sticky right-0 z-10 bg-bg-elevated px-2 py-3 group-hover:bg-accent-soft/20 sm:static sm:bg-transparent sm:px-4">
                     <div className="flex flex-wrap items-center justify-end gap-1">
+                      {convertCheck.ok ? (
+                        <form
+                          action={convertMarketplaceIncomeToInvoice.bind(null, r.id)}
+                        >
+                          <button
+                            type="submit"
+                            className="btn-ghost px-2 py-1 text-xs text-accent"
+                          >
+                            → Factura
+                          </button>
+                        </form>
+                      ) : null}
                       <Link
                         href={`/fiscal/income/${r.id}/edit`}
                         className="btn-ghost px-2 py-1 text-xs"
                       >
                         Editar
                       </Link>
+                      {!r.invoiceId ? (
                       <form action={deleteMarketplaceIncome.bind(null, r.id)}>
                         <button
                           type="submit"
@@ -183,10 +221,12 @@ export function MarketplaceIncomeTable({ rows, emptyHint }: Props) {
                           Borrar
                         </button>
                       </form>
+                      ) : null}
                     </div>
                   </td>
                 </tr>
-              ))
+              );
+              })
             )}
           </tbody>
         </table>

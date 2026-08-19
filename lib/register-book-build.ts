@@ -5,6 +5,7 @@ import type {
   ParsedRegisterBookLine,
   RegisterBookType,
 } from "@/lib/register-book-import";
+import { marketplaceIncomeNotInvoicedWhere } from "@/lib/marketplace-invoice";
 
 function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
@@ -60,7 +61,10 @@ async function buildIncomeLines(
       orderBy: { issueDate: "asc" },
     }),
     prisma.marketplaceIncome.findMany({
-      where: { issueDate: { gte: from, lte: to } },
+      where: {
+        issueDate: { gte: from, lte: to },
+        ...marketplaceIncomeNotInvoicedWhere,
+      },
       orderBy: { issueDate: "asc" },
     }),
   ]);

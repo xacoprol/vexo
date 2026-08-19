@@ -14,6 +14,8 @@ import { stashSourceDocument } from "@/lib/fiscal-blob";
 import { parseShopifyIvaSummaryDraft } from "@/lib/shopify-sales-report";
 import type { AmazonTaxReportRow } from "@/lib/amazon-tax-report";
 import { Prisma } from "@prisma/client";
+import { isRedirectError } from "next/dist/client/components/redirect-error";
+import { convertMarketplaceIncomeInTransaction } from "@/lib/marketplace-invoice";
 
 export type ParseMarketplaceIncomeResult =
   | {
@@ -401,6 +403,9 @@ function revalidateMarketplaceIncome() {
   revalidatePath("/fiscal/303");
   revalidatePath("/fiscal/130");
   revalidatePath("/fiscal/349");
+  revalidatePath("/invoices");
+  revalidatePath("/stats");
+  revalidatePath("/dashboard");
 }
 
 export async function createMarketplaceIncome(
@@ -445,6 +450,9 @@ export async function updateMarketplaceIncome(
   await requireAuth();
   const existing = await prisma.marketplaceIncome.findUnique({ where: { id } });
   if (!existing) return { error: "Ingreso no encontrado" };
+  if (existing.invoiceId) {
+    return { error: "Ya convertido en factura; no se puede editar" };
+  }
 
   const data = parseMarketplaceForm(formData);
   if (Number.isNaN(data.issueDate.getTime())) {
@@ -473,8 +481,35 @@ export async function updateMarketplaceIncome(
   redirect("/fiscal/income");
 }
 
+export async function convertMarketplaceIncomeToInvoice(incomeId: string) {
+  await requireAuth();
+  try {
+    const existing = await prisma.marketplaceIncome.findUnique({
+      where: { id: incomeId },
+      select: { invoiceId: true },
+    });
+    if (existing?.invoiceId) redirect(`/invoices/${existing.invoiceId}`);
+
+    const invoiceId = await prisma.$transaction((tx) =>
+      convertMarketplaceIncomeInTransaction(tx, incomeId)
+    );
+
+    revalidateMarketplaceIncome();
+    redirect(`/invoices/${invoiceId}`);
+  } catch (err) {
+    if (isRedirectError(err)) throw err;
+    throw err instanceof Error
+      ? err
+      : new Error("No se pudo convertir en factura");
+  }
+}
+
 export async function deleteMarketplaceIncome(id: string) {
   await requireAuth();
+  const existing = await prisma.marketplaceIncome.findUnique({ where: { id } });
+  if (existing?.invoiceId) {
+    throw new Error("No se puede borrar: ya convertido en factura");
+  }
   await prisma.marketplaceIncome.delete({ where: { id } });
   revalidatePath("/fiscal");
   revalidatePath("/fiscal/income");
@@ -492,7 +527,7 @@ export async function deleteMarketplaceIncomes(ids: string[]) {
   for (let i = 0; i < unique.length; i += 200) {
     const chunk = unique.slice(i, i + 200);
     const result = await prisma.marketplaceIncome.deleteMany({
-      where: { id: { in: chunk } },
+      where: { id: { in: chunk }, invoiceId: null },
     });
     deleted += result.count;
   }

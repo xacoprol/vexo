@@ -244,6 +244,8 @@ model Invoice {
   payments  InvoicePayment[]
   reminders InvoiceReminderLog[]
 
+  marketplaceIncome MarketplaceIncome?
+
   @@unique([seriesId, number])
   @@index([clientId])
   @@index([status])
@@ -585,6 +587,10 @@ model MarketplaceIncome {
   documentId      String?
   document        FiscalDocument? @relation(fields: [documentId], references: [id], onDelete: SetNull)
   notes           String?
+  /// Factura W3D generada desde este ingreso (evita doble cómputo fiscal)
+  invoiceId       String?  @unique
+  invoice         Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  convertedAt     DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -594,6 +600,7 @@ model MarketplaceIncome {
   @@index([vatStatus])
   @@index([externalRef])
   @@index([documentId])
+  @@index([invoiceId])
 }
 
 // ─── Recurring invoices ─────────────────────────────────────────────────────

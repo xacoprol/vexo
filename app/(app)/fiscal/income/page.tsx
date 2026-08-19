@@ -83,6 +83,9 @@ export default async function MarketplaceIncomePage({
       orderBy: [{ issueDate: "desc" }, { createdAt: "desc" }],
       skip: meta.skip,
       take: meta.take,
+      include: {
+        invoice: { select: { id: true, fullNumber: true } },
+      },
     }),
     prisma.companySettings.findFirst({
       select: {
@@ -113,6 +116,8 @@ export default async function MarketplaceIncomePage({
     vatRate: r.vatRate,
     subtotal: Number(r.subtotal),
     vatAmount: Number(r.vatAmount),
+    invoiceId: r.invoiceId,
+    invoiceFullNumber: r.invoice?.fullNumber ?? null,
   }));
 
   const filterParams = {
@@ -137,8 +142,8 @@ export default async function MarketplaceIncomePage({
             Ingresos marketplace
           </h1>
           <p className="mt-1 text-sm text-ink-muted">
-            Amazon (CSV) y Shopify (API, CSV o Informe IVA) · alta manual si
-            hace falta · no usan la serie W3D
+            Amazon (CSV) y Shopify (API, CSV o Informe IVA) · convierte ingresos
+            en factura W3D con correlativo y VeriFactu
           </p>
         </div>
         <Link href="/fiscal/income/new" className="btn-primary text-sm">
