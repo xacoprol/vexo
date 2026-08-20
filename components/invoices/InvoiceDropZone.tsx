@@ -7,6 +7,10 @@ import {
   saveInvoiceDraftQueue,
   type InvoiceQueueItem,
 } from "@/lib/invoice-draft-storage";
+import {
+  compressUploadFile,
+  formatBytes,
+} from "@/lib/compress-upload";
 import { Spinner } from "@/components/ui/Spinner";
 
 const ACCEPT = "application/pdf,image/jpeg,image/png,image/webp,image/gif";
@@ -22,6 +26,13 @@ type ParseApiResult =
   | { ok: false; error: string };
 
 async function parseInvoiceViaApi(file: File): Promise<ParseApiResult> {
+  if (file.size > 4_200_000) {
+    return {
+      ok: false,
+      error: `Archivo demasiado grande (${formatBytes(file.size)}) tras comprimir. Prueba JPG.`,
+    };
+  }
+
   const fd = new FormData();
   fd.set("file", file);
 
@@ -67,10 +78,15 @@ async function parseInvoiceViaApi(file: File): Promise<ParseApiResult> {
           "Tiempo de espera agotado al leer la factura. Prueba PNG/JPG o de una en una.",
       };
     }
-    return {
-      ok: false,
-      error: e instanceof Error ? e.message : "Error de red al subir",
-    };
+    const msg = e instanceof Error ? e.message : "Error de red al subir";
+    if (/failed to fetch|networkerror|load failed/i.test(msg)) {
+      return {
+        ok: false,
+        error:
+          "No se pudo subir (red o archivo demasiado grande). Prueba JPG.",
+      };
+    }
+    return { ok: false, error: msg };
   } finally {
     clearTimeout(timer);
   }
@@ -120,7 +136,8 @@ export function InvoiceDropZone({ compact }: Props) {
           fileName: file.name,
         });
 
-        const res = await parseInvoiceViaApi(file);
+        const { file: upload } = await compressUploadFile(file);
+        const res = await parseInvoiceViaApi(upload);
         if (!res.ok) {
           failures.push(`${file.name}: ${res.error}`);
           continue;

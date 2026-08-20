@@ -8,6 +8,10 @@ import {
   saveExpenseDraftQueue,
   type ExpenseQueueItem,
 } from "@/lib/expense-draft-storage";
+import {
+  compressUploadFile,
+  formatBytes,
+} from "@/lib/compress-upload";
 import { Spinner } from "@/components/ui/Spinner";
 
 type Props = {
@@ -34,6 +38,13 @@ type ParseApiResult =
   | { ok: false; error: string };
 
 async function parseExpenseViaApi(file: File): Promise<ParseApiResult> {
+  if (file.size > 4_200_000) {
+    return {
+      ok: false,
+      error: `Archivo demasiado grande (${formatBytes(file.size)}) tras comprimir. Prueba JPG o un PDF más ligero.`,
+    };
+  }
+
   const fd = new FormData();
   fd.set("file", file);
   const controller = new AbortController();
@@ -49,6 +60,12 @@ async function parseExpenseViaApi(file: File): Promise<ParseApiResult> {
 
     const contentType = res.headers.get("content-type") ?? "";
     if (!contentType.includes("application/json")) {
+      if (res.status === 413) {
+        return {
+          ok: false,
+          error: "Archivo demasiado grande para el servidor. Prueba JPG.",
+        };
+      }
       if (res.status === 504 || res.status === 408) {
         return {
           ok: false,
@@ -74,10 +91,15 @@ async function parseExpenseViaApi(file: File): Promise<ParseApiResult> {
         error: "Tiempo de espera agotado al leer el gasto.",
       };
     }
-    return {
-      ok: false,
-      error: e instanceof Error ? e.message : "Error de red al subir",
-    };
+    const msg = e instanceof Error ? e.message : "Error de red al subir";
+    if (/failed to fetch|networkerror|load failed/i.test(msg)) {
+      return {
+        ok: false,
+        error:
+          "No se pudo subir (red o archivo demasiado grande). Prueba de nuevo o usa JPG.",
+      };
+    }
+    return { ok: false, error: msg };
   } finally {
     clearTimeout(timer);
   }
@@ -92,6 +114,7 @@ export function ExpenseDropZone({ onParsed, compact }: Props) {
     current: number;
     total: number;
     fileName: string;
+    phase?: "compress" | "parse";
   } | null>(null);
 
   const parsing = progress != null;
@@ -121,9 +144,19 @@ export function ExpenseDropZone({ onParsed, compact }: Props) {
           current: i + 1,
           total: files.length,
           fileName: file.name,
+          phase: "compress",
         });
 
-        const res = await parseExpenseViaApi(file);
+        const { file: upload } = await compressUploadFile(file);
+
+        setProgress({
+          current: i + 1,
+          total: files.length,
+          fileName: upload.name,
+          phase: "parse",
+        });
+
+        const res = await parseExpenseViaApi(upload);
         if (!res.ok) {
           failures.push(`${file.name}: ${res.error}`);
           continue;
@@ -237,7 +270,9 @@ export function ExpenseDropZone({ onParsed, compact }: Props) {
             <span className="inline-flex items-center justify-center gap-2">
               <Spinner className="h-4 w-4" />
               {progress
-                ? `Leyendo ${progress.current}/${progress.total}…`
+                ? progress.phase === "compress"
+                  ? `Comprimiendo ${progress.current}/${progress.total}…`
+                  : `Leyendo ${progress.current}/${progress.total}…`
                 : "Leyendo…"}
             </span>
           ) : dragging
@@ -250,8 +285,8 @@ export function ExpenseDropZone({ onParsed, compact }: Props) {
           </p>
         ) : (
           <p className="mt-1 text-xs text-ink-muted">
-            PDF, JPG, PNG o CSV comisiones Amazon · hasta {MAX_FILES} · tú
-            revisas y guardas
+            PDF/JPG/PNG se comprimen al subir · CSV Amazon · hasta {MAX_FILES} ·
+            tú revisas y guardas
           </p>
         )}
         {!parsing ? (
