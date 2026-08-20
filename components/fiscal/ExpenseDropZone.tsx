@@ -147,7 +147,16 @@ export function ExpenseDropZone({ onParsed, compact }: Props) {
           phase: "compress",
         });
 
-        const { file: upload } = await compressUploadFile(file);
+        let upload: File;
+        try {
+          const compressed = await compressUploadFile(file);
+          upload = compressed.file;
+        } catch (e) {
+          failures.push(
+            `${file.name}: ${e instanceof Error ? e.message : "No se pudo leer"}`
+          );
+          continue;
+        }
 
         setProgress({
           current: i + 1,
@@ -285,7 +294,7 @@ export function ExpenseDropZone({ onParsed, compact }: Props) {
           </p>
         ) : (
           <p className="mt-1 text-xs text-ink-muted">
-            PDF/JPG/PNG se comprimen al subir · CSV Amazon · hasta {MAX_FILES} ·
+            PDF → JPG al subir · Drive: descárgalo antes · hasta {MAX_FILES} ·
             tú revisas y guardas
           </p>
         )}

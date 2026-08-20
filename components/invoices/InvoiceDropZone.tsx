@@ -136,7 +136,15 @@ export function InvoiceDropZone({ compact }: Props) {
           fileName: file.name,
         });
 
-        const { file: upload } = await compressUploadFile(file);
+        let upload: File;
+        try {
+          upload = (await compressUploadFile(file)).file;
+        } catch (e) {
+          failures.push(
+            `${file.name}: ${e instanceof Error ? e.message : "No se pudo leer"}`
+          );
+          continue;
+        }
         const res = await parseInvoiceViaApi(upload);
         if (!res.ok) {
           failures.push(`${file.name}: ${res.error}`);

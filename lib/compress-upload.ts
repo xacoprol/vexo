@@ -1,18 +1,20 @@
 /**
  * Compresión en cliente antes de subir facturas (gasto/ingreso).
- * Objetivo: caber en el límite ~4.5 MB de Vercel Functions y guardar
- * en Blob una copia más ligera sin perder legibilidad para OCR.
+ * PDF de 1–2 páginas → JPEG (más fiable en Vercel/Gemini).
+ * Imágenes → JPEG reescalado. Si el archivo está en Google Drive
+ * sin descargar, falla con mensaje claro.
  */
 
-/** Umbral por debajo del cual no tocamos el archivo. */
-const SKIP_UNDER_BYTES = 700_000;
+/** Umbral por debajo del cual no tocamos imágenes. */
+const SKIP_IMAGE_UNDER_BYTES = 700_000;
 /** Techo seguro para el body de Vercel (~4.5 MB). */
 const TARGET_MAX_BYTES = 3_200_000;
 const IMAGE_MAX_EDGE = 1800;
 const IMAGE_QUALITY_STEPS = [0.82, 0.72, 0.62, 0.52, 0.42];
-const PDF_MAX_EDGE = 1600;
-const PDF_JPEG_QUALITY = 0.72;
-const PDF_MAX_PAGES = 20;
+const PDF_MAX_EDGE = 1400;
+const PDF_JPEG_QUALITY = 0.7;
+const PDF_MAX_PAGES = 12;
+const READ_TIMEOUT_MS = 25_000;
 
 export type CompressedUpload = {
   file: File;
@@ -39,6 +41,46 @@ function isPdfFile(file: File): boolean {
 function replaceExt(name: string, ext: string): string {
   const base = name.replace(/\.[^.]+$/, "") || "documento";
   return `${base}${ext}`;
+}
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  message: string
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(message)), ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/** Lee el File entero; detecta Google Drive / iCloud no descargados. */
+export async function readUploadBytes(file: File): Promise<Uint8Array> {
+  try {
+    const ab = await withTimeout(
+      file.arrayBuffer(),
+      READ_TIMEOUT_MS,
+      "No se pudo leer el archivo a tiempo. Si está en Google Drive o iCloud, descárgalo primero a Descargas y vuelve a subirlo."
+    );
+    return new Uint8Array(ab);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/drive|icloud|timed? ?out|network|abort/i.test(msg)) {
+      throw new Error(
+        "No se pudo leer el archivo. Descárgalo a Descargas (fuera de Google Drive/iCloud) y súbelo otra vez."
+      );
+    }
+    throw err instanceof Error
+      ? err
+      : new Error("No se pudo leer el archivo seleccionado");
+  }
 }
 
 function loadImageElement(file: File): Promise<HTMLImageElement> {
@@ -90,7 +132,6 @@ async function compressImageFile(file: File): Promise<File> {
     if (blob.size <= TARGET_MAX_BYTES) break;
   }
   if (!best) throw new Error("No se pudo comprimir la imagen");
-
   if (best.size >= file.size) return file;
 
   return new File([best], replaceExt(file.name, ".jpg"), {
@@ -99,29 +140,36 @@ async function compressImageFile(file: File): Promise<File> {
   });
 }
 
-async function compressPdfFile(file: File): Promise<File> {
-  const [{ PDFDocument }, pdfjs] = await Promise.all([
-    import("pdf-lib"),
-    import("pdfjs-dist"),
-  ]);
+async function renderPdfPagesToCanvases(
+  data: Uint8Array
+): Promise<HTMLCanvasElement[]> {
+  const pdfjs = await import("pdfjs-dist");
 
-  // Worker desde el mismo paquete (Next/Turbopack resuelve el URL).
-  pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-    "pdfjs-dist/build/pdf.worker.min.mjs",
-    import.meta.url
-  ).toString();
+  // CDN: el worker empaquetado con import.meta.url suele fallar en Vercel.
+  pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
-  const data = new Uint8Array(await file.arrayBuffer());
-  const pdf = await pdfjs.getDocument({ data: data.slice() }).promise;
+  let pdf;
+  try {
+    pdf = await pdfjs.getDocument({ data: data.slice() }).promise;
+  } catch {
+    // Sin worker (más lento, más compatible).
+    pdf = await pdfjs.getDocument({
+      data: data.slice(),
+      // @ts-expect-error — opción soportada en runtime
+      disableWorker: true,
+      useWorkerFetch: false,
+      isEvalSupported: false,
+    }).promise;
+  }
+
   const pageCount = Math.min(pdf.numPages, PDF_MAX_PAGES);
-
-  const out = await PDFDocument.create();
+  const canvases: HTMLCanvasElement[] = [];
 
   for (let i = 1; i <= pageCount; i++) {
     const page = await pdf.getPage(i);
     const viewport0 = page.getViewport({ scale: 1 });
     const scale = Math.min(
-      2,
+      1.75,
       PDF_MAX_EDGE / Math.max(viewport0.width, viewport0.height)
     );
     const viewport = page.getViewport({ scale });
@@ -135,12 +183,47 @@ async function compressPdfFile(file: File): Promise<File> {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     await page.render({ canvas, canvasContext: ctx, viewport }).promise;
+    canvases.push(canvas);
+  }
 
-    let jpeg = await canvasToJpegBlob(canvas, PDF_JPEG_QUALITY);
-    if (jpeg.size > 1_800_000) {
-      jpeg = await canvasToJpegBlob(canvas, 0.55);
-    }
+  return canvases;
+}
 
+async function jpegFromCanvas(
+  canvas: HTMLCanvasElement,
+  quality = PDF_JPEG_QUALITY
+): Promise<Blob> {
+  let jpeg = await canvasToJpegBlob(canvas, quality);
+  if (jpeg.size > 1_500_000) {
+    jpeg = await canvasToJpegBlob(canvas, 0.52);
+  }
+  if (jpeg.size > TARGET_MAX_BYTES) {
+    jpeg = await canvasToJpegBlob(canvas, 0.4);
+  }
+  return jpeg;
+}
+
+/**
+ * PDF → JPEG (1 página) o PDF reconstruido con JPEGs (varias).
+ * Siempre intenta transformar: los PDF de Drive/escáner fallan menos como JPG.
+ */
+async function compressPdfFile(file: File, bytes: Uint8Array): Promise<File> {
+  const canvases = await renderPdfPagesToCanvases(bytes);
+
+  // 1 página → JPG (más rápido de subir y de leer con Gemini).
+  if (canvases.length === 1) {
+    const jpeg = await jpegFromCanvas(canvases[0]);
+    return new File([jpeg], replaceExt(file.name, ".jpg"), {
+      type: "image/jpeg",
+      lastModified: file.lastModified,
+    });
+  }
+
+  const { PDFDocument } = await import("pdf-lib");
+  const out = await PDFDocument.create();
+
+  for (const canvas of canvases) {
+    const jpeg = await jpegFromCanvas(canvas);
     const jpgBytes = new Uint8Array(await jpeg.arrayBuffer());
     const embedded = await out.embedJpg(jpgBytes);
     const pdfPage = out.addPage([embedded.width, embedded.height]);
@@ -152,15 +235,21 @@ async function compressPdfFile(file: File): Promise<File> {
     });
   }
 
-  const bytes = await out.save({ useObjectStreams: true });
-  const ab = bytes.buffer.slice(
-    bytes.byteOffset,
-    bytes.byteOffset + bytes.byteLength
+  const saved = await out.save({ useObjectStreams: true });
+  const ab = saved.buffer.slice(
+    saved.byteOffset,
+    saved.byteOffset + saved.byteLength
   ) as ArrayBuffer;
   const blob = new Blob([ab], { type: "application/pdf" });
 
-  // Si no mejora, mantener original (p. ej. PDF ya optimizado).
-  if (blob.size >= file.size * 0.95) return file;
+  if (blob.size >= file.size * 0.98) {
+    // Mejor enviar la 1ª página como JPG que un PDF enorme.
+    const jpeg = await jpegFromCanvas(canvases[0], 0.65);
+    return new File([jpeg], replaceExt(file.name, "-p1.jpg"), {
+      type: "image/jpeg",
+      lastModified: file.lastModified,
+    });
+  }
 
   return new File([blob], replaceExt(file.name, ".pdf"), {
     type: "application/pdf",
@@ -170,26 +259,19 @@ async function compressPdfFile(file: File): Promise<File> {
 
 /**
  * Comprime el archivo en el navegador antes del upload.
- * CSV y otros tipos se dejan igual. Si falla la compresión, devuelve el original.
+ * Si falla la lectura (Drive), lanza. Si falla solo la compresión, usa original.
  */
 export async function compressUploadFile(file: File): Promise<CompressedUpload> {
   const originalBytes = file.size;
-
-  if (file.size <= SKIP_UNDER_BYTES) {
-    return {
-      file,
-      compressed: false,
-      originalBytes,
-      finalBytes: file.size,
-    };
-  }
+  const bytes = await readUploadBytes(file);
 
   try {
     let out = file;
-    if (isImageFile(file)) {
+
+    if (isPdfFile(file)) {
+      out = await compressPdfFile(file, bytes);
+    } else if (isImageFile(file) && file.size > SKIP_IMAGE_UNDER_BYTES) {
       out = await compressImageFile(file);
-    } else if (isPdfFile(file)) {
-      out = await compressPdfFile(file);
     } else {
       return {
         file,
@@ -201,11 +283,18 @@ export async function compressUploadFile(file: File): Promise<CompressedUpload> 
 
     return {
       file: out,
-      compressed: out.size < originalBytes,
+      compressed: out.size < originalBytes || out.type !== file.type,
       originalBytes,
       finalBytes: out.size,
     };
   } catch (err) {
+    // Errores de lectura (Drive/iCloud) no se tragan: hay que avisar.
+    if (
+      err instanceof Error &&
+      /descárgalo|Google Drive|iCloud|leer el archivo/i.test(err.message)
+    ) {
+      throw err;
+    }
     console.warn("compressUploadFile failed, using original:", err);
     return {
       file,
