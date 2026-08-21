@@ -445,15 +445,15 @@ const styles = StyleSheet.create({
   verifactuBlock: {
     position: "absolute",
     bottom: 52,
-    right: 40,
-    width: 95,
-    alignItems: "center",
+    left: 40,
+    width: 110,
+    alignItems: "flex-start",
   },
   verifactuLabel: {
     fontSize: 6,
     color: MUTED,
     marginBottom: 3,
-    textAlign: "center",
+    textAlign: "left",
   },
   verifactuQr: {
     width: 85,
@@ -463,7 +463,7 @@ const styles = StyleSheet.create({
     marginTop: 3,
     fontSize: 5,
     color: MUTED,
-    textAlign: "center",
+    textAlign: "left",
   },
 });
 
