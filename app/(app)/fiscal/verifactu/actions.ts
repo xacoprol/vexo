@@ -17,31 +17,46 @@ export async function updateVerifactuSettings(
   formData: FormData
 ): Promise<VerifactuSettingsState> {
   await requireAuth();
-  const mode = parseVerifactuMode(formData.get("verifactuMode"));
-  const env = parseVerifactuEnv(formData.get("verifactuEnv"));
+  try {
+    const mode = parseVerifactuMode(formData.get("verifactuMode"));
+    const env = parseVerifactuEnv(formData.get("verifactuEnv"));
 
-  const settings = await prisma.companySettings.findFirst({ select: { id: true } });
-  if (!settings) return { error: "Sin configuración de empresa" };
-
-  await prisma.companySettings.update({
-    where: { id: settings.id },
-    data: { verifactuMode: mode, verifactuEnv: env },
-  });
-
-  // Si activamos VERIFACTU, reencolar SKIPPED → PENDING
-  if (mode === "VERIFACTU") {
-    await prisma.verifactuEvent.updateMany({
-      where: { status: "SKIPPED" },
-      data: {
-        status: "PENDING",
-        aeatMessage: "Activado modo VERIFACTU",
-      },
+    const settings = await prisma.companySettings.findFirst({
+      select: { id: true },
     });
-  }
+    if (!settings) return { error: "Sin configuración de empresa" };
 
-  revalidatePath("/fiscal/verifactu");
-  revalidatePath("/settings");
-  return { success: true };
+    await prisma.companySettings.update({
+      where: { id: settings.id },
+      data: { verifactuMode: mode, verifactuEnv: env },
+    });
+
+    // Reencolar SKIPPED → PENDING (no updateMany: PrismaNeonHTTP lo rompe)
+    if (mode === "VERIFACTU") {
+      const skipped = await prisma.verifactuEvent.findMany({
+        where: { status: "SKIPPED" },
+        select: { id: true },
+      });
+      for (const ev of skipped) {
+        await prisma.verifactuEvent.update({
+          where: { id: ev.id },
+          data: {
+            status: "PENDING",
+            aeatMessage: "Activado modo VERIFACTU",
+          },
+        });
+      }
+    }
+
+    revalidatePath("/fiscal/verifactu");
+    revalidatePath("/settings");
+    return { success: true };
+  } catch (e) {
+    console.error("[verifactu] updateVerifactuSettings", e);
+    return {
+      error: e instanceof Error ? e.message : "No se pudo guardar",
+    };
+  }
 }
 
 export async function runVerifactuRemitNow() {
