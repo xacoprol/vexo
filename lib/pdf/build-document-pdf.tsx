@@ -124,6 +124,7 @@ export async function buildInvoicePdf(
           numSerie: invoice.fullNumber,
           fechaExpedicion: formatFechaExpedicion(invoice.issueDate),
           importeTotal: Number(invoice.total),
+          verificable: Boolean(invoice.verifactuSentAt),
         })
       : null);
   if (qrUrl) {
@@ -188,6 +189,7 @@ export async function buildInvoicePdf(
       showPayment
       verifactuQrDataUrl={verifactuQrDataUrl}
       verifactuHash={invoice.verifactuHash}
+      verifactuSentAt={invoice.verifactuSentAt}
     />
   );
 

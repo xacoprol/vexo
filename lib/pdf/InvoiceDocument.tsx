@@ -60,6 +60,7 @@ export type InvoicePdfProps = {
   /** Veri*Factu: data URL PNG del QR tributario (solo facturas). */
   verifactuQrDataUrl?: string | null;
   verifactuHash?: string | null;
+  verifactuSentAt?: Date | string | null;
 };
 
 /**
@@ -554,6 +555,7 @@ export function InvoicePdfDocument(props: InvoicePdfProps) {
     earlyPaymentDiscountAmount = 0,
     verifactuQrDataUrl,
     verifactuHash,
+    verifactuSentAt,
   } = props;
 
   const vatRate = primaryVatRate(lines);
@@ -772,7 +774,9 @@ export function InvoicePdfDocument(props: InvoicePdfProps) {
             {title.toUpperCase() === "FACTURA" ? (
               <Text style={styles.footerLine}>
                 {verifactuQrDataUrl
-                  ? "Registro Veri*Factu local (modalidad no verificable): huella SHA-256 encadenada y QR tributario AEAT. Aún no se remite en línea a la sede. Obligación plena autónomos: 1 jul 2027."
+                  ? verifactuSentAt
+                    ? "Registro Veri*Factu remitido a la AEAT (QR verificable)."
+                    : "Registro Veri*Factu local (modalidad no verificable): huella SHA-256 encadenada y QR tributario AEAT. Aún no se remite en línea a la sede. Obligación plena autónomos: 1 jul 2027."
                   : "Factura no remitida al sistema Veri*Factu de la AEAT. Documento emitido con software de facturación pendiente de adaptación plena al RRSIF (obligación autónomos: 1 jul 2027)."}
               </Text>
             ) : null}

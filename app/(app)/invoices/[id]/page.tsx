@@ -4,6 +4,10 @@ import { prisma } from "@/lib/prisma";
 import { formatCurrency, formatDate } from "@/lib/calculations";
 import { paymentTotals } from "@/lib/invoice-payments";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { VerifactuBadge } from "@/components/invoices/VerifactuBadge";
+import {
+  resolveVerifactuInvoiceStatus,
+} from "@/lib/verifactu";
 import { annulInvoice, setInvoiceStatus } from "../actions";
 import { SendDocumentButton } from "@/components/documents/SendDocumentButton";
 import { DeleteInvoiceButton } from "@/components/invoices/DeleteInvoiceButton";
@@ -28,6 +32,18 @@ export default async function InvoiceDetailPage({
         select: { id: true, externalRef: true, externalKey: true, channel: true },
       },
       payments: { orderBy: { paidAt: "desc" } },
+      verifactuEvents: {
+        orderBy: { createdAt: "desc" },
+        take: 5,
+        select: {
+          id: true,
+          kind: true,
+          status: true,
+          aeatCode: true,
+          aeatMessage: true,
+          createdAt: true,
+        },
+      },
     },
   });
   if (!invoice) notFound();
@@ -37,6 +53,20 @@ export default async function InvoiceDetailPage({
     invoice.status !== "ANULADA" &&
     invoice.status !== "PAGADA" &&
     totals.remaining > 0;
+
+  const hasPending = invoice.verifactuEvents.some(
+    (e) => e.status === "PENDING" || e.status === "SENT"
+  );
+  const hasRejected = invoice.verifactuEvents.some(
+    (e) => e.status === "REJECTED"
+  );
+  const verifactuStatus = resolveVerifactuInvoiceStatus({
+    status: invoice.status,
+    verifactuHash: invoice.verifactuHash,
+    verifactuSentAt: invoice.verifactuSentAt,
+    pendingEvent: hasPending,
+    rejectedEvent: hasRejected && !invoice.verifactuSentAt,
+  });
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
@@ -50,6 +80,7 @@ export default async function InvoiceDetailPage({
           </h1>
           <div className="mt-2 flex flex-wrap items-center gap-3">
             <StatusBadge status={invoice.status} />
+            <VerifactuBadge status={verifactuStatus} />
             {invoice.vatOperationType &&
             invoice.vatOperationType !== "SUJETA" ? (
               <span className="badge bg-accent-soft text-accent">
@@ -161,6 +192,41 @@ export default async function InvoiceDetailPage({
         }))}
         disabled={invoice.status === "ANULADA"}
       />
+
+      {invoice.verifactuHash || invoice.verifactuEvents.length > 0 ? (
+        <div className="card-panel space-y-2 p-4 text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="font-semibold">Veri*Factu</h2>
+            <Link
+              href="/fiscal/verifactu"
+              className="text-xs text-accent hover:underline"
+            >
+              Panel Veri*Factu
+            </Link>
+          </div>
+          {invoice.verifactuHash ? (
+            <p className="font-mono text-xs text-ink-muted break-all">
+              Huella: {invoice.verifactuHash}
+            </p>
+          ) : null}
+          {invoice.verifactuSentAt ? (
+            <p className="text-xs text-ink-muted">
+              Remitida: {formatDate(invoice.verifactuSentAt)}
+            </p>
+          ) : null}
+          {invoice.verifactuEvents.length > 0 ? (
+            <ul className="space-y-1 text-xs text-ink-muted">
+              {invoice.verifactuEvents.map((ev) => (
+                <li key={ev.id}>
+                  {ev.kind} · {ev.status}
+                  {ev.aeatCode ? ` · ${ev.aeatCode}` : ""}
+                  {ev.aeatMessage ? ` — ${ev.aeatMessage}` : ""}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="card-panel overflow-x-auto">
         <table className="w-full text-sm">

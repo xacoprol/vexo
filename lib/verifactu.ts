@@ -1,20 +1,37 @@
 /**
- * Veri*Factu (RRSIF) — fase B/C:
- * - Huella SHA-256 encadenada (especificación AEAT v0.1.2)
- * - URL del QR tributario en modalidad NO verificable (aún sin remisión)
+ * Veri*Factu (RRSIF):
+ * - Huella SHA-256 encadenada (especificación AEAT)
+ * - QR tributario (no verificable o verificable tras remisión)
  *
  * Fuentes:
  * - Especificaciones huella/hash registros
- * - Especificaciones código QR factura (ValidarQRNoVerifactu)
+ * - ValidarQRNoVerifactu / ValidarQR
  */
 
 import { createHash } from "crypto";
 
-export const VERIFACTU_MODE = "NO_VERIFACTU" as const;
+export type VerifactuMode = "NO_VERIFACTU" | "VERIFACTU";
+export type VerifactuEnv = "TEST" | "PROD";
+
+export const VERIFACTU_MODE_DEFAULT: VerifactuMode = "NO_VERIFACTU";
 
 /** Producción — facturas no verificables (sin remisión en línea). */
 export const VERIFACTU_QR_BASE_NO =
   "https://www2.agenciatributaria.gob.es/wlpl/TIKE-CONT/ValidarQRNoVerifactu";
+
+/** QR verificable tras remisión aceptada. */
+export const VERIFACTU_QR_BASE_YES =
+  "https://www2.agenciatributaria.gob.es/wlpl/TIKE-CONT/ValidarQR";
+
+export function parseVerifactuMode(raw: unknown): VerifactuMode {
+  const v = String(raw ?? "").trim().toUpperCase();
+  return v === "VERIFACTU" ? "VERIFACTU" : "NO_VERIFACTU";
+}
+
+export function parseVerifactuEnv(raw: unknown): VerifactuEnv {
+  const v = String(raw ?? "").trim().toUpperCase();
+  return v === "PROD" ? "PROD" : "TEST";
+}
 
 export type VerifactuAltaFields = {
   idEmisorFactura: string;
@@ -26,6 +43,15 @@ export type VerifactuAltaFields = {
   /** Huella del registro anterior (vacío si es el primero). */
   huellaAnterior: string;
   fechaHoraHusoGenRegistro: string; // ISO con offset
+};
+
+export type VerifactuAnulacionFields = {
+  idEmisorFactura: string;
+  numSerieFactura: string;
+  fechaExpedicionFactura: string;
+  /** Huella del registro de alta que se anula (o cadena previa). */
+  huellaAnterior: string;
+  fechaHoraHusoGenRegistro: string;
 };
 
 export function normalizeIssuerNif(raw: string): string {
@@ -84,7 +110,6 @@ export function formatFechaHoraHusoGenRegistro(date = new Date()): string {
   const s = get("second");
   const local = `${y}-${mo}-${d}T${h}:${mi}:${s}`;
 
-  // Offset = (hora local Madrid interpretada como UTC) − instante real, invertido
   const guessUtc = Date.UTC(
     Number(y),
     Number(mo) - 1,
@@ -105,6 +130,22 @@ function trimValue(v: string): string {
   return String(v ?? "").trim();
 }
 
+/**
+ * TipoFactura AEAT a partir del tipo de operación IVA de Vexo.
+ * F1 = completa; F2 = simplificada (B2C marketplace típico).
+ */
+export function tipoFacturaFromVatOperation(
+  vatOperationType: string | null | undefined,
+  opts?: { simplified?: boolean }
+): string {
+  if (opts?.simplified) return "F2";
+  const op = String(vatOperationType ?? "SUJETA").toUpperCase();
+  if (op === "INTRACOMUNITARIA" || op === "EXPORTACION" || op === "CANARIAS") {
+    return "F1";
+  }
+  return "F1";
+}
+
 /** Cadena canónica AEAT para registro de alta. */
 export function buildHuellaAltaCanonical(fields: VerifactuAltaFields): string {
   const pairs: [string, string][] = [
@@ -114,6 +155,21 @@ export function buildHuellaAltaCanonical(fields: VerifactuAltaFields): string {
     ["TipoFactura", trimValue(fields.tipoFactura || "F1")],
     ["CuotaTotal", trimValue(fields.cuotaTotal)],
     ["ImporteTotal", trimValue(fields.importeTotal)],
+    ["Huella", trimValue(fields.huellaAnterior)],
+    ["FechaHoraHusoGenRegistro", trimValue(fields.fechaHoraHusoGenRegistro)],
+  ];
+  return pairs.map(([k, v]) => `${k}=${v}`).join("&");
+}
+
+/** Cadena canónica para anulación (registro de evento local + cola AEAT). */
+export function buildHuellaAnulacionCanonical(
+  fields: VerifactuAnulacionFields
+): string {
+  const pairs: [string, string][] = [
+    ["IDEmisorFactura", trimValue(fields.idEmisorFactura)],
+    ["NumSerieFactura", trimValue(fields.numSerieFactura)],
+    ["FechaExpedicionFactura", trimValue(fields.fechaExpedicionFactura)],
+    ["TipoFactura", "Anulacion"],
     ["Huella", trimValue(fields.huellaAnterior)],
     ["FechaHoraHusoGenRegistro", trimValue(fields.fechaHoraHusoGenRegistro)],
   ];
@@ -135,20 +191,31 @@ export function computeHuellaAlta(fields: VerifactuAltaFields): {
   return { canonical, huella: sha256HexUpper(canonical) };
 }
 
+export function computeHuellaAnulacion(fields: VerifactuAnulacionFields): {
+  canonical: string;
+  huella: string;
+} {
+  const canonical = buildHuellaAnulacionCanonical(fields);
+  return { canonical, huella: sha256HexUpper(canonical) };
+}
+
 export function buildVerifactuQrUrl(opts: {
   nif: string;
   numSerie: string;
   fechaExpedicion: string; // DD-MM-AAAA
   importeTotal: number;
+  /** true = QR verificable (solo tras remisión aceptada) */
+  verificable?: boolean;
   baseUrl?: string;
 }): string {
-  const base = opts.baseUrl ?? VERIFACTU_QR_BASE_NO;
+  const base =
+    opts.baseUrl ??
+    (opts.verificable ? VERIFACTU_QR_BASE_YES : VERIFACTU_QR_BASE_NO);
   const params = new URLSearchParams();
   params.set("nif", normalizeIssuerNif(opts.nif));
   params.set("numserie", opts.numSerie.slice(0, 60));
   params.set("fecha", opts.fechaExpedicion);
   params.set("importe", formatQrAmount(opts.importeTotal));
-  // URLSearchParams encodea correctamente & en numserie
   return `${base}?${params.toString()}`;
 }
 
@@ -161,6 +228,8 @@ export type SealInput = {
   previousHash: string | null;
   recordAt?: Date;
   tipoFactura?: string;
+  /** QR verificable (tras remisión) */
+  verificable?: boolean;
 };
 
 export type SealResult = {
@@ -170,6 +239,7 @@ export type SealResult = {
   recordAtIso: string;
   qrUrl: string;
   canonical: string;
+  tipoFactura: string;
 };
 
 export function sealVerifactuRecord(input: SealInput): SealResult {
@@ -177,11 +247,12 @@ export function sealVerifactuRecord(input: SealInput): SealResult {
   const recordAtIso = formatFechaHoraHusoGenRegistro(recordAt);
   const fechaExp = formatFechaExpedicion(input.issueDate);
   const previousHash = (input.previousHash ?? "").trim();
+  const tipoFactura = input.tipoFactura || "F1";
   const fields: VerifactuAltaFields = {
     idEmisorFactura: normalizeIssuerNif(input.issuerNif),
     numSerieFactura: input.fullNumber.trim(),
     fechaExpedicionFactura: fechaExp,
-    tipoFactura: input.tipoFactura || "F1",
+    tipoFactura,
     cuotaTotal: formatVerifactuAmount(input.vatAmount),
     importeTotal: formatVerifactuAmount(input.total),
     huellaAnterior: previousHash,
@@ -193,6 +264,7 @@ export function sealVerifactuRecord(input: SealInput): SealResult {
     numSerie: fields.numSerieFactura,
     fechaExpedicion: fechaExp,
     importeTotal: input.total,
+    verificable: Boolean(input.verificable),
   });
   return {
     hash: huella,
@@ -201,5 +273,38 @@ export function sealVerifactuRecord(input: SealInput): SealResult {
     recordAtIso,
     qrUrl,
     canonical,
+    tipoFactura,
   };
 }
+
+export type VerifactuInvoiceStatus =
+  | "sin_sello"
+  | "sellada"
+  | "pendiente_remision"
+  | "remitida"
+  | "rechazada"
+  | "anulada";
+
+export function resolveVerifactuInvoiceStatus(opts: {
+  status: string;
+  verifactuHash: string | null;
+  verifactuSentAt: Date | null;
+  pendingEvent?: boolean;
+  rejectedEvent?: boolean;
+}): VerifactuInvoiceStatus {
+  if (opts.status === "ANULADA") return "anulada";
+  if (!opts.verifactuHash) return "sin_sello";
+  if (opts.verifactuSentAt) return "remitida";
+  if (opts.rejectedEvent) return "rechazada";
+  if (opts.pendingEvent) return "pendiente_remision";
+  return "sellada";
+}
+
+export const VERIFACTU_STATUS_LABEL: Record<VerifactuInvoiceStatus, string> = {
+  sin_sello: "Sin sello",
+  sellada: "Sellada (local)",
+  pendiente_remision: "Pendiente remisión",
+  remitida: "Remitida AEAT",
+  rechazada: "Rechazada AEAT",
+  anulada: "Anulada",
+};

@@ -18,6 +18,7 @@
     "import:aeat-payments": "tsx scripts/import-aeat-payments.ts",
     "link:aeat-payments": "tsx scripts/link-aeat-payments.ts",
     "backfill:verifactu": "tsx scripts/backfill-verifactu.ts",
+    "verify:verifactu": "tsx scripts/verify-verifactu-hash.ts",
     "backfill:expense-nifs": "tsx scripts/backfill-expense-nifs.ts",
     "icons:generate": "tsx scripts/generate-icons.ts"
   },

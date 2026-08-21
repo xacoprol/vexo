@@ -143,6 +143,7 @@ const NAV: NavItem[] = [
       { href: "/fiscal/payments", label: "Pagos / NRC" },
       { href: "/fiscal/archive", label: "Archivo" },
       { href: "/fiscal/aeat", label: "Comunicaciones AEAT" },
+      { href: "/fiscal/verifactu", label: "Veri*Factu" },
     ],
   },
   {

@@ -65,6 +65,14 @@ model CompanySettings {
   shopifyAccessToken   String?
   shopifyLastSyncAt    DateTime?
 
+  /**
+   * Veri*Factu: NO_VERIFACTU = QR no verificable sin remisión;
+   * VERIFACTU = cola de remisión activa (pruebas o prod según verifactuEnv).
+   */
+  verifactuMode String @default("NO_VERIFACTU")
+  /** TEST | PROD — entorno de remisión AEAT */
+  verifactuEnv  String @default("TEST")
+
   // UX theme (CSS variables)
   themeBg           String @default("#F3F1F8")
   themeBgElevated   String @default("#FFFFFF")
@@ -243,6 +251,7 @@ model Invoice {
   lines     InvoiceLine[]
   payments  InvoicePayment[]
   reminders InvoiceReminderLog[]
+  verifactuEvents VerifactuEvent[]
 
   marketplaceIncome MarketplaceIncome?
 
@@ -293,6 +302,34 @@ model InvoiceReminderLog {
   @@index([invoiceId])
   @@index([sentAt])
   @@index([kind])
+}
+
+// ─── Veri*Factu events (cola remisión AEAT) ─────────────────────────────────
+
+model VerifactuEvent {
+  id            String    @id @default(cuid())
+  invoiceId     String
+  invoice       Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  /// ALTA | ANULACION
+  kind          String
+  /// PENDING | SENT | ACCEPTED | REJECTED | SKIPPED
+  status        String    @default("PENDING")
+  hash          String?
+  previousHash  String?
+  canonical     String?   @db.Text
+  qrUrl         String?
+  aeatCode      String?
+  aeatMessage   String?   @db.Text
+  attempts      Int       @default(0)
+  lastAttemptAt DateTime?
+  acceptedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([invoiceId])
+  @@index([status])
+  @@index([kind])
+  @@index([createdAt])
 }
 
 // ─── Catalog of reusable line items ─────────────────────────────────────────

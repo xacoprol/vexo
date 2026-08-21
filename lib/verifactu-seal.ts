@@ -1,8 +1,12 @@
 /**
- * Persistencia Veri*Factu al emitir factura (hash + QR, sin remisión AEAT).
+ * Persistencia Veri*Factu al emitir factura (hash + QR + evento cola).
  */
 import type { Prisma, PrismaClient } from "@prisma/client";
-import { sealVerifactuRecord } from "@/lib/verifactu";
+import {
+  sealVerifactuRecord,
+  tipoFacturaFromVatOperation,
+} from "@/lib/verifactu";
+import { enqueueVerifactuAlta } from "@/lib/verifactu-events";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -21,6 +25,9 @@ export async function applyVerifactuSeal(
         total: true,
         status: true,
         verifactuHash: true,
+        vatOperationType: true,
+        paymentMethod: true,
+        marketplaceIncome: { select: { id: true } },
       },
     }),
     db.companySettings.findFirst({
@@ -57,6 +64,12 @@ export async function applyVerifactuSeal(
     select: { id: true, verifactuHash: true },
   });
 
+  const payment = (invoice.paymentMethod || "").toLowerCase();
+  const simplified =
+    Boolean(invoice.marketplaceIncome) ||
+    payment.includes("shopify") ||
+    payment.includes("marketplace");
+
   const sealed = sealVerifactuRecord({
     issuerNif: settings.nif,
     fullNumber: invoice.fullNumber,
@@ -64,6 +77,9 @@ export async function applyVerifactuSeal(
     vatAmount: Number(invoice.vatAmount),
     total: Number(invoice.total),
     previousHash: prev?.verifactuHash ?? null,
+    tipoFactura: tipoFacturaFromVatOperation(invoice.vatOperationType, {
+      simplified,
+    }),
   });
 
   await db.invoice.update({
@@ -74,6 +90,14 @@ export async function applyVerifactuSeal(
       verifactuRecordAt: sealed.recordAt,
       verifactuQrUrl: sealed.qrUrl,
     },
+  });
+
+  await enqueueVerifactuAlta(db, {
+    invoiceId,
+    hash: sealed.hash,
+    previousHash: sealed.previousHash || null,
+    canonical: sealed.canonical,
+    qrUrl: sealed.qrUrl,
   });
 
   return { hash: sealed.hash, qrUrl: sealed.qrUrl };

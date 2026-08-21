@@ -287,6 +287,8 @@ export async function setInvoiceStatus(id: string, status: string) {
 
   if (status === "ANULADA") {
     await prisma.invoice.update({ where: { id }, data: { status: "ANULADA" } });
+    const { recordVerifactuAnulacion } = await import("@/lib/verifactu-events");
+    await recordVerifactuAnulacion(prisma, id);
   } else if (status === "PAGADA") {
     const { remaining } = paymentTotals(inv.total, inv.payments);
     if (remaining > 0.001) {
