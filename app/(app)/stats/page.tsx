@@ -7,6 +7,7 @@ import { buildOfficialYearHistory } from "@/lib/fiscal-filings";
 import {
   CashflowChart,
   IncomeMixChart,
+  ProfitChart,
 } from "@/components/stats/StatsCharts";
 
 export default async function StatsPage({
@@ -65,6 +66,13 @@ export default async function StatsPage({
     label: m.label,
     invoicesTotal: m.invoicesTotal,
     collected: m.collected,
+  }));
+
+  const profitData = stats.months.map((m) => ({
+    label: m.label,
+    incomeBase: m.incomeBase,
+    expensesBase: m.expensesBase,
+    netBase: m.netBase,
   }));
 
   const panelVsOfficial =
@@ -152,6 +160,72 @@ export default async function StatsPage({
           </div>
         ))}
       </div>
+
+      <section className="card-panel p-5">
+        <div className="mb-1 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold">
+              Beneficio mes a mes ({year})
+            </h2>
+            <p className="mt-0.5 text-xs text-ink-muted">
+              Bases imponibles del panel · ingresos − gastos deducibles (sin IVA)
+            </p>
+          </div>
+        </div>
+        <div className="mt-4">
+          <ProfitChart data={profitData} />
+        </div>
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="border-b border-line bg-line/20 text-xs uppercase tracking-wide text-ink-muted">
+              <tr>
+                <th className="px-3 py-2 text-left font-medium">Mes</th>
+                <th className="px-3 py-2 text-right font-medium">Ingresos</th>
+                <th className="px-3 py-2 text-right font-medium">Gastos</th>
+                <th className="px-3 py-2 text-right font-medium">Beneficio</th>
+              </tr>
+            </thead>
+            <tbody>
+              {stats.months.map((m) => (
+                <tr key={m.key} className="border-b border-line/50">
+                  <td className="px-3 py-2 capitalize">{m.label}</td>
+                  <td className="px-3 py-2 text-right font-mono">
+                    {formatCurrency(m.incomeBase)}
+                  </td>
+                  <td className="px-3 py-2 text-right font-mono">
+                    {formatCurrency(m.expensesBase)}
+                  </td>
+                  <td
+                    className={`px-3 py-2 text-right font-mono font-medium ${
+                      m.netBase >= 0 ? "text-success" : "text-danger"
+                    }`}
+                  >
+                    {formatCurrency(m.netBase)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t border-line bg-line/10 font-medium">
+                <td className="px-3 py-2">Total {year}</td>
+                <td className="px-3 py-2 text-right font-mono">
+                  {formatCurrency(stats.incomeBase)}
+                </td>
+                <td className="px-3 py-2 text-right font-mono">
+                  {formatCurrency(stats.expensesBase)}
+                </td>
+                <td
+                  className={`px-3 py-2 text-right font-mono ${
+                    stats.netBase >= 0 ? "text-success" : "text-danger"
+                  }`}
+                >
+                  {formatCurrency(stats.netBase)}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </section>
 
       <section className="card-panel p-5">
         <div className="mb-4 flex flex-wrap items-end justify-between gap-3">

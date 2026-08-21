@@ -33,6 +33,8 @@ export type StatsMonthPoint = {
   /** Ingresos reconocidos = base W3D + marketplace */
   incomeBase: number;
   expensesBase: number;
+  /** incomeBase − expensesBase */
+  netBase: number;
 };
 
 export type StatsSummary = {
@@ -125,6 +127,7 @@ export async function buildYearStats(year: number): Promise<StatsSummary> {
       marketplaceBase: 0,
       incomeBase: 0,
       expensesBase: 0,
+      netBase: 0,
     });
   }
 
@@ -186,10 +189,12 @@ export async function buildYearStats(year: number): Promise<StatsSummary> {
 
   const months = [...monthMap.values()].map((m) => {
     const marketplace = round2(m.amazonBase + m.shopifyBase);
+    const incomeBase = round2(m.invoicesBase + marketplace);
     return {
       ...m,
       marketplaceBase: marketplace,
-      incomeBase: round2(m.invoicesBase + marketplace),
+      incomeBase,
+      netBase: round2(incomeBase - m.expensesBase),
     };
   });
 
