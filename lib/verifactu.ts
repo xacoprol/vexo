@@ -308,3 +308,17 @@ export const VERIFACTU_STATUS_LABEL: Record<VerifactuInvoiceStatus, string> = {
   rechazada: "Rechazada AEAT",
   anulada: "Anulada",
 };
+
+/** Etiqueta corta para listados / acciones. */
+export const VERIFACTU_STATUS_SHORT: Record<VerifactuInvoiceStatus, string> = {
+  sin_sello: "Sin QR",
+  sellada: "QR ✓",
+  pendiente_remision: "QR · cola",
+  remitida: "QR ✓",
+  rechazada: "QR · error",
+  anulada: "Anulada",
+};
+
+export function hasVerifactuQr(status: VerifactuInvoiceStatus): boolean {
+  return status === "sellada" || status === "pendiente_remision" || status === "remitida";
+}

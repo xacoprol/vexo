@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/LiveSearch";
 import { InvoiceDropZone } from "@/components/invoices/InvoiceDropZone";
 import type { Prisma } from "@prisma/client";
+import { resolveVerifactuInvoiceStatus } from "@/lib/verifactu";
 
 /** OCR Gemini puede superar el límite por defecto de Vercel Hobby. */
 export const maxDuration = 60;
@@ -90,6 +91,11 @@ export default async function InvoicesPage({
         select: { vatRate: true, description: true },
       },
       payments: { select: { amount: true } },
+      verifactuEvents: {
+        where: { status: { in: ["PENDING", "SENT", "REJECTED"] } },
+        select: { status: true },
+        take: 5,
+      },
     },
     orderBy: [{ issueDate: "desc" }, { number: "desc" }],
     skip: meta.skip,
@@ -103,6 +109,12 @@ export default async function InvoicesPage({
       inv.status === "PAGADA" || inv.status === "ANULADA"
         ? 0
         : Math.max(0, Math.round((totalAmt - paid) * 100) / 100);
+    const hasPending = inv.verifactuEvents.some(
+      (e) => e.status === "PENDING" || e.status === "SENT"
+    );
+    const hasRejected = inv.verifactuEvents.some(
+      (e) => e.status === "REJECTED"
+    );
     return {
       id: inv.id,
       fullNumber: inv.fullNumber,
@@ -124,6 +136,13 @@ export default async function InvoicesPage({
       legal: LEGAL_LABELS[inv.vatOperationType] ?? inv.vatOperationType,
       clientName: inv.client.name,
       clientNif: inv.client.nif,
+      verifactuStatus: resolveVerifactuInvoiceStatus({
+        status: inv.status,
+        verifactuHash: inv.verifactuHash,
+        verifactuSentAt: inv.verifactuSentAt,
+        pendingEvent: hasPending,
+        rejectedEvent: hasRejected && !inv.verifactuSentAt,
+      }),
     };
   });
 

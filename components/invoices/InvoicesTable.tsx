@@ -18,6 +18,11 @@ import {
   BulkDeleteConfirmModal,
   BulkSelectionBar,
 } from "@/components/ui/BulkDelete";
+import {
+  hasVerifactuQr,
+  VERIFACTU_STATUS_LABEL,
+  VERIFACTU_STATUS_SHORT,
+} from "@/lib/verifactu";
 
 export type InvoiceListRow = {
   id: string;
@@ -40,6 +45,14 @@ export type InvoiceListRow = {
   legal: string | null;
   clientName: string;
   clientNif: string;
+  /** Estado Veri*Factu para listado / acciones */
+  verifactuStatus:
+    | "sin_sello"
+    | "sellada"
+    | "pendiente_remision"
+    | "remitida"
+    | "rechazada"
+    | "anulada";
 };
 
 type ColumnId =
@@ -368,6 +381,29 @@ export function InvoicesTable({ invoices }: { invoices: InvoiceListRow[] }) {
         >
           Descargar
         </a>
+        {hasVerifactuQr(inv.verifactuStatus) ? (
+          <a
+            href={`/api/invoices/${inv.id}/pdf`}
+            target="_blank"
+            rel="noreferrer"
+            className={`${itemClass} text-accent`}
+            onClick={closeMenu}
+          >
+            Veri*Factu · PDF con QR
+          </a>
+        ) : inv.verifactuStatus !== "anulada" ? (
+          <Link
+            href={`/invoices/${inv.id}`}
+            className={`${itemClass} text-ink-muted`}
+            onClick={closeMenu}
+          >
+            Veri*Factu · sin QR
+          </Link>
+        ) : (
+          <span className={`${itemClass} cursor-default text-ink-muted`}>
+            Veri*Factu · anulada
+          </span>
+        )}
       </>
     );
   }
@@ -562,6 +598,25 @@ export function InvoicesTable({ invoices }: { invoices: InvoiceListRow[] }) {
                     onClick={(e) => e.stopPropagation()}
                   >
                     <div className="inline-flex items-center justify-end gap-1">
+                      {hasVerifactuQr(inv.verifactuStatus) ? (
+                        <a
+                          href={`/api/invoices/${inv.id}/pdf`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="btn-ghost hidden px-2 py-1 text-xs text-accent sm:inline-flex"
+                          title={VERIFACTU_STATUS_LABEL[inv.verifactuStatus]}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {VERIFACTU_STATUS_SHORT[inv.verifactuStatus]}
+                        </a>
+                      ) : inv.verifactuStatus !== "anulada" ? (
+                        <span
+                          className="hidden px-2 py-1 text-xs text-ink-muted sm:inline-flex"
+                          title="Sin sello Veri*Factu / sin QR en PDF"
+                        >
+                          Sin QR
+                        </span>
+                      ) : null}
                       {inv.status !== "ANULADA" ? (
                         <button
                           type="button"
