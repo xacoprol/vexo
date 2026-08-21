@@ -56,26 +56,13 @@ const NAV: NavItem[] = [
     ),
   },
   {
-    href: "/clients",
-    label: "Clientes",
+    href: "/invoices",
+    label: "Facturas",
     icon: (
       <Icon>
-        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-        <circle cx="9" cy="7" r="4" />
-        <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-      </Icon>
-    ),
-  },
-  {
-    href: "/catalog",
-    label: "Conceptos",
-    icon: (
-      <Icon>
-        <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" />
-        <rect x="9" y="3" width="6" height="4" rx="1" />
-        <path d="M9 12h6" />
-        <path d="M9 16h4" />
+        <path d="M4 2v20l3-2 3 2 3-2 3 2 3-2 3 2V2l-3 2-3-2-3 2-3-2-3 2z" />
+        <path d="M8 10h8" />
+        <path d="M8 14h5" />
       </Icon>
     ),
   },
@@ -92,13 +79,14 @@ const NAV: NavItem[] = [
     ),
   },
   {
-    href: "/invoices",
-    label: "Facturas",
+    href: "/clients",
+    label: "Clientes",
     icon: (
       <Icon>
-        <path d="M4 2v20l3-2 3 2 3-2 3 2 3-2 3 2V2l-3 2-3-2-3 2-3-2-3 2z" />
-        <path d="M8 10h8" />
-        <path d="M8 14h5" />
+        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+        <circle cx="9" cy="7" r="4" />
+        <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
       </Icon>
     ),
   },
@@ -114,6 +102,18 @@ const NAV: NavItem[] = [
     ),
   },
   {
+    href: "/catalog",
+    label: "Conceptos",
+    icon: (
+      <Icon>
+        <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" />
+        <rect x="9" y="3" width="6" height="4" rx="1" />
+        <path d="M9 12h6" />
+        <path d="M9 16h4" />
+      </Icon>
+    ),
+  },
+  {
     href: "/fiscal",
     label: "Fiscal",
     icon: (
@@ -125,25 +125,26 @@ const NAV: NavItem[] = [
     children: [
       { href: "/fiscal", label: "Resumen" },
       { href: "/fiscal/guide", label: "Guía presentación" },
-      { href: "#", label: "Operativa", heading: true },
+      { href: "#", label: "Día a día", heading: true },
       { href: "/fiscal/expenses", label: "Gastos" },
       { href: "/fiscal/income", label: "Marketplace" },
+      { href: "/fiscal/verifactu", label: "Veri*Factu" },
       { href: "/fiscal/books", label: "Libros registro" },
       { href: "/fiscal/assets", label: "Bienes inversión" },
-      { href: "#", label: "Modelos", heading: true },
+      { href: "#", label: "Trimestre", heading: true },
       { href: "/fiscal/303", label: "303 IVA" },
       { href: "/fiscal/130", label: "130 IRPF" },
       { href: "/fiscal/349", label: "349 Intracom" },
+      { href: "#", label: "Anual / censo", heading: true },
       { href: "/fiscal/390", label: "390 Anual IVA" },
       { href: "/fiscal/347", label: "347 Terceros" },
       { href: "/fiscal/036", label: "Censo 036" },
       { href: "/fiscal/annual", label: "Resumen anual" },
-      { href: "#", label: "Cumplimiento", heading: true },
+      { href: "#", label: "Archivo AEAT", heading: true },
       { href: "/fiscal/filings", label: "Presentados" },
       { href: "/fiscal/payments", label: "Pagos / NRC" },
       { href: "/fiscal/archive", label: "Archivo" },
       { href: "/fiscal/aeat", label: "Comunicaciones AEAT" },
-      { href: "/fiscal/verifactu", label: "Veri*Factu" },
     ],
   },
   {
