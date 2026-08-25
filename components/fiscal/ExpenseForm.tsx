@@ -424,7 +424,7 @@ export function ExpenseForm({
             {reverseCharge
               ? importService
                 ? "Lo que pagas al proveedor (USD→€)"
-                : "Lo que pagas a Bambu / proveedor"
+                : "Lo que pagas al proveedor"
               : "Total"}
           </label>
           <input

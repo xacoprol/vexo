@@ -50,7 +50,7 @@ export default async function ClientsPage({
             Directorio de clientes y contactos fiscales
           </p>
         </div>
-        <Link href="/clients/new" className="btn-primary">
+        <Link href="/clients/new" className="btn-primary relative z-10">
           Nuevo cliente
         </Link>
       </div>
@@ -88,12 +88,12 @@ export default async function ClientsPage({
               clients.map((c) => (
                 <tr
                   key={c.id}
-                  className="relative cursor-pointer border-b border-line/60 transition hover:bg-accent-soft/40"
+                  className="border-b border-line/60 transition hover:bg-accent-soft/40"
                 >
                   <td className="px-4 py-3">
                     <Link
                       href={`/clients/${c.id}`}
-                      className="font-medium text-ink after:absolute after:inset-0 hover:text-accent"
+                      className="font-medium text-ink hover:text-accent"
                     >
                       {c.name}
                     </Link>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import { createClientQuick } from "@/app/(app)/clients/actions";
 import { COUNTRY_OPTIONS, countryNameFromCode } from "@/lib/nif";
 
@@ -26,11 +27,16 @@ export function CreateClientModal({
   onCreated,
 }: Props) {
   const formId = useId();
+  const [mounted, setMounted] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [countryCode, setCountryCode] = useState("ES");
   const [addressCountry, setAddressCountry] = useState("España");
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -40,7 +46,7 @@ export function CreateClientModal({
     setAddressCountry("España");
   }, [open]);
 
-  if (!open) return null;
+  if (!open || !mounted) return null;
 
   function err(field: string) {
     return fieldErrors[field] ? (
@@ -68,7 +74,9 @@ export function CreateClientModal({
     });
   }
 
-  return (
+  // Portal fuera del <form> del presupuesto/factura: un <form> anidado
+  // es HTML inválido y en móvil el submit acaba en el documento padre.
+  return createPortal(
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center bg-ink/40 p-4"
       role="dialog"
@@ -252,6 +260,7 @@ export function CreateClientModal({
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

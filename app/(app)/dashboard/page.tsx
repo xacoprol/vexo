@@ -270,12 +270,12 @@ export default async function DashboardPage() {
                 recentPending.map((inv) => (
                   <tr
                     key={inv.id}
-                    className="relative cursor-pointer border-b border-line/50 transition hover:bg-accent-soft/40"
+                    className="border-b border-line/50 transition hover:bg-accent-soft/40"
                   >
                     <td className="px-4 py-2 font-mono">
                       <Link
                         href={`/invoices/${inv.id}`}
-                        className="after:absolute after:inset-0 hover:text-accent"
+                        className="hover:text-accent"
                       >
                         {inv.fullNumber}
                       </Link>
