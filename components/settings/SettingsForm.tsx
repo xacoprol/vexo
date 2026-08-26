@@ -12,6 +12,7 @@ import { THEME_FIELDS, DEFAULT_THEME } from "@/lib/theme";
 import { LogoUploadField } from "@/components/settings/LogoUploadField";
 import { FiscalReminderTestButton } from "@/components/settings/FiscalReminderTestButton";
 import { ButtonPending } from "@/components/ui/ButtonPending";
+import { HOUSING_ELIGIBILITY_CONDITIONS } from "@/lib/modelo-130/pre-checks";
 
 type Props = {
   settings: CompanySettings;
@@ -362,6 +363,293 @@ export function SettingsForm({ settings, invoiceSeries, quoteSeries }: Props) {
               <p className="mt-1 text-xs text-ink-muted">
                 Define qué borrador muestra el módulo Fiscal. La mayoría de
                 autónomos de servicios usan 130.
+              </p>
+            </div>
+            <div className="sm:col-span-2">
+              <label className="label" htmlFor="irpfDirectEstimationMode">
+                Modalidad estimación directa (Modelo 130)
+              </label>
+              <select
+                id="irpfDirectEstimationMode"
+                name="irpfDirectEstimationMode"
+                className="input max-w-md"
+                defaultValue={settings.irpfDirectEstimationMode ?? "NORMAL"}
+              >
+                <option value="NORMAL">Normal</option>
+                <option value="SIMPLIFIED">
+                  Simplificada (gastos difícil justificación 5 % / máx. 2.000 €)
+                </option>
+              </select>
+              <p className="mt-1 text-xs text-ink-muted">
+                Independiente del tipo de factura F1/F2. VEXO no deduce la
+                modalidad por presentar el 130.
+              </p>
+            </div>
+            <div>
+              <label className="label" htmlFor="previousYearNetIncome130Mode">
+                Rendimiento neto ejercicio anterior (casilla 13)
+              </label>
+              <select
+                id="previousYearNetIncome130Mode"
+                name="previousYearNetIncome130Mode"
+                className="input max-w-md"
+                defaultValue={settings.previousYearNetIncome130Mode ?? "UNKNOWN"}
+              >
+                <option value="UNKNOWN">Desconocido — no calcular</option>
+                <option value="NO_ACTIVITY">
+                  Sin actividad el año anterior (RN = 0 → 100 €)
+                </option>
+                <option value="KNOWN">Conocido — indicar importe</option>
+              </select>
+            </div>
+            <div>
+              <label className="label" htmlFor="previousYearNetIncomeFor130Reduction">
+                Importe RN anterior (€, solo si «Conocido»)
+              </label>
+              <input
+                id="previousYearNetIncomeFor130Reduction"
+                name="previousYearNetIncomeFor130Reduction"
+                type="text"
+                inputMode="decimal"
+                className="input max-w-xs font-mono"
+                defaultValue={
+                  settings.previousYearNetIncomeFor130Reduction != null
+                    ? String(settings.previousYearNetIncomeFor130Reduction)
+                    : ""
+                }
+                placeholder="p. ej. 8500"
+              />
+            </div>
+            <div>
+              <label className="label" htmlFor="irpf130HousingDeduction">
+                Deducción vivienda habitual (casilla 16)
+              </label>
+              <select
+                id="irpf130HousingDeduction"
+                name="irpf130HousingDeduction"
+                className="input max-w-md"
+                defaultValue={
+                  settings.irpf130HousingDeduction === "YES" ||
+                  settings.irpf130HousingDeduction === "ELIGIBLE_CONFIRMED"
+                    ? "ELIGIBLE_CONFIRMED"
+                    : settings.irpf130HousingDeduction ?? "NO"
+                }
+              >
+                <option value="NO">No tengo derecho / no aplica</option>
+                <option value="UNKNOWN">No lo sé — no deducir (cas. 16 = 0)</option>
+                <option value="ELIGIBLE_CONFIRMED">
+                  Confirmo elegibilidad — calcular cas. 16
+                </option>
+              </select>
+              <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+                Al confirmar elegibilidad, declaras cumplir todas estas condiciones (VEXO no las
+                verifica salvo el umbral de ingresos cuando dispone del ingreso del 1.er trimestre):
+              </p>
+              <ul className="mt-1 max-w-2xl list-inside list-disc text-sm text-muted-foreground">
+                {HOUSING_ELIGIBILITY_CONDITIONS.map((c) => (
+                  <li key={c}>{c}</li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <label className="label" htmlFor="agriculturalActivities130">
+                Actividades agrícolas/ganaderas (cas. 08–11)
+              </label>
+              <select
+                id="agriculturalActivities130"
+                name="agriculturalActivities130"
+                className="input max-w-md"
+                defaultValue={settings.agriculturalActivities130 ?? "NONE"}
+              >
+                <option value="NONE">No — solo apartado I</option>
+                <option value="UNKNOWN">No estoy seguro</option>
+                <option value="HAS">Sí (VEXO no las calcula)</option>
+              </select>
+            </div>
+            <div>
+              <label className="label" htmlFor="irregularIncome130Status">
+                Rendimientos irregulares (art. 32.1)
+              </label>
+              <select
+                id="irregularIncome130Status"
+                name="irregularIncome130Status"
+                className="input max-w-md"
+                defaultValue={settings.irregularIncome130Status ?? "NONE"}
+              >
+                <option value="NONE">No / no aplica</option>
+                <option value="REVIEW_REQUIRED">Sí — requiere revisión manual</option>
+              </select>
+            </div>
+            <div>
+              <label className="label" htmlFor="activityKind130">
+                Tipo de actividad (obligación presentar 130)
+              </label>
+              <select
+                id="activityKind130"
+                name="activityKind130"
+                className="input max-w-md"
+                defaultValue={settings.activityKind130 ?? "UNKNOWN"}
+              >
+                <option value="UNKNOWN">Desconocido</option>
+                <option value="PROFESSIONAL">Profesional</option>
+                <option value="BUSINESS">Empresarial</option>
+              </select>
+            </div>
+            <div>
+              <label className="label" htmlFor="priorYearWithholdingPct130">
+                % ingresos con retención ejercicio anterior
+              </label>
+              <input
+                id="priorYearWithholdingPct130"
+                name="priorYearWithholdingPct130"
+                type="text"
+                inputMode="decimal"
+                className="input max-w-xs font-mono"
+                defaultValue={
+                  settings.priorYearWithholdingPct130 != null
+                    ? String(settings.priorYearWithholdingPct130)
+                    : ""
+                }
+                placeholder="p. ej. 85"
+              />
+            </div>
+          </div>
+        </section>
+
+        <section className="card-panel space-y-4 p-6">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-muted">
+            IVA y Modelo 390
+          </h2>
+          <p className="max-w-2xl text-sm text-ink-muted">
+            VEXO determina si debes presentar el Modelo 390 a partir de estos
+            hechos fiscales. No sustituye el criterio de tu asesor.
+          </p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <span className="label">¿Llevas los libros de IVA mediante SII?</span>
+              <div className="mt-2 flex flex-wrap gap-4">
+                {(
+                  [
+                    ["NO", "No"],
+                    ["YES", "Sí"],
+                    ["UNKNOWN", "No lo sé"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <label key={value} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="radio"
+                      name="vatUsesSii"
+                      value={value}
+                      defaultChecked={
+                        (settings.vatUsesSii ?? "UNKNOWN") === value
+                      }
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="sm:col-span-2">
+              <label className="label" htmlFor="vatPeriodicity">
+                Periodicidad habitual del IVA
+              </label>
+              <select
+                id="vatPeriodicity"
+                name="vatPeriodicity"
+                className="input max-w-md"
+                defaultValue={settings.vatPeriodicity ?? "UNKNOWN"}
+              >
+                <option value="QUARTERLY">Trimestral</option>
+                <option value="MONTHLY">Mensual</option>
+                <option value="UNKNOWN">No lo sé</option>
+              </select>
+            </div>
+            <div className="sm:col-span-2">
+              <span className="label">
+                ¿Tributas exclusivamente en territorio común?
+              </span>
+              <div className="mt-2 flex flex-wrap gap-4">
+                {(
+                  [
+                    ["YES", "Sí"],
+                    ["NO", "No"],
+                    ["UNKNOWN", "No lo sé"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <label key={value} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="radio"
+                      name="vatTerritory"
+                      value={value}
+                      defaultChecked={
+                        (settings.vatTerritory ?? "UNKNOWN") === value
+                      }
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+              <p className="mt-1 text-xs text-ink-muted">
+                Relevante para la exoneración trimestral del 390 (Canarias, Ceuta,
+                Melilla u otros territorios excluyen este supuesto).
+              </p>
+            </div>
+            <div className="sm:col-span-2">
+              <label className="label" htmlFor="vatActivity390Scope">
+                Actividad IVA principal (Modelo 390)
+              </label>
+              <select
+                id="vatActivity390Scope"
+                name="vatActivity390Scope"
+                className="input max-w-md"
+                defaultValue={settings.vatActivity390Scope ?? "UNKNOWN"}
+              >
+                <option value="GENERAL">
+                  Actividad general (régimen normal de IVA)
+                </option>
+                <option value="SIMPLIFIED">Régimen simplificado de IVA</option>
+                <option value="URBAN_RENTAL">
+                  Arrendamiento de bienes inmuebles urbanos
+                </option>
+                <option value="SIMPLIFIED_AND_URBAN_RENTAL">
+                  Régimen simplificado y arrendamiento urbano
+                </option>
+                <option value="UNKNOWN">No lo sé</option>
+              </select>
+              <p className="mt-1 text-xs text-ink-muted">
+                Solo afecta al supuesto de exoneración trimestral. VEXO no deduce
+                la actividad por nombre comercial ni CNAE.
+              </p>
+            </div>
+            <div className="sm:col-span-2">
+              <span className="label">
+                ¿Debes presentar la autoliquidación del último período del ejercicio?
+              </span>
+              <div className="mt-2 flex flex-wrap gap-4">
+                {(
+                  [
+                    ["YES", "Sí"],
+                    ["NO", "No — baja censal antes de ese período"],
+                    ["UNKNOWN", "No lo sé"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <label key={value} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="radio"
+                      name="lastVatPeriodFilingRequired"
+                      value={value}
+                      defaultChecked={
+                        (settings.lastVatPeriodFilingRequired ?? "UNKNOWN") ===
+                        value
+                      }
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+              <p className="mt-1 text-xs text-ink-muted">
+                Si te diste de baja antes del inicio del último trimestre (o mes),
+                la exoneración del 390 no procede aunque cumplas otros requisitos.
               </p>
             </div>
           </div>

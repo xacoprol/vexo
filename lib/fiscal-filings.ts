@@ -17,6 +17,7 @@ export type PresentedFilingView = {
   year: number;
   quarter: number | null;
   modelType: string;
+  rawExtract: unknown;
 };
 
 function round2(n: number) {
@@ -61,6 +62,7 @@ export async function getPresentedFiling(
     year: row.year,
     quarter: row.quarter,
     modelType: row.modelType,
+    rawExtract: row.rawExtract,
   };
 }
 

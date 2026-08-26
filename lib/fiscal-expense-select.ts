@@ -1,0 +1,22 @@
+/** Select Prisma compartido: gastos → motores 303/390. */
+export const EXPENSE_FISCAL_SELECT = {
+  id: true,
+  issueDate: true,
+  subtotal: true,
+  vatAmount: true,
+  vatRate: true,
+  total: true,
+  vatOperationType: true,
+  deductible: true,
+  vatDeductiblePct: true,
+  irpfDeductiblePct: true,
+  isInvestment: true,
+  description: true,
+  supplierName: true,
+  importDuaType: true,
+  importDuaNumber: true,
+  importDuaDate: true,
+  importDuaBase: true,
+  importDuaVat: true,
+  importDuaDocumentId: true,
+} as const;

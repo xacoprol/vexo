@@ -10,6 +10,7 @@ import {
   isExpenseReverseCharge,
   parseExpenseVatOperationType,
 } from "@/lib/fiscal";
+import { stashSourceDocument } from "@/lib/fiscal-blob";
 import { buildLinearAmortization } from "@/lib/investment-amortization";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/session";
@@ -123,6 +124,28 @@ function parseExpenseForm(formData: FormData) {
         : 4,
     notes: String(formData.get("notes") ?? "").trim() || null,
     documentId: String(formData.get("documentId") ?? "").trim() || null,
+    importDuaType: String(formData.get("importDuaType") ?? "").trim() || null,
+    importDuaNumber: String(formData.get("importDuaNumber") ?? "").trim() || null,
+    importDuaDate: (() => {
+      const raw = String(formData.get("importDuaDate") ?? "").trim();
+      if (!raw) return null;
+      const d = new Date(raw);
+      return Number.isNaN(d.getTime()) ? null : d;
+    })(),
+    importDuaBase: (() => {
+      const raw = String(formData.get("importDuaBase") ?? "").trim();
+      if (!raw) return null;
+      const n = parseFloat(raw.replace(",", "."));
+      return Number.isFinite(n) ? n : null;
+    })(),
+    importDuaVat: (() => {
+      const raw = String(formData.get("importDuaVat") ?? "").trim();
+      if (!raw) return null;
+      const n = parseFloat(raw.replace(",", "."));
+      return Number.isFinite(n) ? n : null;
+    })(),
+    importDuaDocumentId:
+      String(formData.get("importDuaDocumentId") ?? "").trim() || null,
   };
 }
 
@@ -134,10 +157,36 @@ function validate(data: ReturnType<typeof parseExpenseForm>) {
   if (data.subtotal < 0) return "La base no puede ser negativa";
   if (data.vatAmount < 0) return "El IVA no puede ser negativo";
   const nif = String(data.supplierNif ?? "").trim();
-  if (data.vatOperationType === "INTRACOMUNITARIA" && !nif) {
+  if (
+    (data.vatOperationType === "INTRACOMUNITARIA" ||
+      data.vatOperationType === "SERVICIO_INTRACOMUNITARIO") &&
+    !nif
+  ) {
     return "En compras intracomunitarias el NIF-IVA del proveedor es obligatorio (modelo 349)";
   }
   return null;
+}
+
+async function resolveImportDuaDocumentId(
+  formData: FormData,
+  issueDate: Date
+): Promise<string | null> {
+  const existing = String(formData.get("importDuaDocumentId") ?? "").trim();
+  if (existing) return existing;
+
+  const file = formData.get("importDuaDocumentFile");
+  if (!(file instanceof File) || file.size <= 0) return null;
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+  return stashSourceDocument({
+    buffer,
+    fileName: file.name,
+    mimeType: file.type || "application/pdf",
+    category: "EXPENSE",
+    title: `DUA importación · ${file.name}`,
+    year: issueDate.getFullYear(),
+    notes: "Documento aduanero (DUA)",
+  });
 }
 
 async function findDuplicateExpense(
@@ -178,6 +227,34 @@ function duplicateMessage(invoiceNumber: string | null) {
 }
 
 type ExpenseWriteData = ReturnType<typeof parseExpenseForm>;
+
+function importDuaWriteFields(
+  data: ExpenseWriteData,
+  importDuaDocumentId: string | null
+) {
+  if (data.vatOperationType !== "IMPORTACION_BIENES") {
+    return {
+      importDuaType: null,
+      importDuaNumber: null,
+      importDuaDate: null,
+      importDuaBase: null,
+      importDuaVat: null,
+      importDuaDocumentId: null,
+    };
+  }
+  return {
+    importDuaType: data.importDuaType,
+    importDuaNumber: data.importDuaNumber,
+    importDuaDate: data.importDuaDate,
+    importDuaBase:
+      data.importDuaBase != null
+        ? new Prisma.Decimal(data.importDuaBase)
+        : null,
+    importDuaVat:
+      data.importDuaVat != null ? new Prisma.Decimal(data.importDuaVat) : null,
+    importDuaDocumentId,
+  };
+}
 
 async function rebuildAssetAmortizations(
   assetId: string,
@@ -223,12 +300,13 @@ async function syncInvestmentAsset(
   }
 
   const reverseCharge = isExpenseReverseCharge(data.vatOperationType);
+  const isImportGoods = data.vatOperationType === "IMPORTACION_BIENES";
   const description =
     data.description?.trim() ||
     `Bien · ${data.supplierName}${data.invoiceNumber ? ` · ${data.invoiceNumber}` : ""}`;
   const startYear = data.issueDate.getFullYear();
-  // 30/31 solo interiores; AIB/extracom queda en el gasto (10/11 o 16/17)
-  const assetVat = reverseCharge ? 0 : data.vatAmount;
+  // 30/31 solo interiores; AIB/extracom en gasto; importación → 32–35 vía DUA
+  const assetVat = reverseCharge || isImportGoods ? 0 : data.vatAmount;
   const payload = {
     description,
     supplierName: data.supplierName,
@@ -281,11 +359,15 @@ function revalidateExpensePaths(id?: string) {
   revalidatePath("/fiscal/expenses");
   revalidatePath("/fiscal/assets");
   revalidatePath("/fiscal/303");
+  revalidatePath("/fiscal/390");
   revalidatePath("/fiscal/130");
   if (id) revalidatePath(`/fiscal/expenses/${id}/edit`);
 }
 
-async function insertExpense(data: ExpenseWriteData): Promise<
+async function insertExpense(
+  data: ExpenseWriteData,
+  importDuaDocumentId: string | null = null
+): Promise<
   | { ok: true; id: string }
   | { ok: false; error: string; duplicateId?: string }
 > {
@@ -300,6 +382,8 @@ async function insertExpense(data: ExpenseWriteData): Promise<
       duplicateId: dup.id,
     };
   }
+
+  const duaDocId = importDuaDocumentId ?? data.importDuaDocumentId;
 
   const created = await prisma.expense.create({
     data: {
@@ -320,6 +404,7 @@ async function insertExpense(data: ExpenseWriteData): Promise<
       isInvestment: data.isInvestment,
       notes: data.notes,
       documentId: data.documentId || null,
+      ...importDuaWriteFields(data, duaDocId),
     },
   });
   await syncInvestmentAsset(created.id, data, null);
@@ -431,7 +516,14 @@ export async function createExpense(
   try {
     const data = parseExpenseForm(formData);
     data.isInvestment = formData.has("isInvestment");
-    const result = await insertExpense(data);
+    const importDuaDocumentId = await resolveImportDuaDocumentId(
+      formData,
+      data.issueDate
+    );
+    const result = await insertExpense(
+      data,
+      importDuaDocumentId ?? data.importDuaDocumentId
+    );
     if (!result.ok) {
       return { error: result.error, duplicateId: result.duplicateId };
     }
@@ -468,6 +560,11 @@ export async function updateExpense(
     });
     if (!existing) return { error: "Gasto no encontrado" };
 
+    const importDuaDocumentId = await resolveImportDuaDocumentId(
+      formData,
+      data.issueDate
+    );
+
     await prisma.expense.update({
       where: { id },
       data: {
@@ -488,6 +585,10 @@ export async function updateExpense(
         irpfDeductiblePct: data.irpfDeductiblePct,
         isInvestment: data.isInvestment,
         ...(data.documentId ? { documentId: data.documentId } : {}),
+        ...importDuaWriteFields(
+          data,
+          importDuaDocumentId ?? data.importDuaDocumentId
+        ),
       },
     });
     await syncInvestmentAsset(id, data, existing.investmentAssetId);

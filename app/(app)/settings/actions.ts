@@ -76,6 +76,103 @@ export async function updateSettings(
     })(),
     fiscalRegime:
       String(formData.get("fiscalRegime") ?? "130") === "131" ? "131" : "130",
+    irpfDirectEstimationMode:
+      String(formData.get("irpfDirectEstimationMode") ?? "NORMAL").toUpperCase() ===
+      "SIMPLIFIED"
+        ? "SIMPLIFIED"
+        : "NORMAL",
+    previousYearNetIncome130Mode: (() => {
+      const v = String(
+        formData.get("previousYearNetIncome130Mode") ?? "UNKNOWN"
+      ).toUpperCase();
+      if (v === "NO_ACTIVITY") return "NO_ACTIVITY";
+      if (v === "KNOWN") return "KNOWN";
+      return "UNKNOWN";
+    })(),
+    previousYearNetIncomeFor130Reduction: (() => {
+      const raw = String(
+        formData.get("previousYearNetIncomeFor130Reduction") ?? ""
+      ).trim();
+      if (!raw) return null;
+      const n = parseFloat(raw.replace(",", "."));
+      return Number.isFinite(n) ? n : null;
+    })(),
+    irpf130HousingDeduction: (() => {
+      const v = String(formData.get("irpf130HousingDeduction") ?? "NO").toUpperCase();
+      if (
+        v === "ELIGIBLE_CONFIRMED" ||
+        v === "ELIGIBLE-CONFIRMED" ||
+        v === "YES" ||
+        v === "SI" ||
+        v === "SÍ"
+      ) {
+        return "ELIGIBLE_CONFIRMED";
+      }
+      if (v === "UNKNOWN") return "UNKNOWN";
+      return "NO";
+    })(),
+    agriculturalActivities130: (() => {
+      const v = String(formData.get("agriculturalActivities130") ?? "NONE").toUpperCase();
+      if (v === "HAS") return "HAS";
+      if (v === "UNKNOWN") return "UNKNOWN";
+      return "NONE";
+    })(),
+    irregularIncome130Status:
+      String(formData.get("irregularIncome130Status") ?? "NONE").toUpperCase() ===
+      "REVIEW_REQUIRED"
+        ? "REVIEW_REQUIRED"
+        : "NONE",
+    activityKind130: (() => {
+      const v = String(formData.get("activityKind130") ?? "UNKNOWN").toUpperCase();
+      if (v === "PROFESSIONAL") return "PROFESSIONAL";
+      if (v === "BUSINESS") return "BUSINESS";
+      return "UNKNOWN";
+    })(),
+    priorYearWithholdingPct130: (() => {
+      const raw = String(formData.get("priorYearWithholdingPct130") ?? "").trim();
+      if (!raw) return null;
+      const n = parseFloat(raw.replace(",", "."));
+      return Number.isFinite(n) ? n : null;
+    })(),
+    vatUsesSii: (() => {
+      const v = String(formData.get("vatUsesSii") ?? "UNKNOWN").toUpperCase();
+      if (v === "YES" || v === "SI" || v === "SÍ") return "YES";
+      if (v === "NO") return "NO";
+      return "UNKNOWN";
+    })(),
+    vatPeriodicity: (() => {
+      const v = String(formData.get("vatPeriodicity") ?? "UNKNOWN").toUpperCase();
+      if (v === "QUARTERLY" || v === "TRIMESTRAL") return "QUARTERLY";
+      if (v === "MONTHLY" || v === "MENSUAL") return "MONTHLY";
+      return "UNKNOWN";
+    })(),
+    vatTerritory: (() => {
+      const v = String(formData.get("vatTerritory") ?? "UNKNOWN").toUpperCase();
+      if (v === "YES" || v === "COMMON_ONLY" || v === "COMUN") return "COMMON_ONLY";
+      if (v === "NO" || v === "OTHER" || v === "OTRO") return "OTHER";
+      return "UNKNOWN";
+    })(),
+    vatActivity390Scope: (() => {
+      const v = String(formData.get("vatActivity390Scope") ?? "UNKNOWN").toUpperCase();
+      if (v === "GENERAL") return "GENERAL";
+      if (v === "SIMPLIFIED" || v === "SIMPLIFICADO") return "SIMPLIFIED";
+      if (v === "URBAN_RENTAL" || v === "ALQUILER") return "URBAN_RENTAL";
+      if (
+        v === "SIMPLIFIED_AND_URBAN_RENTAL" ||
+        v === "SIMPLIFICADO_Y_ALQUILER"
+      ) {
+        return "SIMPLIFIED_AND_URBAN_RENTAL";
+      }
+      return "UNKNOWN";
+    })(),
+    lastVatPeriodFilingRequired: (() => {
+      const v = String(
+        formData.get("lastVatPeriodFilingRequired") ?? "UNKNOWN"
+      ).toUpperCase();
+      if (v === "YES" || v === "SI" || v === "SÍ") return "YES";
+      if (v === "NO") return "NO";
+      return "UNKNOWN";
+    })(),
     emailSubject: String(formData.get("emailSubject") ?? "").trim(),
     emailBody: String(formData.get("emailBody") ?? "").trim(),
     bankIban: String(formData.get("bankIban") ?? "").trim() || null,

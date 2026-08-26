@@ -37,12 +37,16 @@ export type VerifactuAltaFields = {
   idEmisorFactura: string;
   numSerieFactura: string;
   fechaExpedicionFactura: string; // DD-MM-AAAA
-  tipoFactura?: string; // F1 por defecto
+  tipoFactura?: string; // F1 | F2 | R1–R5
   cuotaTotal: string;
   importeTotal: string;
   /** Huella del registro anterior (vacío si es el primero). */
   huellaAnterior: string;
   fechaHoraHusoGenRegistro: string; // ISO con offset
+  /** Rectificativa: I = diferencias, S = sustitución */
+  tipoRectificativa?: string;
+  numSerieFacturaRectificada?: string;
+  fechaExpedicionFacturaRectificada?: string;
 };
 
 export type VerifactuAnulacionFields = {
@@ -158,6 +162,21 @@ export function buildHuellaAltaCanonical(fields: VerifactuAltaFields): string {
     ["Huella", trimValue(fields.huellaAnterior)],
     ["FechaHoraHusoGenRegistro", trimValue(fields.fechaHoraHusoGenRegistro)],
   ];
+  if (fields.tipoRectificativa) {
+    pairs.push(["TipoRectificativa", trimValue(fields.tipoRectificativa)]);
+  }
+  if (fields.numSerieFacturaRectificada) {
+    pairs.push([
+      "NumSerieFacturaRectificada",
+      trimValue(fields.numSerieFacturaRectificada),
+    ]);
+  }
+  if (fields.fechaExpedicionFacturaRectificada) {
+    pairs.push([
+      "FechaExpedicionFacturaRectificada",
+      trimValue(fields.fechaExpedicionFacturaRectificada),
+    ]);
+  }
   return pairs.map(([k, v]) => `${k}=${v}`).join("&");
 }
 
@@ -230,6 +249,11 @@ export type SealInput = {
   tipoFactura?: string;
   /** QR verificable (tras remisión) */
   verificable?: boolean;
+  rectificativa?: {
+    method: "I" | "S";
+    originalFullNumber: string;
+    originalIssueDate: Date;
+  };
 };
 
 export type SealResult = {
@@ -257,6 +281,15 @@ export function sealVerifactuRecord(input: SealInput): SealResult {
     importeTotal: formatVerifactuAmount(input.total),
     huellaAnterior: previousHash,
     fechaHoraHusoGenRegistro: recordAtIso,
+    ...(input.rectificativa
+      ? {
+          tipoRectificativa: input.rectificativa.method,
+          numSerieFacturaRectificada: input.rectificativa.originalFullNumber.trim(),
+          fechaExpedicionFacturaRectificada: formatFechaExpedicion(
+            input.rectificativa.originalIssueDate
+          ),
+        }
+      : {}),
   };
   const { canonical, huella } = computeHuellaAlta(fields);
   const qrUrl = buildVerifactuQrUrl({

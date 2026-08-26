@@ -48,6 +48,12 @@ export function FiscalPeriodNav({
           </Link>
         ))}
         <Link
+          href={`/fiscal/health?year=${year}&q=${quarter}`}
+          className="rounded-md px-2.5 py-1 text-xs font-medium bg-line/40 text-ink-muted hover:bg-line"
+        >
+          Salud
+        </Link>
+        <Link
           href={`/fiscal/annual?year=${year}`}
           className="rounded-md px-2.5 py-1 text-xs font-medium bg-line/40 text-ink-muted hover:bg-line"
         >

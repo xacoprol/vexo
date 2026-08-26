@@ -7,6 +7,7 @@ import { VAT_RATES } from "@/lib/calculations";
 import {
   EXPENSE_CATEGORIES,
   EXPENSE_VAT_OPERATION_TYPES,
+  isExpenseImportGoods,
   isExpenseImportService,
   isExpenseIntracom,
   isExpenseReverseCharge,
@@ -93,8 +94,26 @@ export function ExpenseForm({
   const [documentId, setDocumentId] = useState<string | null>(
     expense?.documentId ?? null
   );
+  const [importDuaNumber, setImportDuaNumber] = useState(
+    expense?.importDuaNumber ?? ""
+  );
+  const [importDuaDate, setImportDuaDate] = useState(
+    expense?.importDuaDate
+      ? toDateInputValue(expense.importDuaDate)
+      : ""
+  );
+  const [importDuaBase, setImportDuaBase] = useState(
+    expense?.importDuaBase != null ? Number(expense.importDuaBase) : 0
+  );
+  const [importDuaVat, setImportDuaVat] = useState(
+    expense?.importDuaVat != null ? Number(expense.importDuaVat) : 0
+  );
+  const [importDuaDocumentId, setImportDuaDocumentId] = useState<string | null>(
+    expense?.importDuaDocumentId ?? null
+  );
 
   const intracom = isExpenseIntracom(vatOperationType);
+  const importGoods = isExpenseImportGoods(vatOperationType);
   const importService = isExpenseImportService(vatOperationType);
   const reverseCharge = isExpenseReverseCharge(vatOperationType);
   const rateOptions = reverseCharge
@@ -158,7 +177,11 @@ export function ExpenseForm({
   }, [expense]);
 
   return (
-    <form action={formAction} className="mx-auto max-w-2xl space-y-5">
+    <form
+      action={formAction}
+      encType="multipart/form-data"
+      className="mx-auto max-w-2xl space-y-5"
+    >
       {documentId ? (
         <input type="hidden" name="documentId" value={documentId} />
       ) : null}
@@ -362,8 +385,150 @@ export function ExpenseForm({
               el gasto es deducible: <strong>no pagas ese IVA a Cursor</strong>,
               solo lo declaras (efecto neto ≈ 0). Base en € si venía en USD.
             </p>
+          ) : importGoods ? (
+            <p className="mt-1 text-xs text-ink-muted">
+              La factura del proveedor extranjero <strong>no</strong> es el DUA.
+              El IVA deducible de importación (303 cas. 32–35) debe indicarse en
+              el bloque de datos aduaneros.
+            </p>
           ) : null}
         </div>
+
+        {importGoods ? (
+          <div className="space-y-4 rounded-lg border border-line bg-line/20 p-4">
+            <h3 className="text-sm font-semibold text-ink">Datos de importación</h3>
+            <p className="text-xs text-ink-muted">
+              VEXO no calcula IVA de importación desde la factura del proveedor.
+            </p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="label" htmlFor="importDuaType">
+                  Documento aduanero
+                </label>
+                <select
+                  id="importDuaType"
+                  name="importDuaType"
+                  className="input"
+                  defaultValue={expense?.importDuaType ?? "DUA"}
+                >
+                  <option value="DUA">DUA</option>
+                  <option value="OTHER">Otro documento aduanero</option>
+                </select>
+              </div>
+              <div>
+                <label className="label" htmlFor="importDuaNumber">
+                  Número
+                </label>
+                <input
+                  id="importDuaNumber"
+                  name="importDuaNumber"
+                  className="input font-mono"
+                  value={importDuaNumber}
+                  onChange={(e) => setImportDuaNumber(e.target.value)}
+                  placeholder="Referencia DUA"
+                />
+              </div>
+              <div>
+                <label className="label" htmlFor="importDuaDate">
+                  Fecha documento
+                </label>
+                <DateInput
+                  id="importDuaDate"
+                  name="importDuaDate"
+                  value={importDuaDate}
+                  onChange={setImportDuaDate}
+                />
+              </div>
+              <div>
+                <label className="label" htmlFor="importDuaBase">
+                  Base IVA importación
+                </label>
+                <input
+                  id="importDuaBase"
+                  name="importDuaBase"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  className="input font-mono"
+                  value={importDuaBase}
+                  onChange={(e) =>
+                    setImportDuaBase(parseFloat(e.target.value) || 0)
+                  }
+                />
+              </div>
+              <div>
+                <label className="label" htmlFor="importDuaVat">
+                  IVA importación
+                </label>
+                <input
+                  id="importDuaVat"
+                  name="importDuaVat"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  className="input font-mono"
+                  value={importDuaVat}
+                  onChange={(e) =>
+                    setImportDuaVat(parseFloat(e.target.value) || 0)
+                  }
+                />
+              </div>
+            </div>
+            <div>
+              <span className="label">Clasificación en el 303</span>
+              <div className="mt-2 flex flex-wrap gap-4 text-sm">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="importKindUi"
+                    checked={!isInvestment}
+                    onChange={() => setIsInvestment(false)}
+                  />
+                  Gasto corriente (32/33)
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="importKindUi"
+                    checked={isInvestment}
+                    onChange={() => setIsInvestment(true)}
+                  />
+                  Bien de inversión (34/35)
+                </label>
+              </div>
+            </div>
+            <div>
+              <label className="label" htmlFor="importDuaDocumentFile">
+                Adjuntar documento aduanero (PDF/imagen)
+              </label>
+              <input
+                id="importDuaDocumentFile"
+                name="importDuaDocumentFile"
+                type="file"
+                accept="application/pdf,image/*"
+                className="input"
+              />
+              <input
+                type="hidden"
+                name="importDuaDocumentId"
+                value={importDuaDocumentId ?? ""}
+              />
+              {importDuaDocumentId ? (
+                <p className="mt-1 text-xs text-ink-muted">
+                  Documento asociado:{" "}
+                  <a
+                    href={fiscalDocumentHref(importDuaDocumentId)}
+                    className="text-accent underline"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    ver DUA
+                  </a>
+                </p>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
 
         <div className="grid gap-4 sm:grid-cols-3">
           <div>
@@ -505,15 +670,14 @@ export function ExpenseForm({
           <span>
             <span className="font-medium text-ink">Bien de inversión</span>
             <span className="block text-ink-muted">
-              Equipo / máquina con vida útil &gt; 1 año. El 130 no descuenta
-              la compra entera: solo la amortización anual. Interior →
-              casillas 30/31 del 303. Intracom → AIB en el gasto. Se crea
-              en Fiscal → Bienes.
+              {importGoods
+                ? "Para importaciones usa la clasificación del bloque DUA (32/33 vs 34/35)."
+                : "Equipo / máquina con vida útil > 1 año. El 130 no descuenta la compra entera: solo la amortización anual. Interior → casillas 30/31 del 303. Intracom → AIB en el gasto. Se crea en Fiscal → Bienes."}
             </span>
           </span>
         </label>
 
-        {isInvestment ? (
+        {isInvestment && !importGoods ? (
           <div>
             <label className="label" htmlFor="usefulLifeYears">
               Años de vida útil

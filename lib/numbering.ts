@@ -30,7 +30,8 @@ function buildFullNumber(
  */
 export async function allocateInvoiceNumber(
   tx: Db,
-  seriesId?: string
+  seriesId?: string,
+  opts?: { seriesKind?: "NORMAL" | "RECTIFYING" }
 ): Promise<{
   seriesId: string;
   seriesPrefix: string;
@@ -39,7 +40,14 @@ export async function allocateInvoiceNumber(
 }> {
   const series = seriesId
     ? await tx.invoiceSeries.findUniqueOrThrow({ where: { id: seriesId } })
-    : await tx.invoiceSeries.findFirstOrThrow({ where: { isDefault: true } });
+    : opts?.seriesKind === "RECTIFYING"
+      ? await tx.invoiceSeries.findFirstOrThrow({
+          where: { seriesKind: "RECTIFYING" },
+          orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
+        })
+      : await tx.invoiceSeries.findFirstOrThrow({
+          where: { seriesKind: { not: "RECTIFYING" }, isDefault: true },
+        });
 
   const currentYear = new Date().getFullYear();
   let year = series.year;
@@ -97,6 +105,37 @@ export async function syncInvoiceSeriesNextNumber(
     data: { nextNumber },
   });
   return nextNumber;
+}
+
+/** Serie rectificativa por defecto; la crea si no existe. */
+export async function ensureRectifyingInvoiceSeries(
+  tx: Db
+): Promise<{ id: string; prefix: string }> {
+  const existing = await tx.invoiceSeries.findFirst({
+    where: { seriesKind: "RECTIFYING" },
+    orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
+  });
+  if (existing) return { id: existing.id, prefix: existing.prefix };
+
+  const year = new Date().getFullYear();
+  const prefix = `R${year}/`;
+  const created = await tx.invoiceSeries.create({
+    data: {
+      prefix,
+      name: `Rectificativas ${year}`,
+      nextNumber: 1,
+      year: null,
+      padLength: 4,
+      isDefault: true,
+      seriesKind: "RECTIFYING",
+    },
+  });
+  return { id: created.id, prefix: created.prefix };
+}
+
+export async function allocateRectifyingInvoiceNumber(tx: Db) {
+  await ensureRectifyingInvoiceSeries(tx);
+  return allocateInvoiceNumber(tx, undefined, { seriesKind: "RECTIFYING" });
 }
 
 export async function allocateQuoteNumber(

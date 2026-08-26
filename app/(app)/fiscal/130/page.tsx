@@ -47,6 +47,16 @@ export default async function Modelo130Page({
           aplica.
         </p>
       ) : null}
+      {summary.modelo130.warnings?.length ? (
+        <div className="space-y-2 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-sm">
+          <p className="font-medium text-warning">Requiere revisión</p>
+          <ul className="list-disc space-y-1 pl-5 text-warning/90">
+            {summary.modelo130.warnings.map((w) => (
+              <li key={w.code}>{w.message}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       <FilingCompare
         modelLabel="130"
         modelType="130"
@@ -67,11 +77,13 @@ export default async function Modelo130Page({
       <ModeloDraft title="Casillas orientativas" model="130" summary={summary} />
       <p className="text-xs text-ink-muted">
         El 130 es <strong>acumulado desde el 1 de enero</strong> hasta el fin
-        del trimestre (como pide AEAT). Casilla 02 = gastos corrientes +
-        amortizaciones (un bien de inversión no se gasta entero el año de
-        compra). Casilla 05 = pagos fraccionados ya calculados en trimestres
-        anteriores del mismo año (solo importes a ingresar). Casilla 06 =
-        retenciones YTD. El 303 sigue siendo solo del trimestre.
+        del trimestre (como pide AEAT). Casilla 12 = max(0, 07 + 11). Solo
+        apartado I (no agrícolas). Obligación de presentar:{" "}
+        <strong>{summary.modelo130.filingObligation?.status ?? "—"}</strong>
+        {summary.modelo130.filingObligation?.reasons?.[0]
+          ? ` — ${summary.modelo130.filingObligation.reasons[0]}`
+          : ""}
+        . Imputación IRPF por devengo (fecha factura), no por cobro.
       </p>
     </div>
   );

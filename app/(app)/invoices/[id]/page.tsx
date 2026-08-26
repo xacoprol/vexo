@@ -16,6 +16,16 @@ import { InvoicePaymentsPanel } from "@/components/invoices/InvoicePaymentsPanel
 import { MarkPendingButton } from "@/components/invoices/MarkPendingButton";
 import { SendReminderButton } from "@/components/documents/SendReminderButton";
 import { isInvoiceDraft, isInvoiceIssued } from "@/lib/invoice-fiscal-lifecycle";
+import {
+  canAnnulInvoice,
+  canRectifyInvoice,
+} from "@/lib/invoice-rectification";
+import {
+  InvoiceRectificationLinks,
+  RectificationDraftPanel,
+  isRectifyingInvoice,
+} from "@/components/invoices/InvoiceRectificationLinks";
+import { InvoiceClientBalancePanel } from "@/components/invoices/InvoiceClientBalancePanel";
 
 export default async function InvoiceDetailPage({
   params,
@@ -46,9 +56,36 @@ export default async function InvoiceDetailPage({
           createdAt: true,
         },
       },
+      rectifiesInvoice: {
+        select: { id: true, fullNumber: true, issueDate: true },
+      },
+      rectifyingInvoices: {
+        where: { fiscalStatus: { not: "DRAFT" } },
+        select: {
+          id: true,
+          fullNumber: true,
+          fiscalStatus: true,
+          total: true,
+          subtotal: true,
+          vatAmount: true,
+        },
+      },
     },
   });
   if (!invoice) notFound();
+
+  const allRectifications = await prisma.invoice.findMany({
+    where: {
+      rectifiesInvoiceId: id,
+      fiscalStatus: "ISSUED",
+      status: { not: "ANULADA" },
+    },
+    select: { subtotal: true, vatAmount: true, total: true },
+  });
+  const rectificationsTotal = allRectifications.reduce(
+    (s, r) => s + Number(r.total),
+    0
+  );
 
   const totals = paymentTotals(invoice.total, invoice.payments);
   const canRemind =
@@ -58,6 +95,9 @@ export default async function InvoiceDetailPage({
 
   const draft = isInvoiceDraft(invoice);
   const issued = isInvoiceIssued(invoice);
+  const rectifying = isRectifyingInvoice(invoice);
+  const rectifyCheck = canRectifyInvoice(invoice);
+  const annulCheck = canAnnulInvoice(invoice);
 
   const hasPending = invoice.verifactuEvents.some(
     (e) => e.status === "PENDING" || e.status === "SENT"
@@ -95,6 +135,11 @@ export default async function InvoiceDetailPage({
                 ? "Simplificada (F2)"
                 : "Completa (F1)"}
             </span>
+            {rectifying && invoice.rectificationType ? (
+              <span className="badge bg-warning/15 text-warning">
+                Rectificativa {invoice.rectificationType}
+              </span>
+            ) : null}
             <VerifactuBadge status={verifactuStatus} />
             {invoice.vatOperationType &&
             invoice.vatOperationType !== "SUJETA" ? (
@@ -141,7 +186,15 @@ export default async function InvoiceDetailPage({
         <div className="flex flex-wrap gap-2">
           {invoice.status !== "ANULADA" && (
             <>
-              {draft ? <IssueInvoiceButton invoiceId={id} /> : null}
+              {draft ? (
+                <IssueInvoiceButton
+                  invoiceId={id}
+                  rectifying={rectifying}
+                  label={
+                    rectifying ? "Emitir rectificativa" : undefined
+                  }
+                />
+              ) : null}
               {issued ? <SendDocumentButton kind="invoice" id={id} /> : null}
               {canRemind && issued ? (
                 <SendReminderButton invoiceId={id} />
@@ -186,11 +239,64 @@ export default async function InvoiceDetailPage({
         </div>
       </div>
 
-      {issued && invoice.status !== "ANULADA" ? (
+      {rectifying ? (
+        <RectificationDraftPanel invoice={invoice} />
+      ) : null}
+
+      {invoice.rectifiesInvoice ? (
+        <p className="text-sm">
+          Rectifica{" "}
+          <Link
+            href={`/invoices/${invoice.rectifiesInvoice.id}`}
+            className="font-mono text-accent hover:underline"
+          >
+            {invoice.rectifiesInvoice.fullNumber}
+          </Link>
+        </p>
+      ) : null}
+
+      {!rectifying ? (
+        <InvoiceRectificationLinks
+          invoiceId={id}
+          rectifyingInvoices={await prisma.invoice.findMany({
+            where: { rectifiesInvoiceId: id },
+            select: {
+              id: true,
+              fullNumber: true,
+              fiscalStatus: true,
+              total: true,
+            },
+            orderBy: { issueDate: "desc" },
+          })}
+        />
+      ) : null}
+
+      {issued && invoice.status !== "ANULADA" && !rectifying ? (
+        <section className="rounded-lg border border-line bg-bg-elevated px-4 py-3 text-sm">
+          <p className="font-medium">Corregir vs anular</p>
+          <p className="mt-1 text-ink-muted">
+            <strong>Rectificar</strong> — La operación existió, pero hay que
+            corregir importe, IVA, devolución o descuento.
+          </p>
+          <p className="mt-1 text-ink-muted">
+            <strong>Anular registro</strong> — La factura se emitió por error
+            y debe invalidarse conservando su registro fiscal.
+          </p>
+          {rectifyCheck.ok ? (
+            <Link
+              href={`/invoices/${id}/rectify`}
+              className="btn-secondary mt-3 inline-flex"
+            >
+              Rectificar factura
+            </Link>
+          ) : null}
+        </section>
+      ) : null}
+
+      {issued && invoice.status !== "ANULADA" && !rectifying ? (
         <p className="rounded-lg border border-line bg-line/20 px-3 py-2 text-sm text-ink-muted">
-          Factura emitida: el contenido fiscal está bloqueado. Puedes gestionar
-          cobros y anular. La rectificativa formal llegará en una fase
-          posterior.
+          Factura emitida: contenido fiscal bloqueado. Gestiona cobros o emite
+          una rectificativa si la operación necesita corrección.
         </p>
       ) : null}
 
@@ -213,15 +319,21 @@ export default async function InvoiceDetailPage({
           {(invoice.status === "PAGADA" || invoice.payments.length > 0) && (
             <MarkPendingButton invoiceId={id} />
           )}
-          {issued ? (
+          {issued && annulCheck.ok ? (
             <form action={annulInvoice.bind(null, id)}>
               <button type="submit" className="btn-ghost text-warning text-sm">
-                Anular factura
+                Anular registro
               </button>
             </form>
           ) : null}
         </div>
       )}
+
+      <InvoiceClientBalancePanel
+        invoiceTotal={Number(invoice.total)}
+        rectificationsTotal={rectificationsTotal}
+        paid={totals.paid}
+      />
 
       <InvoicePaymentsPanel
         invoiceId={id}

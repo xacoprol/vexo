@@ -1,18 +1,45 @@
 import { endOfYear, startOfYear } from "date-fns";
-import {
-  aibDeductibleShare,
-  clampPct,
-  computeExpenseDeductibility,
-  deductibleVatAmount,
-} from "@/lib/expense-deductibility";
 import { fiscalFilingPeriodKey } from "@/lib/gemini-fiscal-filing";
 import { FISCAL_STATUS } from "@/lib/invoice-fiscal-lifecycle";
 import {
   sumAmortizationYtd,
   type AmortizationPeriodInput,
 } from "@/lib/investment-amortization";
+import {
+  assembleModel130Chain,
+  model130ResultToModeloBoxes,
+} from "@/lib/modelo-130/assemble";
+import {
+  aggregateModel303Period,
+  buildModel303ChainFromRows,
+  carryFromPresented303,
+  model303ResultToLegacyBoxes,
+  parsePurchaseVatKind,
+  presented303CarryToPriorCompensation,
+  isPurchaseReverseCharge as isPurchaseRc,
+} from "@/lib/modelo-303";
+import type { Model303Outcome, Model303Trace } from "@/lib/modelo-303";
+import {
+  parseIrpfDirectEstimationMode,
+  presentedQuarterFromFiling,
+} from "@/lib/modelo-130";
+import {
+  parseAgriculturalActivities130,
+  parseIrpf130HousingDeduction,
+  parseIrregularIncome130Status,
+  parsePreviousYearNetIncome130Mode,
+} from "@/lib/modelo-130/config-enums";
+import type {
+  Model130Config,
+  Model130TraceLine,
+  Model130Warning,
+  PresentedQuarter130,
+} from "@/lib/modelo-130/types";
 import { marketplaceIncomeNotInvoicedWhere } from "@/lib/marketplace-invoice";
 import { prisma } from "@/lib/prisma";
+import { EXPENSE_FISCAL_SELECT } from "@/lib/fiscal-expense-select";
+import { buildModel390Result } from "@/lib/modelo-390/engine";
+import { buildModelo390LegacyAdapter } from "@/lib/modelo-390/legacy-adapter";
 
 export type FiscalQuarter = 1 | 2 | 3 | 4;
 
@@ -27,6 +54,28 @@ export type ModeloBoxes = {
   result: number;
   /** Saldo a compensar que arrastra al siguiente periodo (303). */
   carryForward?: number;
+  /** Avisos fiscales (130 / 303). */
+  warnings?: { code: string; message: string; sourceId?: string }[];
+  /** Trazabilidad Modelo 130. */
+  trace?: {
+    box01: Model130TraceLine[];
+    box02: Model130TraceLine[];
+    box06: Model130TraceLine[];
+    box05: Model130TraceLine[];
+    box13: Model130TraceLine[];
+    box15: Model130TraceLine[];
+  };
+  /** Trazabilidad Modelo 303 (Fase 3). */
+  trace303?: Model303Trace;
+  /** Resultado 303 tipificado. */
+  outcome303?: Model303Outcome;
+  /** max(0, −box71) — magnitud interna del periodo (≠ casilla 70). */
+  currentPeriodNegative?: number;
+  /** box87 — saldo anterior pendiente. */
+  priorCompensationPending?: number;
+  /** Obligación de presentar (separada del cálculo). */
+  filingObligation?: import("@/lib/modelo-130/filing-obligation").FilingObligation;
+  scopeNote?: string;
 };
 
 export type FiscalPeriodSummary = {
@@ -101,14 +150,27 @@ export type FiscalYearSummary = {
   /** Suma de ingresos a cuenta 130 (solo resultados positivos de cada T) */
   irpfPaymentsYear: number;
   quarters: FiscalQuarterSlice[];
+  /** Cadena trimestral 303 con trazas (salud fiscal / auditoría). */
+  chain303: Record<FiscalQuarter, ModeloBoxes>;
+  /** Cadena trimestral 130 YTD con trazas. */
+  chain130: Record<FiscalQuarter, ModeloBoxes>;
 };
 
 type InvoiceRow = {
+  id: string;
+  fullNumber?: string;
   issueDate: Date;
   subtotal: unknown;
   vatAmount: unknown;
   irpfAmount: unknown;
+  status: string;
+  fiscalStatus: string;
+  cashAccounting?: boolean;
   vatOperationType: string | null;
+  invoiceFiscalType?: string | null;
+  rectificationType?: string | null;
+  rectifiesInvoiceId?: string | null;
+  rectifiesInvoiceFullNumber?: string | null;
   lines: {
     vatRate: number;
     lineSubtotal: unknown;
@@ -117,6 +179,7 @@ type InvoiceRow = {
 };
 
 type ExpenseRow = {
+  id: string;
   issueDate: Date;
   subtotal: unknown;
   vatAmount: unknown;
@@ -132,25 +195,37 @@ type ExpenseRow = {
   irpfDeductiblePct?: number | null;
   /** IVA interior → casillas 30/31 vía InvestmentAsset; no entra en 28/29 */
   isInvestment: boolean;
+  description?: string | null;
+  supplierName?: string | null;
+  importDuaBase?: unknown;
+  importDuaVat?: unknown;
+  importDuaDocumentId?: string | null;
 };
 
 type MarketplaceRow = {
+  id: string;
   issueDate: Date;
   subtotal: unknown;
   vatAmount: unknown;
   vatRate: number;
   vatStatus: string | null;
+  channel?: string;
+  orderId?: string | null;
+  invoiceId?: string | null;
 };
 
 /** IVA de bienes de inversión interiores en el trimestre de compra → 30/31. */
 type AssetVatRow = {
+  id?: string;
   purchaseDate: Date | null;
   base: unknown;
   vatAmount: unknown;
   vatOperationType?: string | null;
+  description?: string | null;
+  vatDeductiblePct?: number | null;
 };
 
-function parseFilingBoxes(
+function parseFilingBoxesLocal(
   raw: unknown
 ): { code: string; value: number }[] {
   if (!Array.isArray(raw)) return [];
@@ -161,22 +236,6 @@ function parseFilingBoxes(
       value: Number(o.value) || 0,
     };
   });
-}
-
-/** Saldo a compensar que arrastra al siguiente periodo desde un 303 presentado. */
-function carryFromPresented303(row: {
-  result: unknown;
-  boxes: unknown;
-}): number {
-  const result = Number(row.result);
-  const boxes = parseFilingBoxes(row.boxes);
-  const box87 = boxes.find((b) => b.code === "87");
-  if (box87) {
-    return round2(
-      Math.max(0, box87.value) + (result < 0 ? Math.max(0, -result) : 0)
-    );
-  }
-  return round2(Math.max(0, -result));
 }
 
 function round2(n: number): number {
@@ -252,11 +311,19 @@ export const EXPENSE_VAT_OPERATION_TYPES = [
   { value: "INTERIOR", label: "Compra interior (España)" },
   {
     value: "INTRACOMUNITARIA",
-    label: "Intracomunitaria UE (inversión sujeto pasivo)",
+    label: "Adquisición intracomunitaria de bienes (AIB)",
+  },
+  {
+    value: "SERVICIO_INTRACOMUNITARIO",
+    label: "Servicio intracomunitario UE (inversión sujeto pasivo)",
   },
   {
     value: "SERVICIO_EXTRACOMUNITARIO",
     label: "Servicio extracom. (EEUU, factura 0 % IVA)",
+  },
+  {
+    value: "IMPORTACION_BIENES",
+    label: "Importación de bienes (requiere DUA — no calculado)",
   },
 ] as const;
 
@@ -266,279 +333,58 @@ export type ExpenseVatOperationType =
 export function parseExpenseVatOperationType(
   raw: unknown
 ): ExpenseVatOperationType {
-  const v = String(raw ?? "INTERIOR").toUpperCase().trim();
+  const kind = parsePurchaseVatKind(raw);
+  const legacy = {
+    DOMESTIC: "INTERIOR",
+    EU_GOODS: "INTRACOMUNITARIA",
+    EU_SERVICES: "SERVICIO_INTRACOMUNITARIO",
+    NON_EU_SERVICES: "SERVICIO_EXTRACOMUNITARIO",
+    IMPORT_GOODS: "IMPORTACION_BIENES",
+  } as const;
+  const v = legacy[kind];
   if (
-    v === "SERVICIO_EXTRACOMUNITARIO" ||
-    v === "IMPORTACION_SERVICIOS" ||
-    v === "EXTRACOMUNITARIA" ||
-    v === "TERCER_PAIS" ||
-    v === "EEUU" ||
-    v === "USA" ||
-    v === "IMPORT_SERVICE"
+    EXPENSE_VAT_OPERATION_TYPES.some((t) => t.value === v)
   ) {
-    return "SERVICIO_EXTRACOMUNITARIO";
+    return v as ExpenseVatOperationType;
   }
-  if (v === "INTRACOMUNITARIA" || v === "INTRACOM" || v === "AIB") {
-    return "INTRACOMUNITARIA";
-  }
-  // "ISP" solo: sin contexto UE → servicio extracom (p. ej. Cursor EEUU)
-  if (v === "ISP") return "SERVICIO_EXTRACOMUNITARIO";
   return "INTERIOR";
 }
 
 export function isExpenseIntracom(op: string | null | undefined): boolean {
-  return parseExpenseVatOperationType(op) === "INTRACOMUNITARIA";
+  return parsePurchaseVatKind(op) === "EU_GOODS";
+}
+
+export function isExpenseEuService(op: string | null | undefined): boolean {
+  return parsePurchaseVatKind(op) === "EU_SERVICES";
 }
 
 export function isExpenseImportService(op: string | null | undefined): boolean {
-  return parseExpenseVatOperationType(op) === "SERVICIO_EXTRACOMUNITARIO";
+  return parsePurchaseVatKind(op) === "NON_EU_SERVICES";
 }
 
-/** Compras con inversión del sujeto pasivo (UE o terceros países). */
+export function isExpenseImportGoods(op: string | null | undefined): boolean {
+  return parsePurchaseVatKind(op) === "IMPORT_GOODS";
+}
+
+/** Compras con inversión del sujeto pasivo (UE bienes/servicios o terceros países). */
 export function isExpenseReverseCharge(op: string | null | undefined): boolean {
-  return isExpenseIntracom(op) || isExpenseImportService(op);
+  return isPurchaseRc(parsePurchaseVatKind(op));
 }
 
-function addBucket(
-  map: Map<number, VatBucket>,
-  rate: number,
-  base: number,
-  quota: number
-) {
-  const cur = map.get(rate) ?? { rate, base: 0, quota: 0 };
-  cur.base = round2(cur.base + base);
-  cur.quota = round2(cur.quota + quota);
-  map.set(rate, cur);
-}
-
-function inRange(d: Date, from: Date, to: Date): boolean {
-  return d >= from && d <= to;
-}
-
-type Modelo303Input = {
-  vatBuckets: VatBucket[];
-  expenseBase: number;
-  expenseVat: number;
-  /** Bienes de inversión (casillas 30/31) */
-  investmentBase?: number;
-  investmentVat?: number;
-  /** Adquisiciones intracomunitarias (compras UE) — IVA devengado 10/11 */
-  aibBase?: number;
-  aibQuota?: number;
-  /** AIB deducible 36/37 (independiente del % de deducción IVA) */
-  aibDeductibleBase?: number;
-  aibDeductibleVat?: number;
-  /** Servicios recibidos desde terceros países (casillas 16/17) */
-  importServiceBase?: number;
-  importServiceQuota?: number;
-  baseExenta: number;
-  baseIntracom: number;
-  baseExport: number;
-  baseCanarias: number;
-  baseMarketplaceCollected: number;
-  /** Casilla 110: saldo a compensar de periodos anteriores */
-  priorCompensation?: number;
-};
-
-/**
- * Borrador Modelo 303 (régimen general) alineado con instrucciones AEAT 2025/2026.
- * result = casilla 69 (resultado de la autoliquidación tras aplicar compensaciones).
- */
-function buildModelo303(input: Modelo303Input): ModeloBoxes {
-  const {
-    vatBuckets,
-    expenseBase,
-    expenseVat,
-    investmentBase = 0,
-    investmentVat = 0,
-    aibBase = 0,
-    aibQuota = 0,
-    aibDeductibleBase,
-    aibDeductibleVat,
-    importServiceBase = 0,
-    importServiceQuota = 0,
-    baseExenta,
-    baseIntracom,
-    baseExport,
-    baseCanarias,
-    baseMarketplaceCollected,
-    priorCompensation = 0,
-  } = input;
-
-  const bucketAt = (rate: number) =>
-    vatBuckets.find((b) => Math.abs(b.rate - rate) < 0.01) ?? {
-      rate,
-      base: 0,
-      quota: 0,
-    };
-  const b4 = bucketAt(4);
-  const b10 = bucketAt(10);
-  const b21 = bucketAt(21);
-  const quotaRepercutida = round2(
-    vatBuckets.reduce((s, b) => s + b.quota, 0)
-  );
-  const otherBase = round2(
-    vatBuckets
-      .filter((b) => ![4, 10, 21].some((r) => Math.abs(b.rate - r) < 0.01))
-      .reduce((s, b) => s + b.base, 0)
-  );
-  const otherQuota = round2(
-    vatBuckets
-      .filter((b) => ![4, 10, 21].some((r) => Math.abs(b.rate - r) < 0.01))
-      .reduce((s, b) => s + b.quota, 0)
-  );
-
-  const box10 = round2(Math.max(0, aibBase));
-  const box11 = round2(Math.max(0, aibQuota));
-  const box16 = round2(Math.max(0, importServiceBase));
-  const box17 = round2(Math.max(0, importServiceQuota));
-  const box27 = round2(quotaRepercutida + box11 + box17);
-  const box28 = round2(Math.max(0, expenseBase));
-  const box29 = round2(Math.max(0, expenseVat));
-  const box30 = round2(Math.max(0, investmentBase));
-  const box31 = round2(Math.max(0, investmentVat));
-  // Devengado (10/11) ≠ deducible (36/37): el % IVA deducible aplica solo a 36/37.
-  const box36 = round2(
-    Math.max(0, aibDeductibleBase != null ? aibDeductibleBase : aibBase)
-  );
-  const box37 = round2(
-    Math.max(0, aibDeductibleVat != null ? aibDeductibleVat : aibQuota)
-  );
-  const box45 = round2(box29 + box31 + box37);
-  const box46 = round2(box27 - box45);
-
-  const box110 = round2(Math.max(0, priorCompensation));
-  const box78 = round2(Math.min(box110, Math.max(0, box46)));
-  const box87 = round2(box110 - box78);
-  const box69 = round2(box46 - box78);
-  // Saldo que arrastra al siguiente periodo: lo no aplicado de 110 + resultado negativo de este T
-  const carryForward = round2(box87 + (box69 < 0 ? -box69 : 0));
-
-  // 60: exportaciones + asimiladas (incl. envíos definitivos a Canarias, Ceuta, Melilla)
-  const box60 = round2(baseExport + baseCanarias);
-
+function model303ToModeloBoxes(
+  result: ReturnType<typeof aggregateModel303Period>["modelo303"]
+): ModeloBoxes {
+  const legacy = model303ResultToLegacyBoxes(result);
   return {
-    boxes: [
-      { code: "01", label: "Base imponible 4 %", value: b4.base },
-      { code: "03", label: "Cuota 4 %", value: b4.quota },
-      { code: "04", label: "Base imponible 10 %", value: b10.base },
-      { code: "06", label: "Cuota 10 %", value: b10.quota },
-      { code: "07", label: "Base imponible 21 %", value: b21.base },
-      { code: "09", label: "Cuota 21 %", value: b21.quota },
-      {
-        code: "10",
-        label: "Adquisiciones intracomunitarias (base)",
-        value: box10,
-      },
-      {
-        code: "11",
-        label: "Adquisiciones intracomunitarias (cuota)",
-        value: box11,
-      },
-      {
-        code: "16",
-        label: "Adquisiciones servicios terceros países (base)",
-        value: box16,
-      },
-      {
-        code: "17",
-        label: "Adquisiciones servicios terceros países (cuota)",
-        value: box17,
-      },
-      ...(otherQuota > 0 || otherBase > 0
-        ? [
-            {
-              code: "revisar",
-              label: "Otras bases sujetas (tipos distintos) — revisar en sede",
-              value: otherBase,
-            },
-            {
-              code: "revisar",
-              label: "Otras cuotas repercutidas — revisar en sede",
-              value: otherQuota,
-            },
-          ]
-        : []),
-      { code: "27", label: "Total cuota devengada", value: box27 },
-      {
-        code: "28",
-        label: "Base cuotas soportadas (ops. interiores corrientes)",
-        value: box28,
-      },
-      {
-        code: "29",
-        label: "Cuota deducible (gastos corrientes)",
-        value: box29,
-      },
-      {
-        code: "30",
-        label: "Base bienes de inversión (ops. interiores)",
-        value: box30,
-      },
-      {
-        code: "31",
-        label: "Cuota deducible bienes de inversión",
-        value: box31,
-      },
-      {
-        code: "36",
-        label: "IVA deducible adquisiciones intracomunitarias (base)",
-        value: box36,
-      },
-      {
-        code: "37",
-        label: "IVA deducible adquisiciones intracomunitarias (cuota)",
-        value: box37,
-      },
-      { code: "45", label: "Total IVA deducible", value: box45 },
-      {
-        code: "46",
-        label: "Resultado régimen general (27 − 45)",
-        value: box46,
-      },
-      {
-        code: "59",
-        label: "Entregas intracomunitarias (base)",
-        value: round2(baseIntracom),
-      },
-      {
-        code: "60",
-        label: "Exportaciones y asimiladas (incl. Canarias)",
-        value: box60,
-      },
-      {
-        code: "revisar",
-        label: "Otras operaciones exentas — revisar en sede",
-        value: round2(baseExenta),
-      },
-      {
-        code: "123",
-        label: "No sujetas OSS / ventanilla única (marketplace)",
-        value: round2(baseMarketplaceCollected),
-      },
-      {
-        code: "110",
-        label: "Cuotas a compensar de periodos anteriores",
-        value: box110,
-      },
-      {
-        code: "78",
-        label: "Cuotas a compensar aplicadas este periodo",
-        value: box78,
-      },
-      {
-        code: "87",
-        label: "Compensación previa no aplicada (110 − 78)",
-        value: box87,
-      },
-      {
-        code: "69",
-        label: "Resultado autoliquidación (46 − 78)",
-        value: box69,
-      },
-    ],
-    result: box69,
-    carryForward,
+    boxes: legacy.boxes,
+    result: legacy.result,
+    carryForward: legacy.carryForward,
+    warnings: legacy.warnings,
+    trace303: legacy.trace,
+    outcome303: legacy.outcome,
+    scopeNote: legacy.scopeNote,
+    currentPeriodNegative: result.currentPeriodNegative,
+    priorCompensationPending: result.priorCompensationPending,
   };
 }
 
@@ -556,253 +402,159 @@ function buildModelo303Chain(
   presentedCarryByQuarter: Partial<Record<FiscalQuarter, number>> = {},
   assets: AssetVatRow[] = []
 ): Record<FiscalQuarter, ModeloBoxes> {
-  let pending = round2(Math.max(0, priorYearCompensation));
+  const chain = buildModel303ChainFromRows({
+    year,
+    invoices,
+    expenses,
+    marketplace,
+    assets,
+    priorYearCompensation,
+    presentedCarryByQuarter,
+    quarterRange,
+  });
   const out = {} as Record<FiscalQuarter, ModeloBoxes>;
-
   for (const q of [1, 2, 3, 4] as FiscalQuarter[]) {
-    const { from, to } = quarterRange(year, q);
-    const agg = aggregateRows(
-      invoices,
-      expenses,
-      marketplace,
-      from,
-      to,
-      pending,
-      assets
-    );
-    out[q] = agg.modelo303;
-    const presentedCarry = presentedCarryByQuarter[q];
-    if (presentedCarry != null && Number.isFinite(presentedCarry)) {
-      pending = round2(Math.max(0, presentedCarry));
-    } else {
-      pending = round2(
-        Math.max(
-          0,
-          agg.modelo303.carryForward ?? Math.max(0, -agg.modelo303.result)
-        )
-      );
-    }
+    out[q] = model303ToModeloBoxes(chain[q]);
   }
-
   return out;
 }
 
 /**
- * Borrador orientativo Modelo 390 (resumen anual IVA).
- * Números de casilla aproximados al régimen general habitual; verificar en AEAT.
- * Declaración informativa: no genera pago (result = suma de 303 del año).
+ * Borrador orientativo Modelo 390 — eliminado.
+ * @deprecated Usar `buildModel390Result` + `buildModelo390LegacyAdapter`.
  */
-function buildModelo390(
-  issued: FiscalPeriodSummary["issued"],
-  expenses: FiscalPeriodSummary["expenses"],
-  ivaNetYear: number
-): ModeloBoxes {
-  const bucketAt = (rate: number) =>
-    issued.vatBuckets.find((b) => Math.abs(b.rate - rate) < 0.01) ?? {
-      rate,
-      base: 0,
-      quota: 0,
-    };
-  const b4 = bucketAt(4);
-  const b10 = bucketAt(10);
-  const b21 = bucketAt(21);
-  const otherBase = round2(
-    issued.vatBuckets
-      .filter((b) => ![4, 10, 21].some((r) => Math.abs(b.rate - r) < 0.01))
-      .reduce((s, b) => s + b.base, 0)
-  );
-  const otherQuota = round2(
-    issued.vatBuckets
-      .filter((b) => ![4, 10, 21].some((r) => Math.abs(b.rate - r) < 0.01))
-      .reduce((s, b) => s + b.quota, 0)
-  );
 
-  const volumeOps = round2(
-    issued.baseSujeta +
-      issued.baseExenta +
-      issued.baseIntracom +
-      issued.baseExport +
-      issued.baseCanarias +
-      issued.baseMarketplaceCollected
-  );
-
-  return {
-    boxes: [
-      {
-        code: "99",
-        label: "Volumen de operaciones (orientativo)",
-        value: volumeOps,
-      },
-      { code: "01", label: "Base imponible 4% (régimen general)", value: b4.base },
-      { code: "02", label: "Cuota 4%", value: b4.quota },
-      { code: "03", label: "Base imponible 10%", value: b10.base },
-      { code: "04", label: "Cuota 10%", value: b10.quota },
-      { code: "05", label: "Base imponible 21%", value: b21.base },
-      { code: "06", label: "Cuota 21%", value: b21.quota },
-      {
-        code: "—",
-        label: "Otras bases sujetas (tipos distintos)",
-        value: otherBase,
-      },
-      {
-        code: "—",
-        label: "Otras cuotas repercutidas",
-        value: otherQuota,
-      },
-      {
-        code: "21",
-        label: "Total bases régimen general (sujetas)",
-        value: issued.baseSujeta,
-      },
-      {
-        code: "22",
-        label: "Total cuotas IVA devengado",
-        value: issued.quotaRepercutida,
-      },
-      {
-        code: "—",
-        label: "Operaciones exentas",
-        value: issued.baseExenta,
-      },
-      {
-        code: "—",
-        label: "Intracomunitarias (base)",
-        value: issued.baseIntracom,
-      },
-      {
-        code: "—",
-        label: "Exportaciones (base)",
-        value: issued.baseExport,
-      },
-      {
-        code: "—",
-        label: "Canarias / IGIC (base)",
-        value: issued.baseCanarias,
-      },
-      {
-        code: "—",
-        label: "Marketplace OSS (IVA recaudado por plataforma)",
-        value: issued.baseMarketplaceCollected,
-      },
-      {
-        code: "29",
-        label: "IVA deducible (gastos corrientes + AIB)",
-        value: round2(expenses.vatDeductible + expenses.aibDeductibleVat),
-      },
-      {
-        code: "—",
-        label: "Adquisiciones intracomunitarias (base)",
-        value: expenses.aibBase,
-      },
-      {
-        code: "48",
-        label: "Base gastos deducibles (referencia)",
-        value: expenses.base,
-      },
-      {
-        code: "86",
-        label: "Resultado liquidación anual (suma 303)",
-        value: ivaNetYear,
-      },
-    ],
-    result: ivaNetYear,
-  };
-}
-
-function buildModelo130(
+function buildModelo130Placeholder(
   incomeBase: number,
   expenseBase: number,
-  irpfWithheld: number,
-  priorPayments = 0
+  irpfWithheld: number
 ): ModeloBoxes {
   const rendimiento = round2(incomeBase - expenseBase);
   const pago20 = round2(Math.max(0, rendimiento) * 0.2);
-  const prior = round2(Math.max(0, priorPayments));
   const retenciones = round2(Math.max(0, irpfWithheld));
-  const resultado130 = round2(pago20 - prior - retenciones);
-
+  const resultado130 = round2(pago20 - retenciones);
   return {
     boxes: [
-      {
-        code: "01",
-        label: "Ingresos computables (desde 1 de enero)",
-        value: incomeBase,
-      },
-      {
-        code: "02",
-        label:
-          "Gastos deducibles (corrientes + amortizaciones, desde 1 de enero)",
-        value: expenseBase,
-      },
-      {
-        code: "03",
-        label: "Rendimiento neto (01 − 02)",
-        value: rendimiento,
-      },
-      {
-        code: "04",
-        label: "20 % del rendimiento neto positivo",
-        value: pago20,
-      },
-      {
-        code: "05",
-        label: "Pagos fraccionados anteriores del ejercicio",
-        value: prior,
-      },
-      {
-        code: "06",
-        label: "Retenciones e ingresos a cuenta (desde 1 de enero)",
-        value: retenciones,
-      },
-      {
-        code: "07",
-        label: "Resultado (04 − 05 − 06)",
-        value: resultado130,
-      },
+      { code: "01", label: "Ingresos computables", value: incomeBase },
+      { code: "02", label: "Gastos deducibles", value: expenseBase },
+      { code: "03", label: "Rendimiento neto", value: rendimiento },
+      { code: "04", label: "20 % rendimiento positivo", value: pago20 },
+      { code: "06", label: "Retenciones", value: retenciones },
+      { code: "19", label: "Resultado (orientativo)", value: resultado130 },
     ],
     result: resultado130,
   };
 }
 
-/**
- * Cadena del 130: YTD (1 ene → fin T). Casilla 05 = pagos presentados previos
- * si existen; si no, resultados positivos de borradores previos.
- * Amortizaciones: prorrateo por mes de alta hasta fin de cada T.
- */
-async function buildModelo130Chain(
-  year: number,
-  invoices: InvoiceRow[],
-  expenses: ExpenseRow[],
-  marketplace: MarketplaceRow[],
-  amortizationRows: AmortizationPeriodInput[],
-  presentedPriorByQuarter: Partial<Record<FiscalQuarter, number>>
-): Promise<Record<FiscalQuarter, ModeloBoxes>> {
-  const yearStart = yearRange(year).from;
-  let priorPayments = 0;
-  const out = {} as Record<FiscalQuarter, ModeloBoxes>;
+async function fetchModel130Config(): Promise<Model130Config> {
+  const s = await prisma.companySettings.findFirst({
+    select: {
+      irpfDirectEstimationMode: true,
+      previousYearNetIncomeFor130Reduction: true,
+      previousYearNetIncome130Mode: true,
+      irpf130HousingDeduction: true,
+      agriculturalActivities130: true,
+      irregularIncome130Status: true,
+      fiscalRegime: true,
+      activityKind130: true,
+      priorYearWithholdingPct130: true,
+    },
+  });
+  const activityRaw = String(s?.activityKind130 ?? "UNKNOWN").toUpperCase();
+  const activityKind130 =
+    activityRaw === "PROFESSIONAL"
+      ? "PROFESSIONAL"
+      : activityRaw === "BUSINESS"
+        ? "BUSINESS"
+        : "UNKNOWN";
 
-  for (const q of [1, 2, 3, 4] as FiscalQuarter[]) {
-    const { to } = quarterRange(year, q);
-    const agg = aggregateRows(invoices, expenses, marketplace, yearStart, to);
-    const amortYtd = sumAmortizationYtd(amortizationRows, year, q);
-    const draft = buildModelo130(
-      agg.issued.incomeBase,
-      round2(agg.expenses.base + amortYtd),
-      agg.issued.irpfWithheld,
-      priorPayments
-    );
-    out[q] = draft;
-    const presentedPrior = presentedPriorByQuarter[q];
-    if (presentedPrior != null && Number.isFinite(presentedPrior)) {
-      // Tras este T, el siguiente usa el resultado presentado si ya está guardado
-      priorPayments = round2(priorPayments + Math.max(0, presentedPrior));
-    } else {
-      priorPayments = round2(priorPayments + Math.max(0, draft.result));
+  return {
+    irpfDirectEstimationMode: parseIrpfDirectEstimationMode(
+      s?.irpfDirectEstimationMode
+    ),
+    previousYearNetIncomeMode: parsePreviousYearNetIncome130Mode(
+      s?.previousYearNetIncome130Mode
+    ),
+    previousYearNetIncomeFor130Reduction:
+      s?.previousYearNetIncomeFor130Reduction != null
+        ? Number(s.previousYearNetIncomeFor130Reduction)
+        : null,
+    irpf130HousingDeduction: parseIrpf130HousingDeduction(
+      s?.irpf130HousingDeduction
+    ),
+    agriculturalActivities130: parseAgriculturalActivities130(
+      s?.agriculturalActivities130
+    ),
+    irregularIncome130Status: parseIrregularIncome130Status(
+      s?.irregularIncome130Status
+    ),
+    fiscalRegime: s?.fiscalRegime === "131" ? "131" : "130",
+    activityKind130,
+    priorYearWithholdingPct130:
+      s?.priorYearWithholdingPct130 != null
+        ? Number(s.priorYearWithholdingPct130)
+        : null,
+    hasCashAccountingInvoices: false,
+  };
+}
+
+async function fetchPresented130Quarters(
+  year: number
+): Promise<Partial<Record<FiscalQuarter, PresentedQuarter130>>> {
+  const rows = await prisma.fiscalFiling.findMany({
+    where: { modelType: "130", year, quarter: { not: null } },
+    select: { quarter: true, result: true, boxes: true },
+  });
+  const out: Partial<Record<FiscalQuarter, PresentedQuarter130>> = {};
+  for (const r of rows) {
+    if (r.quarter === 1 || r.quarter === 2 || r.quarter === 3 || r.quarter === 4) {
+      const boxes = parseFilingBoxesLocal(r.boxes).map((b) => ({
+        code: b.code,
+        value: b.value,
+      }));
+      out[r.quarter as FiscalQuarter] = presentedQuarterFromFiling({
+        quarter: r.quarter as FiscalQuarter,
+        result: Number(r.result),
+        boxes,
+      });
     }
   }
-
   return out;
 }
+
+function buildModelo130ChainFromData(
+  year: number,
+  config: Model130Config,
+  invoices: Model130DataInvoice[],
+  expenses: Model130DataExpense[],
+  marketplace: Model130DataMarketplace[],
+  amortRows: Model130AmortRow[],
+  presented: Partial<Record<FiscalQuarter, PresentedQuarter130>>
+): Record<FiscalQuarter, ModeloBoxes> {
+  const chain = assembleModel130Chain({
+    year,
+    config,
+    invoices,
+    expenses,
+    marketplace,
+    amortRows,
+    presented,
+  });
+  const out = {} as Record<FiscalQuarter, ModeloBoxes>;
+  for (const q of [1, 2, 3, 4] as FiscalQuarter[]) {
+    out[q] = model130ResultToModeloBoxes(chain[q], config);
+  }
+  return out;
+}
+
+type Model130DataInvoice = InvoiceRow;
+type Model130DataExpense = ExpenseRow;
+type Model130DataMarketplace = MarketplaceRow;
+
+type Model130AmortRow = AmortizationPeriodInput & {
+  assetId?: string;
+  label?: string;
+};
 
 function aggregateRows(
   invoices: InvoiceRow[],
@@ -811,232 +563,52 @@ function aggregateRows(
   from: Date,
   to: Date,
   priorCompensation303 = 0,
-  assets: AssetVatRow[] = []
+  assets: AssetVatRow[] = [],
+  priorCompensationProvisional = false
 ): {
   issued: FiscalPeriodSummary["issued"];
   expenses: FiscalPeriodSummary["expenses"];
   modelo303: ModeloBoxes;
   modelo130: ModeloBoxes;
 } {
-  const invs = invoices.filter((i) => inRange(i.issueDate, from, to));
-  const exps = expenses.filter((e) => inRange(e.issueDate, from, to));
-  const mkts = marketplace.filter((m) => inRange(m.issueDate, from, to));
-  const assetRows = assets.filter(
-    (a) =>
-      a.purchaseDate != null &&
-      inRange(a.purchaseDate, from, to) &&
-      !isExpenseIntracom(a.vatOperationType)
-  );
-
-  const vatMap = new Map<number, VatBucket>();
-  let baseExenta = 0;
-  let baseIntracom = 0;
-  let baseExport = 0;
-  let baseCanarias = 0;
-  let baseMarketplaceCollected = 0;
-  let irpfWithheld = 0;
-  let invoiceIncomeBase = 0;
-
-  for (const inv of invs) {
-    const subtotal = Number(inv.subtotal);
-    invoiceIncomeBase = round2(invoiceIncomeBase + subtotal);
-    irpfWithheld = round2(irpfWithheld + Number(inv.irpfAmount));
-
-    const op = (inv.vatOperationType || "SUJETA").toUpperCase();
-    if (op === "EXENTA") {
-      baseExenta = round2(baseExenta + subtotal);
-      continue;
-    }
-    if (op === "INTRACOMUNITARIA") {
-      baseIntracom = round2(baseIntracom + subtotal);
-      continue;
-    }
-    if (op === "CANARIAS") {
-      baseCanarias = round2(baseCanarias + subtotal);
-      continue;
-    }
-    if (op === "EXPORTACION") {
-      baseExport = round2(baseExport + subtotal);
-      continue;
-    }
-
-    if (inv.lines.length) {
-      for (const line of inv.lines) {
-        addBucket(
-          vatMap,
-          line.vatRate,
-          Number(line.lineSubtotal),
-          Number(line.lineVat)
-        );
-      }
-    } else {
-      const rate =
-        subtotal > 0
-          ? round2((Number(inv.vatAmount) / subtotal) * 100)
-          : 21;
-      addBucket(vatMap, rate, subtotal, Number(inv.vatAmount));
-    }
-  }
-
-  let marketplaceIncomeBase = 0;
-  for (const m of mkts) {
-    const subtotal = Number(m.subtotal);
-    const vatAmount = Number(m.vatAmount);
-    marketplaceIncomeBase = round2(marketplaceIncomeBase + subtotal);
-    const status = (m.vatStatus || "TAXABLE").toUpperCase();
-    if (status === "TAXABLE") {
-      addBucket(vatMap, m.vatRate || 21, subtotal, vatAmount);
-    } else if (status === "MARKETPLACE_COLLECTED") {
-      baseMarketplaceCollected = round2(baseMarketplaceCollected + subtotal);
-    } else {
-      baseExenta = round2(baseExenta + subtotal);
-    }
-  }
-
-  const incomeBase = round2(invoiceIncomeBase + marketplaceIncomeBase);
-  const vatBuckets = [...vatMap.values()].sort((a, b) => b.rate - a.rate);
-  const baseSujeta = round2(vatBuckets.reduce((s, b) => s + b.base, 0));
-  const quotaRepercutida = round2(
-    vatBuckets.reduce((s, b) => s + b.quota, 0)
-  );
-
-  let expenseBase = 0;
-  let expenseVatInterior = 0;
-  let expenseBaseInterior = 0;
-  let investmentBase = 0;
-  let investmentVat = 0;
-  let aibAccruedBase = 0;
-  let aibAccruedVat = 0;
-  let aibDeductibleBase = 0;
-  let aibDeductibleVat = 0;
-  let importServiceBase = 0;
-  let importServiceQuota = 0;
-  let expenseTotal = 0;
-  for (const e of exps) {
-    const sub = Number(e.subtotal);
-    const vat = Number(e.vatAmount);
-    const tot = Number(e.total);
-    const vatPct =
-      e.vatDeductiblePct != null
-        ? clampPct(e.vatDeductiblePct)
-        : e.deductible === false
-          ? 0
-          : 100;
-    const irpfPct =
-      e.irpfDeductiblePct != null
-        ? clampPct(e.irpfDeductiblePct)
-        : e.deductible === false
-          ? 0
-          : 100;
-    const rate = e.vatRate > 0 ? e.vatRate : 21;
-    const reverseQuota = vat > 0 ? vat : round2(sub * (rate / 100));
-    const ded = computeExpenseDeductibility({
-      subtotal: sub,
-      vatAmount: isExpenseReverseCharge(e.vatOperationType) ? reverseQuota : vat,
-      vatDeductiblePct: vatPct,
-      irpfDeductiblePct: irpfPct,
-      isInvestment: e.isInvestment,
-    });
-
-    if (ded.irpfComputable > 0 || (irpfPct > 0 && !e.isInvestment)) {
-      expenseTotal = round2(expenseTotal + tot * (irpfPct / 100));
-    }
-    expenseBase = round2(expenseBase + ded.irpfComputable);
-
-    // AIB UE: 10/11 siempre = autorrepercusión; 36/37 según vatDeductiblePct.
-    if (isExpenseIntracom(e.vatOperationType)) {
-      aibAccruedBase = round2(aibAccruedBase + sub);
-      aibAccruedVat = round2(aibAccruedVat + reverseQuota);
-      const share = aibDeductibleShare(sub, reverseQuota, vatPct);
-      aibDeductibleBase = round2(aibDeductibleBase + share.deductibleBase);
-      aibDeductibleVat = round2(aibDeductibleVat + share.deductibleVat);
-    } else if (isExpenseImportService(e.vatOperationType)) {
-      importServiceBase = round2(importServiceBase + sub);
-      importServiceQuota = round2(importServiceQuota + reverseQuota);
-      if (!e.isInvestment) {
-        expenseVatInterior = round2(
-          expenseVatInterior + deductibleVatAmount(reverseQuota, vatPct)
-        );
-      }
-    } else if (!e.isInvestment) {
-      // Base 28: proporción del derecho a deducir IVA (prorrata simple por %).
-      expenseBaseInterior = round2(
-        expenseBaseInterior + round2(sub * (vatPct / 100))
-      );
-      expenseVatInterior = round2(
-        expenseVatInterior + deductibleVatAmount(vat, vatPct)
-      );
-    }
-    // Interior + inversión: casillas 30/31 vía InvestmentAsset (no aquí)
-  }
-
-  const aibBase = aibAccruedBase;
-  const aibQuota = aibAccruedVat;
-
-  for (const a of assetRows) {
-    investmentBase = round2(investmentBase + Number(a.base));
-    investmentVat = round2(investmentVat + Number(a.vatAmount));
-  }
+  const agg = aggregateModel303Period({
+    invoices,
+    expenses,
+    marketplace,
+    assets,
+    from,
+    to,
+    priorCompensation: priorCompensation303,
+    priorCompensationProvisional,
+  });
 
   return {
-    issued: {
-      count: invs.length,
-      vatBuckets,
-      baseSujeta,
-      quotaRepercutida,
-      baseExenta,
-      baseIntracom,
-      baseExport,
-      baseCanarias,
-      baseMarketplaceCollected,
-      irpfWithheld,
-      incomeBase,
-      invoiceIncomeBase,
-      marketplaceCount: mkts.length,
-      marketplaceIncomeBase,
-    },
-    expenses: {
-      count: exps.length,
-      base: expenseBase,
-      vatDeductible: round2(expenseVatInterior + investmentVat),
-      aibBase,
-      aibQuota,
-      aibDeductibleBase,
-      aibDeductibleVat,
-      importServiceBase,
-      importServiceQuota,
-      total: expenseTotal,
-    },
-    modelo303: buildModelo303({
-      vatBuckets,
-      expenseBase: expenseBaseInterior,
-      expenseVat: expenseVatInterior,
-      investmentBase,
-      investmentVat,
-      aibBase,
-      aibQuota,
-      aibDeductibleBase,
-      aibDeductibleVat,
-      importServiceBase,
-      importServiceQuota,
-      baseExenta,
-      baseIntracom,
-      baseExport,
-      baseCanarias,
-      baseMarketplaceCollected,
-      priorCompensation: priorCompensation303,
-    }),
-    // Placeholder: el 130 trimestral real se calcula en buildFiscalPeriodSummary / year (YTD + cadena).
-    modelo130: buildModelo130(incomeBase, expenseBase, irpfWithheld, 0),
+    issued: agg.issued,
+    expenses: agg.expenses,
+    modelo303: model303ToModeloBoxes(agg.modelo303),
+    modelo130: buildModelo130Placeholder(
+      agg.issued.incomeBase,
+      agg.expenses.base,
+      agg.issued.irpfWithheld
+    ),
   };
 }
 
 const invoiceSelect = {
+  id: true,
+  fullNumber: true,
   issueDate: true,
   subtotal: true,
   vatAmount: true,
   irpfAmount: true,
+  status: true,
+  fiscalStatus: true,
+  cashAccounting: true,
   vatOperationType: true,
+  invoiceFiscalType: true,
+  rectificationType: true,
+  rectifiesInvoiceId: true,
+  rectifiesInvoice: { select: { fullNumber: true } },
   lines: {
     select: {
       vatRate: true,
@@ -1060,18 +632,7 @@ async function fetchFiscalRows(from: Date, to: Date) {
       where: {
         issueDate: { gte: from, lte: to },
       },
-      select: {
-        issueDate: true,
-        subtotal: true,
-        vatAmount: true,
-        vatRate: true,
-        total: true,
-        vatOperationType: true,
-        deductible: true,
-        vatDeductiblePct: true,
-        irpfDeductiblePct: true,
-        isInvestment: true,
-      },
+      select: EXPENSE_FISCAL_SELECT,
     }),
     prisma.marketplaceIncome.findMany({
       where: {
@@ -1079,11 +640,15 @@ async function fetchFiscalRows(from: Date, to: Date) {
         ...marketplaceIncomeNotInvoicedWhere,
       },
       select: {
+        id: true,
         issueDate: true,
         subtotal: true,
         vatAmount: true,
         vatRate: true,
         vatStatus: true,
+        channel: true,
+        orderId: true,
+        invoiceId: true,
       },
     }),
     prisma.investmentAsset.findMany({
@@ -1091,30 +656,53 @@ async function fetchFiscalRows(from: Date, to: Date) {
         purchaseDate: { gte: from, lte: to },
       },
       select: {
+        id: true,
+        description: true,
         purchaseDate: true,
         base: true,
         vatAmount: true,
         vatOperationType: true,
+        expense: {
+          select: { vatDeductiblePct: true },
+        },
       },
     }),
   ]);
   return {
-    invoices: invoices as InvoiceRow[],
+    invoices: invoices.map((inv) => {
+      const row = inv as InvoiceRow & {
+        rectifiesInvoice?: { fullNumber: string } | null;
+      };
+      return {
+        ...row,
+        rectifiesInvoiceFullNumber: row.rectifiesInvoice?.fullNumber ?? null,
+      };
+    }),
     expenses: expenses as ExpenseRow[],
     marketplace: marketplace as MarketplaceRow[],
-    assets: assets as AssetVatRow[],
+    assets: assets.map((a) => ({
+      id: a.id,
+      description: a.description,
+      purchaseDate: a.purchaseDate,
+      base: a.base,
+      vatAmount: a.vatAmount,
+      vatOperationType: a.vatOperationType,
+      vatDeductiblePct: a.expense?.vatDeductiblePct ?? null,
+    })) as AssetVatRow[],
   };
 }
 
 async function fetchYearAmortizationRows(
   year: number
-): Promise<AmortizationPeriodInput[]> {
+): Promise<Model130AmortRow[]> {
   const rows = await prisma.investmentAmortization.findMany({
     where: { year },
     select: {
       amount: true,
       asset: {
         select: {
+          id: true,
+          description: true,
           purchaseDate: true,
           startYear: true,
           usefulLifeYears: true,
@@ -1127,23 +715,9 @@ async function fetchYearAmortizationRows(
     purchaseDate: r.asset.purchaseDate,
     startYear: r.asset.startYear,
     usefulLifeYears: r.asset.usefulLifeYears,
+    assetId: r.asset.id,
+    label: r.asset.description?.trim() || `Bien ${r.asset.id.slice(0, 8)}`,
   }));
-}
-
-async function fetchPresented130Results(
-  year: number
-): Promise<Partial<Record<FiscalQuarter, number>>> {
-  const rows = await prisma.fiscalFiling.findMany({
-    where: { modelType: "130", year, quarter: { not: null } },
-    select: { quarter: true, result: true },
-  });
-  const out: Partial<Record<FiscalQuarter, number>> = {};
-  for (const r of rows) {
-    if (r.quarter === 1 || r.quarter === 2 || r.quarter === 3 || r.quarter === 4) {
-      out[r.quarter as FiscalQuarter] = Number(r.result);
-    }
-  }
-  return out;
 }
 
 /** Carry-forward (casilla 87 + resultado a compensar) de 303 presentados del año. */
@@ -1157,7 +731,9 @@ async function fetchPresented303Carries(
   const out: Partial<Record<FiscalQuarter, number>> = {};
   for (const r of rows) {
     if (r.quarter === 1 || r.quarter === 2 || r.quarter === 3 || r.quarter === 4) {
-      out[r.quarter as FiscalQuarter] = carryFromPresented303(r);
+      out[r.quarter as FiscalQuarter] = presented303CarryToPriorCompensation(
+        carryFromPresented303(r)
+      );
     }
   }
   return out;
@@ -1178,12 +754,14 @@ export async function buildFiscalPeriodSummary(
     amortRows,
     presented130,
     presented303,
+    model130Config,
   ] = await Promise.all([
     fetchFiscalRows(yearStart, to),
     getPriorYear303Compensation(year),
     fetchYearAmortizationRows(year),
-    fetchPresented130Results(year),
+    fetchPresented130Quarters(year),
     fetchPresented303Carries(year),
+    fetchModel130Config(),
   ]);
   const quarterAgg = aggregateRows(
     invoices,
@@ -1194,8 +772,9 @@ export async function buildFiscalPeriodSummary(
     0,
     assets
   );
-  const chain130 = await buildModelo130Chain(
+  const chain130 = buildModelo130ChainFromData(
     year,
+    model130Config,
     invoices,
     expenses,
     marketplace,
@@ -1241,12 +820,14 @@ export async function buildFiscalYearSummary(
     amortRows,
     presented130,
     presented303,
+    model130Config,
   ] = await Promise.all([
     fetchFiscalRows(from, to),
     getPriorYear303Compensation(year),
     fetchYearAmortizationRows(year),
-    fetchPresented130Results(year),
+    fetchPresented130Quarters(year),
     fetchPresented303Carries(year),
+    fetchModel130Config(),
   ]);
   const yearAgg = aggregateRows(
     invoices,
@@ -1257,8 +838,9 @@ export async function buildFiscalYearSummary(
     0,
     assets
   );
-  const chain130 = await buildModelo130Chain(
+  const chain130 = buildModelo130ChainFromData(
     year,
+    model130Config,
     invoices,
     expenses,
     marketplace,
@@ -1311,6 +893,8 @@ export async function buildFiscalYearSummary(
     )
   );
 
+  const model390Result = await buildModel390Result(year);
+
   return {
     year,
     from,
@@ -1321,11 +905,57 @@ export async function buildFiscalYearSummary(
     // Agregado anual sin cadena de compensación (eso es por trimestre)
     modelo303: yearAgg.modelo303,
     modelo130: chain130[4],
-    modelo390: buildModelo390(yearAgg.issued, yearAgg.expenses, ivaNetYear),
+    modelo390: buildModelo390LegacyAdapter(model390Result),
     ivaNetYear,
     irpfPaymentsYear,
     quarters,
+    chain303,
+    chain130,
   };
+}
+
+/**
+ * Cadenas trimestrales 303/130 para auditoría cruzada (sin resumen anual completo).
+ */
+export async function buildFiscalMotorChains(year: number): Promise<{
+  chain303: Record<FiscalQuarter, ModeloBoxes>;
+  chain130: Record<FiscalQuarter, ModeloBoxes>;
+}> {
+  const { from, to } = yearRange(year);
+  const [
+    { invoices, expenses, marketplace, assets },
+    priorYearCompensation,
+    amortRows,
+    presented130,
+    presented303,
+    model130Config,
+  ] = await Promise.all([
+    fetchFiscalRows(from, to),
+    getPriorYear303Compensation(year),
+    fetchYearAmortizationRows(year),
+    fetchPresented130Quarters(year),
+    fetchPresented303Carries(year),
+    fetchModel130Config(),
+  ]);
+  const chain130 = buildModelo130ChainFromData(
+    year,
+    model130Config,
+    invoices,
+    expenses,
+    marketplace,
+    amortRows,
+    presented130
+  );
+  const chain303 = buildModelo303Chain(
+    year,
+    invoices,
+    expenses,
+    marketplace,
+    priorYearCompensation,
+    presented303,
+    assets
+  );
+  return { chain303, chain130 };
 }
 
 /**
@@ -1341,7 +971,7 @@ async function getPriorYear303Compensation(year: number): Promise<number> {
     select: { result: true, boxes: true },
   });
   if (presented) {
-    return carryFromPresented303(presented);
+    return presented303CarryToPriorCompensation(carryFromPresented303(presented));
   }
   // Sin 4T presentado: calcula cadena 303 del año anterior (sin recursión de compensación)
   const { to } = yearRange(prev);
@@ -1360,7 +990,5 @@ async function getPriorYear303Compensation(year: number): Promise<number> {
     assets
   );
   const last = chain[4];
-  return round2(
-    last.carryForward ?? Math.max(0, last.result < 0 ? -last.result : 0)
-  );
+  return round2(last.carryForward ?? 0);
 }

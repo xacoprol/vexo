@@ -550,7 +550,10 @@ export async function setInvoiceStatus(id: string, status: string) {
         "Anula solo facturas emitidas. Un borrador puede eliminarse."
       );
     }
-    await prisma.invoice.update({ where: { id }, data: { status: "ANULADA" } });
+    await prisma.invoice.update({
+      where: { id },
+      data: { status: "ANULADA", annulledAt: new Date() },
+    });
     const { recordVerifactuAnulacion } = await import("@/lib/verifactu-events");
     await recordVerifactuAnulacion(prisma, id);
   } else if (status === "PAGADA") {

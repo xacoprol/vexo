@@ -8,6 +8,7 @@ import {
   upsertFiscalFiling,
   type FilingDraftInput,
 } from "@/app/(app)/fiscal/filings/actions";
+import { checkFiscalFilingGate } from "@/app/(app)/fiscal/health/actions";
 import type {
   FiscalModelType,
   FilingBox,
@@ -28,6 +29,7 @@ type Props = {
   expensesBase?: number | null;
   vatRepercutida?: number | null;
   vatDeductible?: number | null;
+  rawExtract?: Record<string, unknown> | null;
 };
 
 export function MarkPresentedForm({
@@ -40,6 +42,7 @@ export function MarkPresentedForm({
   expensesBase = null,
   vatRepercutida = null,
   vatDeductible = null,
+  rawExtract = null,
 }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -69,7 +72,23 @@ export function MarkPresentedForm({
       return;
     }
 
-    const input: FilingDraftInput = {
+    startTransition(async () => {
+      const gate = await checkFiscalFilingGate({
+        modelType,
+        year,
+        quarter,
+      });
+      if (!gate.allowed) {
+        const titles = gate.blockers.map((b) => b.title).join(" · ");
+        setError(
+          titles
+            ? `No se puede marcar como presentado: ${titles}`
+            : "La salud fiscal del período no está lista. Revisa /fiscal/health."
+        );
+        return;
+      }
+
+      const input: FilingDraftInput = {
       modelType,
       year,
       quarter,
@@ -83,10 +102,9 @@ export function MarkPresentedForm({
       notes: notes.trim() || "Registrado manualmente desde borrador Vexo",
       confidence: "high",
       sourceFileName: null,
-      rawExtract: { source: "manual-mark-presented" },
+      rawExtract: rawExtract ?? { source: "manual-mark-presented" },
     };
 
-    startTransition(async () => {
       const res = await upsertFiscalFiling(input);
       if (!res.ok) {
         setError(res.error);

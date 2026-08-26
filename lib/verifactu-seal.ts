@@ -1,10 +1,15 @@
 /**
  * Persistencia Veri*Factu al emitir factura (hash + QR + evento cola).
- * TipoFactura se deriva de Invoice.invoiceKind persistido (no de paymentMethod).
+ * TipoFactura: F1/F2 normal; R1–R5 rectificativa.
  */
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { FISCAL_STATUS } from "@/lib/invoice-fiscal-lifecycle";
 import { resolveInvoiceTipoFactura } from "@/lib/invoice-issuance";
+import {
+  INVOICE_FISCAL_TYPE,
+  rectificationMethodToAeat,
+} from "@/lib/invoice-rectification";
+import type { RectificationMethod } from "@/lib/invoice-rectification";
 import { sealVerifactuRecord } from "@/lib/verifactu";
 import { enqueueVerifactuAlta } from "@/lib/verifactu-events";
 
@@ -33,6 +38,12 @@ export async function applyVerifactuSeal(
         fiscalStatus: true,
         verifactuHash: true,
         invoiceKind: true,
+        invoiceFiscalType: true,
+        rectificationType: true,
+        rectificationMethod: true,
+        rectifiesInvoice: {
+          select: { fullNumber: true, issueDate: true },
+        },
       },
     }),
     db.companySettings.findFirst({
@@ -42,9 +53,11 @@ export async function applyVerifactuSeal(
 
   if (!invoice || invoice.status === "ANULADA") return null;
 
-  const tipoFactura = resolveInvoiceTipoFactura({
-    invoiceKind: invoice.invoiceKind,
-  });
+  const isRectifying =
+    invoice.invoiceFiscalType === INVOICE_FISCAL_TYPE.RECTIFYING;
+  const tipoFactura = isRectifying
+    ? invoice.rectificationType ?? "R1"
+    : resolveInvoiceTipoFactura({ invoiceKind: invoice.invoiceKind });
 
   if (invoice.verifactuHash) {
     if (
@@ -74,6 +87,17 @@ export async function applyVerifactuSeal(
     return null;
   }
 
+  if (
+    isRectifying &&
+    (!invoice.rectifiesInvoice || !invoice.rectificationMethod)
+  ) {
+    console.warn(
+      "[verifactu] Rectificativa sin original o método — no se sella",
+      invoice.fullNumber
+    );
+    return null;
+  }
+
   const prev = await db.invoice.findFirst({
     where: {
       verifactuHash: { not: null },
@@ -92,6 +116,17 @@ export async function applyVerifactuSeal(
     total: Number(invoice.total),
     previousHash: prev?.verifactuHash ?? null,
     tipoFactura,
+    ...(isRectifying && invoice.rectifiesInvoice
+      ? {
+          rectificativa: {
+            method: rectificationMethodToAeat(
+              invoice.rectificationMethod as RectificationMethod
+            ),
+            originalFullNumber: invoice.rectifiesInvoice.fullNumber,
+            originalIssueDate: invoice.rectifiesInvoice.issueDate,
+          },
+        }
+      : {}),
   });
 
   await db.invoice.update({

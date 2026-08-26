@@ -40,6 +40,29 @@ model CompanySettings {
   /** Régimen IRPF autónomo: 130 estimación directa | 131 módulos */
   fiscalRegime    String   @default("130")
   /**
+   * Modalidad estimación directa (solo si fiscalRegime = 130).
+   * NORMAL = sin gastos difícil justificación | SIMPLIFIED = art. 30 Reglamento IRPF.
+   */
+  irpfDirectEstimationMode String @default("NORMAL") // NORMAL | SIMPLIFIED
+  /**
+   * Rendimiento neto ejercicio anterior (casilla 13) cuando mode = KNOWN.
+   */
+  previousYearNetIncomeFor130Reduction Float?
+  /**
+   * Casilla 13: UNKNOWN = no aplicar | NO_ACTIVITY = RN 0 (100 €) | KNOWN = usar importe.
+   */
+  previousYearNetIncome130Mode String @default("UNKNOWN")
+  /** Deducción vivienda cas. 16: NO | UNKNOWN | ELIGIBLE_CONFIRMED */
+  irpf130HousingDeduction String @default("NO")
+  /** Apartado II agrícola: NONE | UNKNOWN | HAS */
+  agriculturalActivities130 String @default("NONE")
+  /** Rendimientos irregulares art. 32.1: NONE | REVIEW_REQUIRED */
+  irregularIncome130Status String @default("NONE")
+  /** Obligación 130: tipo actividad UNKNOWN | PROFESSIONAL | BUSINESS */
+  activityKind130 String @default("UNKNOWN")
+  /** % ingresos con retención ejercicio anterior (null = desconocido). */
+  priorYearWithholdingPct130 Float?
+  /**
    * Importe máximo IVA incluido para factura simplificada (F2).
    * Default conservador 400 € (RD 1619/2012). Configurable a 3000 €
    * solo si la actividad concreta lo permite — no se auto-detecta.
@@ -62,6 +85,21 @@ model CompanySettings {
   fiscalReminderEnabled Boolean @default(true)
   /// Destino; si vacío usa email de la empresa
   fiscalReminderEmail   String  @default("")
+
+  /** Periodicidad IVA: QUARTERLY | MONTHLY | UNKNOWN */
+  vatPeriodicity String @default("UNKNOWN")
+  /** Lleva libros registro IVA mediante SII: YES | NO | UNKNOWN */
+  vatUsesSii String @default("UNKNOWN")
+  /** Territorio IVA: COMMON_ONLY | OTHER | UNKNOWN */
+  vatTerritory String @default("UNKNOWN")
+  /** Actividad relevante exoneración trimestral 390: GENERAL | SIMPLIFIED | URBAN_RENTAL | SIMPLIFIED_AND_URBAN_RENTAL | UNKNOWN */
+  vatActivity390Scope String @default("UNKNOWN")
+  /** Obligación autoliquidación último período del ejercicio: YES | NO | UNKNOWN */
+  lastVatPeriodFilingRequired String @default("UNKNOWN")
+  /** @deprecated Legacy — no usar; hechos en vatUsesSii etc. Obligación Modelo 390: UNKNOWN | REQUIRED | EXEMPT */
+  vat390FilingObligation String @default("UNKNOWN")
+  /** @deprecated Legacy — REDEME/grupo no son motivos de exoneración 390. Solo SII migrado a vatUsesSii. */
+  vat390ExemptionReason String?
 
   // Shopify Admin API (ingresos marketplace) — Dev Dashboard 2026+
   shopifyShop          String? // tienda.myshopify.com
@@ -105,6 +143,8 @@ model InvoiceSeries {
   year        Int? // optional year segment; null = continuous
   padLength   Int       @default(3)
   isDefault   Boolean   @default(false)
+  /// NORMAL | RECTIFYING — serie de facturas rectificativas separada
+  seriesKind  String    @default("NORMAL")
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   invoices    Invoice[]
@@ -230,6 +270,24 @@ model Invoice {
    * Independiente del origen (manual / marketplace / quote).
    */
   invoiceKind   String        @default("FULL") // FULL | SIMPLIFIED
+  /// NORMAL | RECTIFYING — documento fiscal
+  invoiceFiscalType String    @default("NORMAL")
+  /// R1 | R2 | R3 | R4 | R5 (VeriFactu/RRSIF)
+  rectificationType String?
+  /// DIFFERENCES | SUBSTITUTION (I | S)
+  rectificationMethod String?
+  rectifiesInvoiceId String?
+  rectifiesInvoice Invoice? @relation("InvoiceRectification", fields: [rectifiesInvoiceId], references: [id], onDelete: SetNull)
+  rectifyingInvoices Invoice[] @relation("InvoiceRectification")
+  /// Causa operativa UX (devolución, error importe, etc.)
+  rectificationCause String?
+  rectificationNotes String?
+  /// Sustitución: importes correctos finales (no simular como diferencias)
+  substitutionCorrectSubtotal Decimal?
+  substitutionCorrectVat Decimal?
+  substitutionCorrectTotal Decimal?
+  annulledAt DateTime?
+  annulReason String?
   paymentMethod String?
   notes         String?
   subtotal      Decimal
@@ -281,6 +339,8 @@ model Invoice {
   @@index([issueDate])
   @@index([recurringTemplateId])
   @@index([sourceDocumentId])
+  @@index([rectifiesInvoiceId])
+  @@index([invoiceFiscalType])
 }
 
 model InvoiceLine {
@@ -402,6 +462,14 @@ model Expense {
   /// PDF/imagen/CSV original subido (Vercel Blob vía FiscalDocument)
   documentId     String?
   document       FiscalDocument? @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  /// Documentación aduanera (DUA) — IVA importación en 303 cas. 32–35 (no desde factura proveedor)
+  importDuaType       String?
+  importDuaNumber     String?
+  importDuaDate       DateTime?
+  importDuaBase       Decimal?
+  importDuaVat        Decimal?
+  importDuaDocumentId String?
+  importDuaDocument   FiscalDocument? @relation("ExpenseImportDua", fields: [importDuaDocumentId], references: [id], onDelete: SetNull)
   investmentAssetId String? @unique
   investmentAsset   InvestmentAsset? @relation(fields: [investmentAssetId], references: [id], onDelete: SetNull)
   createdAt      DateTime @default(now())
@@ -441,6 +509,7 @@ model FiscalDocument {
   registerBooks      RegisterBook[]
   investmentAssets   InvestmentAsset[]
   expenses           Expense[]
+  importDuaExpenses  Expense[]           @relation("ExpenseImportDua")
   sourceInvoices     Invoice[]           @relation("InvoiceSourceDocument")
   marketplaceIncomes MarketplaceIncome[]
 

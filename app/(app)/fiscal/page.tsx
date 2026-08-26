@@ -102,6 +102,12 @@ export default async function FiscalPage({
           <Link href="/fiscal/payments" className="btn-secondary">
             Pagos / NRC
           </Link>
+          <Link
+            href={`/fiscal/health?year=${year}&q=${quarter}`}
+            className="btn-secondary"
+          >
+            Salud fiscal
+          </Link>
           <Link href="/fiscal/filings" className="btn-secondary">
             Presentados
           </Link>

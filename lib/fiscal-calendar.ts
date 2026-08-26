@@ -8,6 +8,8 @@ import {
   currentFiscalPeriod,
   type FiscalQuarter,
 } from "@/lib/fiscal";
+import { resolve347Deadline } from "@/lib/modelo-347/deadlines";
+import { resolve349Deadline } from "@/lib/modelo-349/deadlines";
 
 export type GuideModel = "303" | "130" | "349" | "390" | "347" | "100";
 
@@ -61,6 +63,13 @@ export function buildUpcomingDeadlines(now = new Date()): FilingDeadline[] {
   const { year, quarter } = target;
   const due = dueDayForQuarter(year, quarter);
   const label = periodLabel(year, quarter);
+  const due349 = resolve349Deadline({
+    kind: "QUARTERLY",
+    year,
+    quarter,
+    startMonth: (quarter - 1) * 3 + 1,
+    endMonth: quarter * 3,
+  });
 
   const quarterly: FilingDeadline[] = [
     {
@@ -90,9 +99,9 @@ export function buildUpcomingDeadlines(now = new Date()): FilingDeadline[] {
       year,
       quarter,
       periodLabel: label,
-      dueDate: due,
-      dueLabel: formatEs(due),
-      what: "Operaciones intracomunitarias (compras/ventas UE). Si no hay, a veces no aplica.",
+      dueDate: due349.dueDate,
+      dueLabel: due349.dueLabel,
+      what: "Operaciones intracomunitarias (E/A/S/I). Periodicidad mensual si superas 50.000 €.",
       aeatPath: "https://sede.agenciatributaria.gob.es/",
       href: `/fiscal/349?year=${year}&q=${quarter}`,
     },
@@ -120,15 +129,14 @@ export function buildUpcomingDeadlines(now = new Date()): FilingDeadline[] {
   }
 
   if (show347) {
-    // Día 0 de marzo = último día de febrero (28/29).
-    const due347 = new Date(annualYear + 1, 2, 0, 23, 59, 59);
+    const due347Info = resolve347Deadline(annualYear);
     quarterly.push({
       model: "347",
       year: annualYear,
       quarter: null,
       periodLabel: periodLabel(annualYear, null),
-      dueDate: due347,
-      dueLabel: formatEs(due347),
+      dueDate: due347Info.dueDate,
+      dueLabel: due347Info.dueLabel,
       what: "Operaciones con terceros > 3.005,06 €/año (clientes/proveedores).",
       aeatPath: "https://sede.agenciatributaria.gob.es/",
       href: `/fiscal/347?year=${annualYear}`,
