@@ -11,9 +11,11 @@ import {
 import { annulInvoice, setInvoiceStatus } from "../actions";
 import { SendDocumentButton } from "@/components/documents/SendDocumentButton";
 import { DeleteInvoiceButton } from "@/components/invoices/DeleteInvoiceButton";
+import { IssueInvoiceButton } from "@/components/invoices/IssueInvoiceButton";
 import { InvoicePaymentsPanel } from "@/components/invoices/InvoicePaymentsPanel";
 import { MarkPendingButton } from "@/components/invoices/MarkPendingButton";
 import { SendReminderButton } from "@/components/documents/SendReminderButton";
+import { isInvoiceDraft, isInvoiceIssued } from "@/lib/invoice-fiscal-lifecycle";
 
 export default async function InvoiceDetailPage({
   params,
@@ -54,6 +56,9 @@ export default async function InvoiceDetailPage({
     invoice.status !== "PAGADA" &&
     totals.remaining > 0;
 
+  const draft = isInvoiceDraft(invoice);
+  const issued = isInvoiceIssued(invoice);
+
   const hasPending = invoice.verifactuEvents.some(
     (e) => e.status === "PENDING" || e.status === "SENT"
   );
@@ -80,6 +85,16 @@ export default async function InvoiceDetailPage({
           </h1>
           <div className="mt-2 flex flex-wrap items-center gap-3">
             <StatusBadge status={invoice.status} />
+            {draft ? (
+              <span className="badge bg-line/40 text-ink-muted">Borrador</span>
+            ) : (
+              <span className="badge bg-success/15 text-success">Emitida</span>
+            )}
+            <span className="badge bg-accent-soft text-accent">
+              {invoice.invoiceKind === "SIMPLIFIED"
+                ? "Simplificada (F2)"
+                : "Completa (F1)"}
+            </span>
             <VerifactuBadge status={verifactuStatus} />
             {invoice.vatOperationType &&
             invoice.vatOperationType !== "SUJETA" ? (
@@ -126,11 +141,23 @@ export default async function InvoiceDetailPage({
         <div className="flex flex-wrap gap-2">
           {invoice.status !== "ANULADA" && (
             <>
-              <SendDocumentButton kind="invoice" id={id} />
-              {canRemind ? <SendReminderButton invoiceId={id} /> : null}
-              <Link href={`/invoices/${id}/edit`} className="btn-secondary">
-                Editar
-              </Link>
+              {draft ? <IssueInvoiceButton invoiceId={id} /> : null}
+              {issued ? <SendDocumentButton kind="invoice" id={id} /> : null}
+              {canRemind && issued ? (
+                <SendReminderButton invoiceId={id} />
+              ) : null}
+              {draft ? (
+                <Link href={`/invoices/${id}/edit`} className="btn-secondary">
+                  Editar
+                </Link>
+              ) : (
+                <span
+                  className="btn-secondary cursor-not-allowed opacity-60"
+                  title="La factura ya ha sido emitida y su contenido fiscal no puede modificarse. Usa anulación o una rectificativa (fase futura)."
+                >
+                  Editar
+                </span>
+              )}
             </>
           )}
           <Link
@@ -150,12 +177,29 @@ export default async function InvoiceDetailPage({
               PDF original
             </a>
           ) : null}
-          <DeleteInvoiceButton
-            invoiceId={id}
-            fullNumber={invoice.fullNumber}
-          />
+          {draft ? (
+            <DeleteInvoiceButton
+              invoiceId={id}
+              fullNumber={invoice.fullNumber}
+            />
+          ) : null}
         </div>
       </div>
+
+      {issued && invoice.status !== "ANULADA" ? (
+        <p className="rounded-lg border border-line bg-line/20 px-3 py-2 text-sm text-ink-muted">
+          Factura emitida: el contenido fiscal está bloqueado. Puedes gestionar
+          cobros y anular. La rectificativa formal llegará en una fase
+          posterior.
+        </p>
+      ) : null}
+
+      {draft ? (
+        <p className="rounded-lg border border-accent/30 bg-accent-soft/40 px-3 py-2 text-sm text-ink">
+          Borrador: editable y borrable. No entra en libros ni modelos hasta que
+          pulses <strong>Emitir factura</strong>.
+        </p>
+      ) : null}
 
       {invoice.status !== "ANULADA" && (
         <div className="flex flex-wrap gap-2">
@@ -169,11 +213,13 @@ export default async function InvoiceDetailPage({
           {(invoice.status === "PAGADA" || invoice.payments.length > 0) && (
             <MarkPendingButton invoiceId={id} />
           )}
-          <form action={annulInvoice.bind(null, id)}>
-            <button type="submit" className="btn-ghost text-warning text-sm">
-              Anular factura
-            </button>
-          </form>
+          {issued ? (
+            <form action={annulInvoice.bind(null, id)}>
+              <button type="submit" className="btn-ghost text-warning text-sm">
+                Anular factura
+              </button>
+            </form>
+          ) : null}
         </div>
       )}
 

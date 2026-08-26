@@ -71,7 +71,12 @@ export function ExpenseForm({
     );
   const [vatRate, setVatRate] = useState(expense?.vatRate ?? 21);
   const [notes, setNotes] = useState(expense?.notes ?? "");
-  const [deductible, setDeductible] = useState(expense?.deductible ?? true);
+  const [vatDeductiblePct, setVatDeductiblePct] = useState(
+    expense?.vatDeductiblePct ?? (expense?.deductible === false ? 0 : 100)
+  );
+  const [irpfDeductiblePct, setIrpfDeductiblePct] = useState(
+    expense?.irpfDeductiblePct ?? (expense?.deductible === false ? 0 : 100)
+  );
   const [isInvestment, setIsInvestment] = useState(
     expense?.isInvestment ?? false
   );
@@ -131,7 +136,8 @@ export function ExpenseForm({
     setHomeOfficeTip(draft.homeOfficeTip ?? null);
     setDocumentId(draft.documentId ?? null);
     if (draft.activityFit === "suspicious") {
-      setDeductible(false);
+      setVatDeductiblePct(0);
+      setIrpfDeductiblePct(0);
     }
     const conf =
       draft.confidence === "high"
@@ -438,19 +444,54 @@ export function ExpenseForm({
           />
         </div>
 
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            name="deductible"
-            value="1"
-            checked={deductible}
-            onChange={(e) => setDeductible(e.target.checked)}
-            className="rounded border-line"
-          />
-          Deducible IRPF e IVA (130 casilla 02 + 303 soportado). Si lo
-          desmarcas (gasto privado), no entra en IRPF ni como IVA deducible.
-          Las adquisiciones intracomunitarias siguen declarándose en el 303.
-        </label>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label className="label" htmlFor="irpfDeductiblePct">
+              % deducible IRPF (130)
+            </label>
+            <input
+              id="irpfDeductiblePct"
+              name="irpfDeductiblePct"
+              type="number"
+              min={0}
+              max={100}
+              step={1}
+              className="input font-mono"
+              value={irpfDeductiblePct}
+              onChange={(e) =>
+                setIrpfDeductiblePct(
+                  Math.min(100, Math.max(0, parseFloat(e.target.value) || 0))
+                )
+              }
+            />
+            <p className="mt-1 text-xs text-ink-muted">
+              Incluye IVA no deducible como coste cuando IRPF &gt; 0
+            </p>
+          </div>
+          <div>
+            <label className="label" htmlFor="vatDeductiblePct">
+              % IVA soportado deducible (303)
+            </label>
+            <input
+              id="vatDeductiblePct"
+              name="vatDeductiblePct"
+              type="number"
+              min={0}
+              max={100}
+              step={1}
+              className="input font-mono"
+              value={vatDeductiblePct}
+              onChange={(e) =>
+                setVatDeductiblePct(
+                  Math.min(100, Math.max(0, parseFloat(e.target.value) || 0))
+                )
+              }
+            />
+            <p className="mt-1 text-xs text-ink-muted">
+              En AIB: cuota 11 siempre; casilla 37 = este %
+            </p>
+          </div>
+        </div>
 
         <label className="flex items-start gap-2 text-sm">
           <input

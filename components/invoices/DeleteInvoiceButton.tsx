@@ -62,9 +62,9 @@ export function DeleteInvoiceButton({ invoiceId, fullNumber }: Props) {
                 <span className="font-mono font-medium text-ink">
                   {fullNumber}
                 </span>
-                ? Esta acción no se puede deshacer. Si era la última de la serie,
-                su número vuelve a quedar disponible. Para conservar el número,
-                anula la factura en su lugar.
+                ? Esta acción no se puede deshacer. Solo borradores: si era la
+                última de la serie, su número vuelve a quedar disponible. Las
+                facturas emitidas no se pueden eliminar (usa anulación).
               </p>
             </div>
 

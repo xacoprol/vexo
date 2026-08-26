@@ -1,19 +1,25 @@
 /**
  * Persistencia Veri*Factu al emitir factura (hash + QR + evento cola).
+ * TipoFactura se deriva de Invoice.invoiceKind persistido (no de paymentMethod).
  */
 import type { Prisma, PrismaClient } from "@prisma/client";
-import {
-  sealVerifactuRecord,
-  tipoFacturaFromVatOperation,
-} from "@/lib/verifactu";
+import { FISCAL_STATUS } from "@/lib/invoice-fiscal-lifecycle";
+import { resolveInvoiceTipoFactura } from "@/lib/invoice-issuance";
+import { sealVerifactuRecord } from "@/lib/verifactu";
 import { enqueueVerifactuAlta } from "@/lib/verifactu-events";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
+export type ApplyVerifactuSealOptions = {
+  /** Al sellar con éxito, marca fiscalStatus = ISSUED en el mismo UPDATE. */
+  markIssued?: boolean;
+};
+
 export async function applyVerifactuSeal(
   db: Db,
-  invoiceId: string
-): Promise<{ hash: string; qrUrl: string } | null> {
+  invoiceId: string,
+  options: ApplyVerifactuSealOptions = {}
+): Promise<{ hash: string; qrUrl: string; tipoFactura: string } | null> {
   const [invoice, settings] = await Promise.all([
     db.invoice.findUnique({
       where: { id: invoiceId },
@@ -24,10 +30,9 @@ export async function applyVerifactuSeal(
         vatAmount: true,
         total: true,
         status: true,
+        fiscalStatus: true,
         verifactuHash: true,
-        vatOperationType: true,
-        paymentMethod: true,
-        marketplaceIncome: { select: { id: true } },
+        invoiceKind: true,
       },
     }),
     db.companySettings.findFirst({
@@ -36,7 +41,21 @@ export async function applyVerifactuSeal(
   ]);
 
   if (!invoice || invoice.status === "ANULADA") return null;
+
+  const tipoFactura = resolveInvoiceTipoFactura({
+    invoiceKind: invoice.invoiceKind,
+  });
+
   if (invoice.verifactuHash) {
+    if (
+      options.markIssued &&
+      invoice.fiscalStatus !== FISCAL_STATUS.ISSUED
+    ) {
+      await db.invoice.update({
+        where: { id: invoiceId },
+        data: { fiscalStatus: FISCAL_STATUS.ISSUED },
+      });
+    }
     const existing = await db.invoice.findUnique({
       where: { id: invoiceId },
       select: { verifactuQrUrl: true },
@@ -44,11 +63,12 @@ export async function applyVerifactuSeal(
     return {
       hash: invoice.verifactuHash,
       qrUrl: existing?.verifactuQrUrl ?? "",
+      tipoFactura,
     };
   }
   if (!settings?.nif?.trim()) {
     console.warn(
-      "[verifactu] Sin NIF en ajustes: no se sella la factura",
+      "[verifactu] Sin NIF emisor en ajustes: no se sella",
       invoice.fullNumber
     );
     return null;
@@ -64,12 +84,6 @@ export async function applyVerifactuSeal(
     select: { id: true, verifactuHash: true },
   });
 
-  const payment = (invoice.paymentMethod || "").toLowerCase();
-  const simplified =
-    Boolean(invoice.marketplaceIncome) ||
-    payment.includes("shopify") ||
-    payment.includes("marketplace");
-
   const sealed = sealVerifactuRecord({
     issuerNif: settings.nif,
     fullNumber: invoice.fullNumber,
@@ -77,9 +91,7 @@ export async function applyVerifactuSeal(
     vatAmount: Number(invoice.vatAmount),
     total: Number(invoice.total),
     previousHash: prev?.verifactuHash ?? null,
-    tipoFactura: tipoFacturaFromVatOperation(invoice.vatOperationType, {
-      simplified,
-    }),
+    tipoFactura,
   });
 
   await db.invoice.update({
@@ -89,16 +101,32 @@ export async function applyVerifactuSeal(
       verifactuPreviousHash: sealed.previousHash || null,
       verifactuRecordAt: sealed.recordAt,
       verifactuQrUrl: sealed.qrUrl,
+      ...(options.markIssued
+        ? { fiscalStatus: FISCAL_STATUS.ISSUED }
+        : {}),
     },
   });
 
-  await enqueueVerifactuAlta(db, {
-    invoiceId,
-    hash: sealed.hash,
-    previousHash: sealed.previousHash || null,
-    canonical: sealed.canonical,
-    qrUrl: sealed.qrUrl,
-  });
+  try {
+    await enqueueVerifactuAlta(db, {
+      invoiceId,
+      hash: sealed.hash,
+      previousHash: sealed.previousHash || null,
+      canonical: sealed.canonical,
+      qrUrl: sealed.qrUrl,
+    });
+  } catch (err) {
+    console.error(
+      "[verifactu] enqueue ALTA falló tras sello; factura sellada reparable",
+      {
+        invoiceId,
+        fullNumber: invoice.fullNumber,
+        invoiceKind: invoice.invoiceKind,
+        tipoFactura,
+        err: err instanceof Error ? err.message : err,
+      }
+    );
+  }
 
-  return { hash: sealed.hash, qrUrl: sealed.qrUrl };
+  return { hash: sealed.hash, qrUrl: sealed.qrUrl, tipoFactura };
 }

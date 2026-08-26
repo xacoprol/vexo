@@ -39,6 +39,12 @@ model CompanySettings {
   defaultIrpfRate Float    @default(15)
   /** Régimen IRPF autónomo: 130 estimación directa | 131 módulos */
   fiscalRegime    String   @default("130")
+  /**
+   * Importe máximo IVA incluido para factura simplificada (F2).
+   * Default conservador 400 € (RD 1619/2012). Configurable a 3000 €
+   * solo si la actividad concreta lo permite — no se auto-detecta.
+   */
+  simplifiedInvoiceMaxAmount Float @default(400)
   emailSubject    String   @default("Documento {{number}} de {{company}}")
   emailBody       String   @default("Adjuntamos el documento {{number}}.\n\nUn saludo,\n{{company}}")
   bankIban        String?
@@ -210,7 +216,20 @@ model Invoice {
   client        Client        @relation(fields: [clientId], references: [id])
   issueDate     DateTime
   dueDate       DateTime?
-  status        String        @default("PENDIENTE") // PENDIENTE | PAGADA | VENCIDA | ANULADA
+  /// Cobro operativo: PENDIENTE | PAGADA | VENCIDA | ANULADA (no es emisión fiscal)
+  status        String        @default("PENDIENTE")
+  /**
+   * Emisión fiscal (independiente del cobro).
+   * DRAFT  = editable/borrable; no entra en libros/modelos definitivos.
+   * ISSUED = sellada o emitida; contenido fiscal inmutable; no borrable.
+   */
+  fiscalStatus  String        @default("DRAFT") // DRAFT | ISSUED
+  /**
+   * Modalidad fiscal de la factura (fuente de verdad F1/F2).
+   * FULL = completa → TipoFactura F1; SIMPLIFIED = simplificada → F2.
+   * Independiente del origen (manual / marketplace / quote).
+   */
+  invoiceKind   String        @default("FULL") // FULL | SIMPLIFIED
   paymentMethod String?
   notes         String?
   subtotal      Decimal
@@ -258,6 +277,7 @@ model Invoice {
   @@unique([seriesId, number])
   @@index([clientId])
   @@index([status])
+  @@index([fiscalStatus])
   @@index([issueDate])
   @@index([recurringTemplateId])
   @@index([sourceDocumentId])
@@ -366,7 +386,16 @@ model Expense {
   vatRate        Float    @default(21)
   vatAmount      Decimal
   total          Decimal
-  deductible     Boolean  @default(true) // IVA deducible / gasto computable 130
+  /**
+   * @deprecated Legacy binario. Preferir vatDeductiblePct / irpfDeductiblePct.
+   * Se mantiene sincronizado: true ↔ ambos pct a 100; false ↔ ambos a 0
+   * cuando el formulario no envía porcentajes explícitos.
+   */
+  deductible     Boolean  @default(true)
+  /// % IVA soportado deducible (0–100). Independiente de IRPF.
+  vatDeductiblePct  Float @default(100)
+  /// % gasto computable en IRPF / modelo 130 (0–100). Independiente de IVA.
+  irpfDeductiblePct Float @default(100)
   /// Si true: IVA interior → casillas 30/31; crea/actualiza InvestmentAsset
   isInvestment   Boolean  @default(false)
   notes          String?

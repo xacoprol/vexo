@@ -76,8 +76,9 @@ export async function allocateInvoiceNumber(
 }
 
 /**
- * Tras borrar una factura, recalcula nextNumber = max(número existente) + 1.
- * Si era la última (o la única), el correlativo vuelve a ese número para reutilizarlo.
+ * Tras borrar una factura DRAFT, recalcula nextNumber = max(número existente) + 1.
+ * Como ISSUED nunca se borra, sus números permanecen en el max → jamás se reutilizan.
+ * Si el borrado era el máximo (borrador sin ISSUED superior), el correlativo se recupera.
  */
 export async function syncInvoiceSeriesNextNumber(
   tx: Db,

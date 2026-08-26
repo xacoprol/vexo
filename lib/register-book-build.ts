@@ -1,11 +1,12 @@
 import { Prisma } from "@prisma/client";
-import { prisma } from "@/lib/prisma";
 import { yearRange } from "@/lib/fiscal";
+import { FISCAL_STATUS } from "@/lib/invoice-fiscal-lifecycle";
+import { marketplaceIncomeNotInvoicedWhere } from "@/lib/marketplace-invoice";
+import { prisma } from "@/lib/prisma";
 import type {
   ParsedRegisterBookLine,
   RegisterBookType,
 } from "@/lib/register-book-import";
-import { marketplaceIncomeNotInvoicedWhere } from "@/lib/marketplace-invoice";
 
 function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
@@ -43,6 +44,7 @@ async function buildIncomeLines(
     prisma.invoice.findMany({
       where: {
         status: { not: "ANULADA" },
+        fiscalStatus: FISCAL_STATUS.ISSUED,
         issueDate: { gte: from, lte: to },
       },
       include: {

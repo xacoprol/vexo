@@ -46,6 +46,7 @@ type InvoiceData = {
   dueDate: string;
   status: string;
   paymentMethod: string;
+  invoiceKind?: string;
   notes: string;
   irpfRate: number;
   vatOperationType: string;
@@ -99,6 +100,9 @@ export function InvoiceForm({
   );
   const [operationKey347, setOperationKey347] = useState(
     invoice?.operationKey347 || "B"
+  );
+  const [invoiceKind, setInvoiceKind] = useState(
+    invoice?.invoiceKind === "SIMPLIFIED" ? "SIMPLIFIED" : "FULL"
   );
   const [selectedClient, setSelectedClient] = useState<ClientOption | null>(
     defaultClient ?? null
@@ -227,6 +231,37 @@ export function InvoiceForm({
                 </select>
               </div>
             )}
+            <div className="sm:col-span-2">
+              <p className="label">Tipo de factura</p>
+              <div className="mt-1 flex flex-wrap gap-4 text-sm">
+                <label className="inline-flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="invoiceKind"
+                    value="FULL"
+                    checked={invoiceKind === "FULL"}
+                    onChange={() => setInvoiceKind("FULL")}
+                    className="accent-[var(--accent)]"
+                  />
+                  Factura completa
+                </label>
+                <label className="inline-flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="invoiceKind"
+                    value="SIMPLIFIED"
+                    checked={invoiceKind === "SIMPLIFIED"}
+                    onChange={() => setInvoiceKind("SIMPLIFIED")}
+                    className="accent-[var(--accent)]"
+                  />
+                  Factura simplificada
+                </label>
+              </div>
+              <p className="mt-1 text-xs text-ink-muted">
+                Completa (F1): requiere NIF del cliente. Simplificada (F2):
+                límite de importe según Ajustes; el tipo queda fijado al emitir.
+              </p>
+            </div>
             <div className={invoice ? undefined : "sm:col-span-2"}>
               <label className="label" htmlFor="paymentMethod">
                 Método de pago

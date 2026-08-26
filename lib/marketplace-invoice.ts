@@ -135,6 +135,8 @@ export async function convertMarketplaceIncomeInTransaction(
       issueDate,
       dueDate,
       status: "PAGADA",
+      fiscalStatus: "ISSUED",
+      invoiceKind: "SIMPLIFIED",
       paymentMethod: income.channel === "SHOPIFY" ? "Shopify" : "Marketplace",
       notes: noteParts.join(" · ") || null,
       vatOperationType,
@@ -174,7 +176,7 @@ export async function convertMarketplaceIncomeInTransaction(
     });
   }
 
-  await applyVerifactuSeal(tx, invoice.id);
+  await applyVerifactuSeal(tx, invoice.id, { markIssued: true });
 
   await tx.marketplaceIncome.update({
     where: { id: incomeId },

@@ -204,6 +204,8 @@ export async function convertQuoteToInvoice(quoteId: string) {
       issueDate: new Date(),
       dueDate: due,
       status: "PENDIENTE",
+      fiscalStatus: "ISSUED",
+      invoiceKind: "FULL",
       paymentMethod:
         tpl?.paymentMethod?.trim() || "Transferencia",
       notes: quote.notes,
@@ -239,7 +241,7 @@ export async function convertQuoteToInvoice(quoteId: string) {
     });
   }
 
-  await applyVerifactuSeal(prisma, invoice.id);
+  await applyVerifactuSeal(prisma, invoice.id, { markIssued: true });
 
   await prisma.quote.update({
     where: { id: quoteId },

@@ -75,7 +75,7 @@ export async function retryVerifactuEventAction(eventId: string) {
 
 export async function sealMissingInvoice(invoiceId: string) {
   await requireAuth();
-  await applyVerifactuSeal(prisma, invoiceId);
+  await applyVerifactuSeal(prisma, invoiceId, { markIssued: true });
   revalidatePath("/fiscal/verifactu");
   revalidatePath(`/invoices/${invoiceId}`);
 }

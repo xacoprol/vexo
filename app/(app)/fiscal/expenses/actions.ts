@@ -1,17 +1,22 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
-import { isRedirectError } from "next/dist/client/components/redirect-error";
-import { Prisma } from "@prisma/client";
-import { prisma } from "@/lib/prisma";
-import { requireAuth } from "@/lib/session";
+import {
+  clampPct,
+  legacyDeductibleFlag,
+  pctsFromLegacyDeductible,
+} from "@/lib/expense-deductibility";
 import {
   isExpenseIntracom,
   isExpenseReverseCharge,
   parseExpenseVatOperationType,
 } from "@/lib/fiscal";
 import { buildLinearAmortization } from "@/lib/investment-amortization";
+import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/session";
+import { Prisma } from "@prisma/client";
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { isRedirectError } from "next/dist/client/components/redirect-error";
 
 export type ExpenseFormState = {
   error?: string;
@@ -63,6 +68,29 @@ function parseExpenseForm(formData: FormData) {
       ? round2(subtotal)
       : round2(subtotal + resolvedVatAmount);
 
+  const hasVatPct = formData.has("vatDeductiblePct");
+  const hasIrpfPct = formData.has("irpfDeductiblePct");
+  const legacyDeductible =
+    formData.get("deductible") === "on" ||
+    formData.get("deductible") === "1";
+
+  let vatDeductiblePct: number;
+  let irpfDeductiblePct: number;
+  if (hasVatPct || hasIrpfPct) {
+    vatDeductiblePct = clampPct(
+      formData.get("vatDeductiblePct"),
+      hasVatPct ? 100 : legacyDeductible ? 100 : 0
+    );
+    irpfDeductiblePct = clampPct(
+      formData.get("irpfDeductiblePct"),
+      hasIrpfPct ? 100 : legacyDeductible ? 100 : 0
+    );
+  } else {
+    const pcts = pctsFromLegacyDeductible(legacyDeductible);
+    vatDeductiblePct = pcts.vatDeductiblePct;
+    irpfDeductiblePct = pcts.irpfDeductiblePct;
+  }
+
   const issueDateRaw = String(formData.get("issueDate") ?? "").trim();
   const usefulLifeRaw = parseInt(
     String(formData.get("usefulLifeYears") ?? "4"),
@@ -82,9 +110,10 @@ function parseExpenseForm(formData: FormData) {
     vatRate,
     vatAmount: resolvedVatAmount,
     total: reverseCharge ? round2(subtotal) : total,
-    deductible:
-      formData.get("deductible") === "on" ||
-      formData.get("deductible") === "1",
+    /** @deprecated sincronizado desde pcts */
+    deductible: legacyDeductibleFlag(vatDeductiblePct, irpfDeductiblePct),
+    vatDeductiblePct,
+    irpfDeductiblePct,
     isInvestment:
       formData.get("isInvestment") === "on" ||
       formData.get("isInvestment") === "1",
@@ -286,6 +315,8 @@ async function insertExpense(data: ExpenseWriteData): Promise<
       vatAmount: data.vatAmount,
       total: data.total,
       deductible: data.deductible,
+      vatDeductiblePct: data.vatDeductiblePct,
+      irpfDeductiblePct: data.irpfDeductiblePct,
       isInvestment: data.isInvestment,
       notes: data.notes,
       documentId: data.documentId || null,
@@ -309,6 +340,8 @@ export type ExpenseDraftInput = {
   vatAmount?: number;
   total?: number;
   deductible?: boolean;
+  vatDeductiblePct?: number;
+  irpfDeductiblePct?: number;
   isInvestment?: boolean;
   usefulLifeYears?: number;
   notes?: string | null;
@@ -336,6 +369,14 @@ function fromDraftInput(input: ExpenseDraftInput): ExpenseWriteData {
   const issueDateRaw = String(input.issueDate ?? "").trim();
   const usefulLifeRaw = Number(input.usefulLifeYears) || 4;
 
+  const pcts =
+    input.vatDeductiblePct != null || input.irpfDeductiblePct != null
+      ? {
+          vatDeductiblePct: clampPct(input.vatDeductiblePct, 100),
+          irpfDeductiblePct: clampPct(input.irpfDeductiblePct, 100),
+        }
+      : pctsFromLegacyDeductible(input.deductible !== false);
+
   return {
     issueDate: issueDateRaw ? new Date(issueDateRaw) : new Date(),
     supplierName: String(input.supplierName ?? "").trim(),
@@ -348,7 +389,12 @@ function fromDraftInput(input: ExpenseDraftInput): ExpenseWriteData {
     vatRate,
     vatAmount,
     total,
-    deductible: input.deductible !== false,
+    deductible: legacyDeductibleFlag(
+      pcts.vatDeductiblePct,
+      pcts.irpfDeductiblePct
+    ),
+    vatDeductiblePct: pcts.vatDeductiblePct,
+    irpfDeductiblePct: pcts.irpfDeductiblePct,
     isInvestment: Boolean(input.isInvestment),
     usefulLifeYears:
       Number.isFinite(usefulLifeRaw) && usefulLifeRaw > 0
@@ -384,7 +430,6 @@ export async function createExpense(
   await requireAuth();
   try {
     const data = parseExpenseForm(formData);
-    data.deductible = formData.has("deductible");
     data.isInvestment = formData.has("isInvestment");
     const result = await insertExpense(data);
     if (!result.ok) {
@@ -405,7 +450,6 @@ export async function updateExpense(
   await requireAuth();
   try {
     const data = parseExpenseForm(formData);
-    data.deductible = formData.has("deductible");
     data.isInvestment = formData.has("isInvestment");
     const err = validate(data);
     if (err) return { error: err };
@@ -440,6 +484,8 @@ export async function updateExpense(
         total: data.total,
         notes: data.notes,
         deductible: data.deductible,
+        vatDeductiblePct: data.vatDeductiblePct,
+        irpfDeductiblePct: data.irpfDeductiblePct,
         isInvestment: data.isInvestment,
         ...(data.documentId ? { documentId: data.documentId } : {}),
       },

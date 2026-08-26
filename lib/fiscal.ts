@@ -1,11 +1,18 @@
 import { endOfYear, startOfYear } from "date-fns";
-import { prisma } from "@/lib/prisma";
+import {
+  aibDeductibleShare,
+  clampPct,
+  computeExpenseDeductibility,
+  deductibleVatAmount,
+} from "@/lib/expense-deductibility";
 import { fiscalFilingPeriodKey } from "@/lib/gemini-fiscal-filing";
+import { FISCAL_STATUS } from "@/lib/invoice-fiscal-lifecycle";
 import {
   sumAmortizationYtd,
   type AmortizationPeriodInput,
 } from "@/lib/investment-amortization";
 import { marketplaceIncomeNotInvoicedWhere } from "@/lib/marketplace-invoice";
+import { prisma } from "@/lib/prisma";
 
 export type FiscalQuarter = 1 | 2 | 3 | 4;
 
@@ -50,10 +57,14 @@ export type FiscalPeriodSummary = {
     base: number;
     /** IVA soportado compras interiores (casillas 28/29) */
     vatDeductible: number;
-    /** Adquisiciones intracomunitarias: base (10 / 36) */
+    /** AIB IVA devengado: base (casilla 10) */
     aibBase: number;
-    /** Adquisiciones intracomunitarias: cuota autorrepercutida (11 / 37) */
+    /** AIB IVA devengado: cuota (casilla 11) */
     aibQuota: number;
+    /** AIB IVA deducible: base (casilla 36) */
+    aibDeductibleBase: number;
+    /** AIB IVA deducible: cuota (casilla 37) */
+    aibDeductibleVat: number;
     /** Servicios desde terceros países (EEUU…): base (16) */
     importServiceBase: number;
     /** Servicios extracomunitarios: cuota ISP (17) */
@@ -113,10 +124,12 @@ type ExpenseRow = {
   total: unknown;
   vatOperationType: string | null;
   /**
-   * Si false: no computa en IRPF (130) ni en IVA soportado interior (303).
-   * AIB (intracom) y servicios extracomunitarios se declaran siempre en el 303.
+   * @deprecated Preferir vatDeductiblePct / irpfDeductiblePct.
+   * Si los pct faltan, se deriva: true→100/100, false→0/0.
    */
-  deductible: boolean;
+  deductible?: boolean | null;
+  vatDeductiblePct?: number | null;
+  irpfDeductiblePct?: number | null;
   /** IVA interior → casillas 30/31 vía InvestmentAsset; no entra en 28/29 */
   isInvestment: boolean;
 };
@@ -309,9 +322,12 @@ type Modelo303Input = {
   /** Bienes de inversión (casillas 30/31) */
   investmentBase?: number;
   investmentVat?: number;
-  /** Adquisiciones intracomunitarias (compras UE) */
+  /** Adquisiciones intracomunitarias (compras UE) — IVA devengado 10/11 */
   aibBase?: number;
   aibQuota?: number;
+  /** AIB deducible 36/37 (independiente del % de deducción IVA) */
+  aibDeductibleBase?: number;
+  aibDeductibleVat?: number;
   /** Servicios recibidos desde terceros países (casillas 16/17) */
   importServiceBase?: number;
   importServiceQuota?: number;
@@ -337,6 +353,8 @@ function buildModelo303(input: Modelo303Input): ModeloBoxes {
     investmentVat = 0,
     aibBase = 0,
     aibQuota = 0,
+    aibDeductibleBase,
+    aibDeductibleVat,
     importServiceBase = 0,
     importServiceQuota = 0,
     baseExenta,
@@ -379,8 +397,13 @@ function buildModelo303(input: Modelo303Input): ModeloBoxes {
   const box29 = round2(Math.max(0, expenseVat));
   const box30 = round2(Math.max(0, investmentBase));
   const box31 = round2(Math.max(0, investmentVat));
-  const box36 = box10;
-  const box37 = box11;
+  // Devengado (10/11) ≠ deducible (36/37): el % IVA deducible aplica solo a 36/37.
+  const box36 = round2(
+    Math.max(0, aibDeductibleBase != null ? aibDeductibleBase : aibBase)
+  );
+  const box37 = round2(
+    Math.max(0, aibDeductibleVat != null ? aibDeductibleVat : aibQuota)
+  );
   const box45 = round2(box29 + box31 + box37);
   const box46 = round2(box27 - box45);
 
@@ -664,7 +687,7 @@ function buildModelo390(
       {
         code: "29",
         label: "IVA deducible (gastos corrientes + AIB)",
-        value: round2(expenses.vatDeductible + expenses.aibQuota),
+        value: round2(expenses.vatDeductible + expenses.aibDeductibleVat),
       },
       {
         code: "—",
@@ -882,8 +905,10 @@ function aggregateRows(
   let expenseBaseInterior = 0;
   let investmentBase = 0;
   let investmentVat = 0;
-  let aibBase = 0;
-  let aibQuota = 0;
+  let aibAccruedBase = 0;
+  let aibAccruedVat = 0;
+  let aibDeductibleBase = 0;
+  let aibDeductibleVat = 0;
   let importServiceBase = 0;
   let importServiceQuota = 0;
   let expenseTotal = 0;
@@ -891,33 +916,62 @@ function aggregateRows(
     const sub = Number(e.subtotal);
     const vat = Number(e.vatAmount);
     const tot = Number(e.total);
-    const deductibleOk = e.deductible !== false;
+    const vatPct =
+      e.vatDeductiblePct != null
+        ? clampPct(e.vatDeductiblePct)
+        : e.deductible === false
+          ? 0
+          : 100;
+    const irpfPct =
+      e.irpfDeductiblePct != null
+        ? clampPct(e.irpfDeductiblePct)
+        : e.deductible === false
+          ? 0
+          : 100;
     const rate = e.vatRate > 0 ? e.vatRate : 21;
     const reverseQuota = vat > 0 ? vat : round2(sub * (rate / 100));
-    if (deductibleOk) {
-      expenseTotal = round2(expenseTotal + tot);
-      // IRPF: el bien de inversión no se gasta entero el año de compra;
-      // entra por amortización (buildModelo130Chain suma amortYtd).
-      if (!e.isInvestment) {
-        expenseBase = round2(expenseBase + sub);
-      }
+    const ded = computeExpenseDeductibility({
+      subtotal: sub,
+      vatAmount: isExpenseReverseCharge(e.vatOperationType) ? reverseQuota : vat,
+      vatDeductiblePct: vatPct,
+      irpfDeductiblePct: irpfPct,
+      isInvestment: e.isInvestment,
+    });
+
+    if (ded.irpfComputable > 0 || (irpfPct > 0 && !e.isInvestment)) {
+      expenseTotal = round2(expenseTotal + tot * (irpfPct / 100));
     }
-    // AIB UE: casillas 10/11 + deducción 36/37. Servicios extracom: 16/17 + deducción 29.
+    expenseBase = round2(expenseBase + ded.irpfComputable);
+
+    // AIB UE: 10/11 siempre = autorrepercusión; 36/37 según vatDeductiblePct.
     if (isExpenseIntracom(e.vatOperationType)) {
-      aibBase = round2(aibBase + sub);
-      aibQuota = round2(aibQuota + reverseQuota);
+      aibAccruedBase = round2(aibAccruedBase + sub);
+      aibAccruedVat = round2(aibAccruedVat + reverseQuota);
+      const share = aibDeductibleShare(sub, reverseQuota, vatPct);
+      aibDeductibleBase = round2(aibDeductibleBase + share.deductibleBase);
+      aibDeductibleVat = round2(aibDeductibleVat + share.deductibleVat);
     } else if (isExpenseImportService(e.vatOperationType)) {
       importServiceBase = round2(importServiceBase + sub);
       importServiceQuota = round2(importServiceQuota + reverseQuota);
-      if (deductibleOk && !e.isInvestment) {
-        expenseVatInterior = round2(expenseVatInterior + reverseQuota);
+      if (!e.isInvestment) {
+        expenseVatInterior = round2(
+          expenseVatInterior + deductibleVatAmount(reverseQuota, vatPct)
+        );
       }
-    } else if (deductibleOk && !e.isInvestment) {
-      expenseBaseInterior = round2(expenseBaseInterior + sub);
-      expenseVatInterior = round2(expenseVatInterior + vat);
+    } else if (!e.isInvestment) {
+      // Base 28: proporción del derecho a deducir IVA (prorrata simple por %).
+      expenseBaseInterior = round2(
+        expenseBaseInterior + round2(sub * (vatPct / 100))
+      );
+      expenseVatInterior = round2(
+        expenseVatInterior + deductibleVatAmount(vat, vatPct)
+      );
     }
     // Interior + inversión: casillas 30/31 vía InvestmentAsset (no aquí)
   }
+
+  const aibBase = aibAccruedBase;
+  const aibQuota = aibAccruedVat;
 
   for (const a of assetRows) {
     investmentBase = round2(investmentBase + Number(a.base));
@@ -947,6 +1001,8 @@ function aggregateRows(
       vatDeductible: round2(expenseVatInterior + investmentVat),
       aibBase,
       aibQuota,
+      aibDeductibleBase,
+      aibDeductibleVat,
       importServiceBase,
       importServiceQuota,
       total: expenseTotal,
@@ -959,6 +1015,8 @@ function aggregateRows(
       investmentVat,
       aibBase,
       aibQuota,
+      aibDeductibleBase,
+      aibDeductibleVat,
       importServiceBase,
       importServiceQuota,
       baseExenta,
@@ -993,6 +1051,7 @@ async function fetchFiscalRows(from: Date, to: Date) {
     prisma.invoice.findMany({
       where: {
         status: { not: "ANULADA" },
+        fiscalStatus: FISCAL_STATUS.ISSUED,
         issueDate: { gte: from, lte: to },
       },
       select: invoiceSelect,
@@ -1009,6 +1068,8 @@ async function fetchFiscalRows(from: Date, to: Date) {
         total: true,
         vatOperationType: true,
         deductible: true,
+        vatDeductiblePct: true,
+        irpfDeductiblePct: true,
         isInvestment: true,
       },
     }),

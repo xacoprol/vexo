@@ -8,6 +8,7 @@
     "postinstall": "prisma generate",
     "start": "next start",
     "lint": "eslint",
+    "test": "node --import tsx --test lib/__tests__/**/*.test.ts",
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/run-seed.ts",
     "db:reset": "prisma migrate reset",

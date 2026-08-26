@@ -321,6 +321,30 @@ export function SettingsForm({ settings, invoiceSeries, quoteSeries }: Props) {
               </select>
             </div>
             <div className="sm:col-span-2">
+              <label className="label" htmlFor="simplifiedInvoiceMaxAmount">
+                Límite factura simplificada (IVA incluido)
+              </label>
+              <select
+                id="simplifiedInvoiceMaxAmount"
+                name="simplifiedInvoiceMaxAmount"
+                className="input max-w-xs"
+                defaultValue={
+                  Number(settings.simplifiedInvoiceMaxAmount) >= 3000
+                    ? 3000
+                    : 400
+                }
+              >
+                <option value={400}>400 € (límite general)</option>
+                <option value={3000}>
+                  3.000 € (solo si tu actividad lo permite)
+                </option>
+              </select>
+              <p className="mt-1 text-xs text-ink-muted">
+                Conservador por defecto: 400 €. No se auto-detecta el supuesto
+                de 3.000 €.
+              </p>
+            </div>
+            <div className="sm:col-span-2">
               <label className="label" htmlFor="fiscalRegime">
                 Régimen IRPF (autónomo)
               </label>

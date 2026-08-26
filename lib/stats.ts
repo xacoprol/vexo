@@ -7,8 +7,10 @@ import {
   subMonths,
 } from "date-fns";
 import { es } from "date-fns/locale";
-import { prisma } from "@/lib/prisma";
+import { computeExpenseDeductibility } from "@/lib/expense-deductibility";
+import { FISCAL_STATUS } from "@/lib/invoice-fiscal-lifecycle";
 import { marketplaceIncomeNotInvoicedWhere } from "@/lib/marketplace-invoice";
+import { prisma } from "@/lib/prisma";
 
 function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
@@ -71,6 +73,7 @@ export async function buildYearStats(year: number): Promise<StatsSummary> {
       prisma.invoice.findMany({
         where: {
           status: { not: "ANULADA" },
+          fiscalStatus: FISCAL_STATUS.ISSUED,
           issueDate: { gte: from, lte: to },
         },
         select: {
@@ -99,9 +102,16 @@ export async function buildYearStats(year: number): Promise<StatsSummary> {
       prisma.expense.findMany({
         where: {
           issueDate: { gte: from, lte: to },
-          deductible: true,
+          irpfDeductiblePct: { gt: 0 },
         },
-        select: { issueDate: true, subtotal: true },
+        select: {
+          issueDate: true,
+          subtotal: true,
+          vatAmount: true,
+          vatDeductiblePct: true,
+          irpfDeductiblePct: true,
+          isInvestment: true,
+        },
       }),
       prisma.invoice.findMany({
         where: { status: { in: ["PENDIENTE", "VENCIDA"] } },
@@ -181,7 +191,13 @@ export async function buildYearStats(year: number): Promise<StatsSummary> {
 
   let expensesBase = 0;
   for (const e of expenses) {
-    const base = Number(e.subtotal);
+    const base = computeExpenseDeductibility({
+      subtotal: Number(e.subtotal),
+      vatAmount: Number(e.vatAmount),
+      vatDeductiblePct: e.vatDeductiblePct,
+      irpfDeductiblePct: e.irpfDeductiblePct,
+      isInvestment: e.isInvestment,
+    }).irpfComputable;
     expensesBase = round2(expensesBase + base);
     const bucket = monthMap.get(monthKey(e.issueDate));
     if (bucket) bucket.expensesBase = round2(bucket.expensesBase + base);
@@ -249,6 +265,7 @@ export async function buildRecentMonthTotals(monthsBack = 6): Promise<
     prisma.invoice.findMany({
       where: {
         status: { not: "ANULADA" },
+        fiscalStatus: FISCAL_STATUS.ISSUED,
         issueDate: { gte: from, lte: to },
       },
       select: { issueDate: true, total: true, subtotal: true },

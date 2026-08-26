@@ -67,6 +67,13 @@ export async function updateSettings(
     logoUrl: logoResult.logoUrl,
     defaultVatRate: parseFloat(String(formData.get("defaultVatRate") ?? "21")),
     defaultIrpfRate: parseFloat(String(formData.get("defaultIrpfRate") ?? "15")),
+    simplifiedInvoiceMaxAmount: (() => {
+      const n = parseFloat(
+        String(formData.get("simplifiedInvoiceMaxAmount") ?? "400")
+      );
+      if (n >= 3000) return 3000;
+      return 400;
+    })(),
     fiscalRegime:
       String(formData.get("fiscalRegime") ?? "130") === "131" ? "131" : "130",
     emailSubject: String(formData.get("emailSubject") ?? "").trim(),

@@ -30,6 +30,7 @@ export type InvoiceListRow = {
   issueDate: string;
   dueDate: string | null;
   status: string;
+  fiscalStatus: string;
   paymentMethod: string | null;
   notes: string | null;
   subtotal: number;
@@ -155,7 +156,14 @@ function cellValue(inv: InvoiceListRow, id: ColumnId): ReactNode {
     case "total":
       return formatCurrency(inv.total);
     case "estado":
-      return <StatusBadge status={inv.status} />;
+      return (
+        <span className="inline-flex flex-wrap items-center gap-1">
+          <StatusBadge status={inv.status} />
+          {inv.fiscalStatus === "DRAFT" ? (
+            <span className="badge bg-line/40 text-ink-muted">Borrador</span>
+          ) : null}
+        </span>
+      );
     case "importePendiente":
       return formatCurrency(inv.pendingAmount);
     case "descripcion":
@@ -422,11 +430,20 @@ export function InvoicesTable({ invoices }: { invoices: InvoiceListRow[] }) {
         entityLabel={selectedIds.size === 1 ? "factura" : "facturas"}
         open={bulkDeleteOpen}
         onClose={() => setBulkDeleteOpen(false)}
-        description="Si alguna era la última de su serie, el número puede reutilizarse."
+        description="Solo se pueden eliminar borradores. Si alguna factura está emitida, la operación se cancela entera."
         onConfirm={async () => {
-          await deleteInvoices([...selectedIds]);
-          setSelectedIds(new Set());
-          router.refresh();
+          try {
+            await deleteInvoices([...selectedIds]);
+            setSelectedIds(new Set());
+            router.refresh();
+          } catch (err) {
+            alert(
+              err instanceof Error
+                ? err.message
+                : "No se pudieron eliminar las facturas"
+            );
+            throw err;
+          }
         }}
       />
       <BulkSelectionBar

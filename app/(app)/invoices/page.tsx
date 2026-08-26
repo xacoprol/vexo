@@ -121,6 +121,7 @@ export default async function InvoicesPage({
       issueDate: inv.issueDate.toISOString(),
       dueDate: inv.dueDate?.toISOString() ?? null,
       status: inv.status,
+      fiscalStatus: inv.fiscalStatus,
       paymentMethod: inv.paymentMethod,
       notes: inv.notes,
       subtotal: Number(inv.subtotal),
@@ -154,7 +155,7 @@ export default async function InvoicesPage({
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Facturas</h1>
           <p className="mt-1 text-sm text-ink-muted">
-            Numeración correlativa · al borrar la última se reutiliza el número
+            Numeración correlativo · borradores editables · emisión bloquea el contenido fiscal
           </p>
         </div>
         <Link href="/invoices/new" className="btn-primary">

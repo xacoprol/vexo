@@ -1,7 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { prisma } from "@/lib/prisma";
 import { InvoiceForm } from "@/components/documents/InvoiceForm";
+import {
+  isInvoiceIssued,
+  ISSUED_IMMUTABLE_ERROR,
+} from "@/lib/invoice-fiscal-lifecycle";
+import { prisma } from "@/lib/prisma";
 
 export default async function EditInvoicePage({
   params,
@@ -27,6 +31,20 @@ export default async function EditInvoicePage({
         <p>Las facturas anuladas no se pueden editar.</p>
         <Link href={`/invoices/${id}`} className="btn-secondary">
           Volver
+        </Link>
+      </div>
+    );
+  }
+  if (isInvoiceIssued(invoice)) {
+    return (
+      <div className="mx-auto max-w-lg space-y-4 py-10">
+        <p className="text-sm text-ink">{ISSUED_IMMUTABLE_ERROR}</p>
+        <p className="text-sm text-ink-muted">
+          Puedes anular la factura o esperar a la fase de rectificativas. Los
+          cobros y notas se gestionan desde la ficha.
+        </p>
+        <Link href={`/invoices/${id}`} className="btn-secondary">
+          Volver a la factura
         </Link>
       </div>
     );
@@ -60,6 +78,7 @@ export default async function EditInvoicePage({
             : "",
           status: invoice.status,
           paymentMethod: invoice.paymentMethod ?? "",
+          invoiceKind: invoice.invoiceKind ?? "FULL",
           notes: invoice.notes ?? "",
           irpfRate: invoice.irpfRate,
           vatOperationType: invoice.vatOperationType,

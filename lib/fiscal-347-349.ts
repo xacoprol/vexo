@@ -1,5 +1,6 @@
-import { prisma } from "@/lib/prisma";
 import { quarterRange, yearRange, type FiscalQuarter } from "@/lib/fiscal";
+import { FISCAL_STATUS } from "@/lib/invoice-fiscal-lifecycle";
+import { prisma } from "@/lib/prisma";
 
 /** Umbral legal modelo 347 (operaciones anuales con el mismo tercero). */
 export const MODELO_347_THRESHOLD = 3005.06;
@@ -102,6 +103,7 @@ export async function buildModelo347Draft(year: number): Promise<Modelo347Draft>
     prisma.invoice.findMany({
       where: {
         status: { not: "ANULADA" },
+        fiscalStatus: FISCAL_STATUS.ISSUED,
         issueDate: { gte: from, lte: to },
         vatOperationType: { in: ["SUJETA", "EXENTA"] },
       },
@@ -204,6 +206,7 @@ export async function buildModelo349Draft(
     prisma.invoice.findMany({
       where: {
         status: { not: "ANULADA" },
+        fiscalStatus: FISCAL_STATUS.ISSUED,
         issueDate: { gte: from, lte: to },
         vatOperationType: "INTRACOMUNITARIA",
       },
