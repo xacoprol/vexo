@@ -1,7 +1,25 @@
 import Link from "next/link";
+import { prisma } from "@/lib/prisma";
 import { ExpenseForm } from "@/components/fiscal/ExpenseForm";
 
-export default function NewExpensePage() {
+async function loadLeaseOptions() {
+  const leases = await prisma.businessPremisesLease.findMany({
+    where: { active: true },
+    include: { counterparty: true },
+    orderBy: { propertyAddress: "asc" },
+  });
+  return leases.map((l) => ({
+    id: l.id,
+    label: `${l.propertyAddress} · ${l.counterparty.name}`,
+    landlordName: l.counterparty.name,
+    landlordNif: l.counterparty.taxId,
+    withholdingStatus: l.withholdingStatus,
+    defaultWithholdingRate: l.defaultWithholdingRate,
+  }));
+}
+
+export default async function NewExpensePage() {
+  const leases = await loadLeaseOptions();
   return (
     <div className="space-y-6">
       <div>
@@ -15,7 +33,7 @@ export default function NewExpensePage() {
           Nuevo gasto
         </h1>
       </div>
-      <ExpenseForm />
+      <ExpenseForm leases={leases} />
     </div>
   );
 }

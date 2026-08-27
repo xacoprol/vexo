@@ -13,6 +13,8 @@ import { resolveFiscalNextStep } from "@/lib/fiscal-next-step";
 import { FiscalPeriodNav } from "@/components/fiscal/FiscalPeriodNav";
 import { FiscalNextStepCard } from "@/components/fiscal/FiscalNextStepCard";
 import { ModeloDraft } from "@/components/fiscal/ModeloDraft";
+import { FiscalObligationsPanel } from "@/components/fiscal/FiscalObligationsPanel";
+import { buildFiscalObligations } from "@/lib/fiscal-obligations";
 
 export default async function FiscalPage({
   searchParams,
@@ -33,6 +35,7 @@ export default async function FiscalPage({
     pendingPay,
     aeatOpenCount,
     booksForYear,
+    obligationsMap,
   ] = await Promise.all([
     buildFiscalPeriodSummary(year, q),
     prisma.companySettings.findFirst(),
@@ -46,6 +49,7 @@ export default async function FiscalPage({
       where: { year },
       select: { bookType: true, _count: { select: { lines: true } } },
     }),
+    buildFiscalObligations({ year, quarter: q }),
   ]);
   const regime = settings?.fiscalRegime ?? "130";
   const skip130 = regime === "131";
@@ -63,7 +67,7 @@ export default async function FiscalPage({
     presented303: Boolean(presented303),
     presented130: Boolean(presented130),
     has349Ops: draft349.hasOps,
-    incomplete349Nif: draft349.incompleteNif,
+    incomplete349Nif: draft349.incompleteVatId,
     presented349: Boolean(presented349),
     pendingNrcCount: pendingPay.length,
     aeatOpenCount,
@@ -108,6 +112,12 @@ export default async function FiscalPage({
           >
             Salud fiscal
           </Link>
+          <Link
+            href={`/fiscal/close?year=${year}&q=${quarter}`}
+            className="btn-secondary"
+          >
+            Cierre trimestre
+          </Link>
           <Link href="/fiscal/filings" className="btn-secondary">
             Presentados
           </Link>
@@ -115,6 +125,29 @@ export default async function FiscalPage({
       </div>
 
       <FiscalPeriodNav year={year} quarter={quarter} />
+
+      <FiscalObligationsPanel
+        year={year}
+        quarter={q}
+        quarterly={obligationsMap.obligations.filter(
+          (o) =>
+            o.period.quarter === q &&
+            (o.model === "130" ||
+              o.model === "303" ||
+              o.model === "111" ||
+              o.model === "115" ||
+              o.model === "349")
+        )}
+        annual={obligationsMap.obligations.filter(
+          (o) =>
+            o.period.quarter == null &&
+            (o.model === "180" ||
+              o.model === "190" ||
+              o.model === "347" ||
+              o.model === "390")
+        )}
+        completeness={obligationsMap.profileCompleteness}
+      />
 
       <FiscalNextStepCard step={nextStep} />
 

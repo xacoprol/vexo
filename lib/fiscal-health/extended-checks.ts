@@ -795,125 +795,13 @@ export function runRectificationCrossChecks(
   return { issues, checks };
 }
 
-export function runObligationChecks(
-  ctx: FiscalHealthContext,
-  allIssues: FiscalHealthIssue[] = []
-): {
-  issues: FiscalHealthIssue[];
-  checks: FiscalHealthCheck[];
-  modelStatuses: FiscalHealthModelStatus[];
-} {
-  const issues: FiscalHealthIssue[] = [];
-  const checks: FiscalHealthCheck[] = [];
-  const modelStatuses: FiscalHealthModelStatus[] = [];
-  let ok = true;
+export { runObligationChecks } from "@/lib/fiscal-health/obligation-checks";
 
-  function statusFor(
-    model: FiscalHealthModelStatus["model"],
-    quarter: FiscalQuarter | null
-  ): FiscalHealthModelStatus["status"] {
-    const relevant = allIssues.filter(
-      (i) =>
-        (i.model === model || i.relatedModels?.includes(model as "303")) &&
-        (quarter == null || i.quarter == null || i.quarter === quarter)
-    );
-    if (relevant.some((i) => i.blocksFiling)) return "NOT_READY";
-    if (relevant.some((i) => i.severity === "ERROR" || i.severity === "CRITICAL"))
-      return "NOT_READY";
-    if (relevant.some((i) => i.severity === "WARNING" || i.severity === "INFO"))
-      return "READY_WITH_WARNINGS";
-    return "READY";
-  }
-
-  for (const q of quartersToAudit(ctx)) {
-    const presented130 = ctx.filingsYear.some(
-      (f) => f.modelType === "130" && f.quarter === q
-    );
-    const presented303 = ctx.filingsYear.some(
-      (f) => f.modelType === "303" && f.quarter === q
-    );
-    const m130 = ctx.chain130?.[q];
-    const obligation130 =
-      m130?.filingObligation?.status ??
-      (ctx.settings?.fiscalRegime === "131" ? "UNKNOWN" : "REQUIRED");
-
-    modelStatuses.push({
-      model: "130",
-      label: `130 ${q}T`,
-      status: statusFor("130", q),
-      presented: presented130,
-      obligation:
-        obligation130 === "NOT_REQUIRED"
-          ? "NOT_APPLICABLE"
-          : obligation130 === "UNKNOWN"
-            ? "UNKNOWN"
-            : "REQUIRED",
-    });
-
-    if (obligation130 === "UNKNOWN" && ctx.settings?.fiscalRegime !== "131") {
-      ok = false;
-      issues.push(
-        createHealthIssue({
-          code: "OBLIGATION_130_UNKNOWN",
-          severity: "WARNING",
-          blocksFiling: false,
-          title: `130 ${q}T: obligación desconocida`,
-          description: "Completa datos de actividad en Ajustes.",
-          model: "130",
-          year: ctx.year,
-          quarter: q,
-        })
-      );
-    }
-
-    modelStatuses.push({
-      model: "303",
-      label: `303 ${q}T`,
-      status: statusFor("303", q),
-      presented: presented303,
-      obligation: "REQUIRED",
-    });
-
-    const d349 = ctx.draft349All.find((d) => d.quarter === q);
-    modelStatuses.push({
-      model: "349",
-      label: `349 ${q}T`,
-      status: statusFor("349", q),
-      presented: ctx.filingsYear.some(
-        (f) => f.modelType === "349" && f.quarter === q
-      ),
-      obligation: d349?.hasOps ? "REQUIRED" : "NOT_APPLICABLE",
-    });
-  }
-
-  if (ctx.mode === "annual") {
-    const ob390 = ctx.model390?.filingObligation.status ?? "UNKNOWN";
-    modelStatuses.push({
-      model: "390",
-      label: "390",
-      status: statusFor("390", null),
-      presented: Boolean(ctx.presented390),
-      obligation: ob390,
-    });
-    modelStatuses.push({
-      model: "347",
-      label: "347",
-      status: statusFor("347", null),
-      presented: Boolean(ctx.presented347),
-      obligation: "REQUIRED",
-    });
-  }
-
-  checks.push(
-    check(
-      "obligations_coherent",
-      "Obligaciones fiscales sin incoherencias detectadas",
-      ok,
-      "HEALTH"
-    )
+/** @deprecated Use runObligationChecks from obligation-checks (buildFiscalObligations). */
+export function runObligationChecksLegacyDeprecated(): never {
+  throw new Error(
+    "runObligationChecks paralelo deprecado — usa lib/fiscal-health/obligation-checks"
   );
-
-  return { issues, checks, modelStatuses };
 }
 
 export function hasPostFilingRectification(

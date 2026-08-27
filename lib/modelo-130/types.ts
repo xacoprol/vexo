@@ -52,6 +52,8 @@ export type Model130Config = {
   fiscalRegime: "130" | "131";
   activityKind130: "UNKNOWN" | "PROFESSIONAL" | "BUSINESS";
   priorYearWithholdingPct130: number | null;
+  /** Año de inicio de actividad (null = desconocido). */
+  activityStartYear?: number | null;
   hasCashAccountingInvoices: boolean;
   paymentRate?: number;
   /** Obligación de presentar (independiente del cálculo). */

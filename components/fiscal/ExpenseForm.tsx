@@ -26,9 +26,29 @@ import { consumeExpenseDraft } from "@/lib/expense-draft-storage";
 import { ButtonPending } from "@/components/ui/ButtonPending";
 import { ActivityFitAlert } from "@/components/fiscal/ActivityFitAlert";
 import { fiscalDocumentHref } from "@/lib/fiscal-blob";
+import { expectedWithholdingAmount } from "@/lib/fiscal-withholding";
+
+type LeaseOption = {
+  id: string;
+  label: string;
+  landlordName: string;
+  landlordNif: string;
+  withholdingStatus: string;
+  defaultWithholdingRate: number | null;
+};
+
+type PracticedWithholdingDraft = {
+  baseAmount: number;
+  rate: number;
+  withholdingAmount: number;
+  paymentDate: string | null;
+};
 
 type Props = {
   expense?: Expense;
+  practicedWithholding?: PracticedWithholdingDraft | null;
+  rentWithholding?: PracticedWithholdingDraft | null;
+  leases?: LeaseOption[];
   defaultUsefulLifeYears?: number;
 };
 
@@ -39,6 +59,9 @@ function toDateInputValue(d: Date | string) {
 
 export function ExpenseForm({
   expense,
+  practicedWithholding = null,
+  rentWithholding = null,
+  leases = [],
   defaultUsefulLifeYears = 4,
 }: Props) {
   const action = expense
@@ -111,6 +134,31 @@ export function ExpenseForm({
   const [importDuaDocumentId, setImportDuaDocumentId] = useState<string | null>(
     expense?.importDuaDocumentId ?? null
   );
+  const [practicedWithholdingStatus, setPracticedWithholdingStatus] = useState(
+    expense?.practicedWithholdingStatus ?? "UNKNOWN"
+  );
+  const initialWh = rentWithholding ?? practicedWithholding;
+  const [leaseId, setLeaseId] = useState(expense?.leaseId ?? "");
+  const selectedLease = useMemo(
+    () => leases.find((l) => l.id === leaseId) ?? null,
+    [leases, leaseId]
+  );
+  const rentWithholdingYes = selectedLease?.withholdingStatus === "YES";
+  const [withholdingBase, setWithholdingBase] = useState(
+    initialWh?.baseAmount ?? (expense ? Number(expense.subtotal) : 0)
+  );
+  const [withholdingRate, setWithholdingRate] = useState(
+    initialWh?.rate ??
+      (selectedLease?.defaultWithholdingRate != null
+        ? selectedLease.defaultWithholdingRate
+        : 15)
+  );
+  const [withholdingAmountManual, setWithholdingAmountManual] = useState<
+    number | null
+  >(initialWh?.withholdingAmount ?? null);
+  const [withholdingPaymentDate, setWithholdingPaymentDate] = useState(
+    initialWh?.paymentDate ?? ""
+  );
 
   const intracom = isExpenseIntracom(vatOperationType);
   const importGoods = isExpenseImportGoods(vatOperationType);
@@ -130,6 +178,35 @@ export function ExpenseForm({
       Math.round((reverseCharge ? subtotal : subtotal + vatAmount) * 100) / 100,
     [subtotal, vatAmount, reverseCharge]
   );
+  const computedWithholding = useMemo(
+    () => expectedWithholdingAmount(withholdingBase, withholdingRate),
+    [withholdingBase, withholdingRate]
+  );
+  const withholdingAmount =
+    withholdingAmountManual != null
+      ? withholdingAmountManual
+      : computedWithholding;
+  const amountPayable = useMemo(
+    () =>
+      practicedWithholdingStatus === "YES" || rentWithholdingYes
+        ? Math.round((total - withholdingAmount) * 100) / 100
+        : total,
+    [practicedWithholdingStatus, rentWithholdingYes, total, withholdingAmount]
+  );
+
+  function applyLeaseSelection(nextId: string) {
+    setLeaseId(nextId);
+    const lease = leases.find((l) => l.id === nextId);
+    if (!lease) return;
+    setSupplierName(lease.landlordName);
+    setSupplierNif(lease.landlordNif);
+    if (lease.withholdingStatus === "YES") {
+      setPracticedWithholdingStatus("NO");
+      setWithholdingBase(subtotal);
+      setWithholdingRate(lease.defaultWithholdingRate ?? 19);
+      setWithholdingAmountManual(null);
+    }
+  }
 
   useEffect(() => {
     if (reverseCharge && vatRate <= 0) setVatRate(21);
@@ -144,6 +221,8 @@ export function ExpenseForm({
     setInvoiceNumber(draft.invoiceNumber ?? "");
     setDescription(draft.description ?? "");
     setSubtotal(draft.subtotal);
+    setWithholdingBase(draft.subtotal);
+    setWithholdingAmountManual(null);
     const op = parseExpenseVatOperationType(draft.vatOperationType);
     setVatOperationType(op);
     setVatRate(
@@ -594,9 +673,9 @@ export function ExpenseForm({
           <label className="label" htmlFor="total">
             {reverseCharge
               ? importService
-                ? "Lo que pagas al proveedor (USD→€)"
-                : "Lo que pagas al proveedor"
-              : "Total"}
+                ? "Importe bruto documento (USD→€)"
+                : "Importe bruto documento (pagas al proveedor)"
+              : "Total bruto documento"}
           </label>
           <input
             id="total"
@@ -607,12 +686,278 @@ export function ExpenseForm({
             value={total}
             readOnly
           />
+          <p className="mt-1 text-xs text-ink-muted">
+            Bruto = base + IVA (o solo base en reverse charge). No incluye el
+            efecto de la retención practicada.
+          </p>
         </div>
+
+        <div className="space-y-3 rounded-lg border border-line bg-line/15 p-4">
+          <div>
+            <label className="label" htmlFor="leaseId">
+              Vincular a local arrendado
+            </label>
+            <select
+              id="leaseId"
+              name="leaseId"
+              className="input"
+              value={leaseId}
+              onChange={(e) => applyLeaseSelection(e.target.value)}
+            >
+              <option value="">— No es alquiler de local —</option>
+              {leases.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.label}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-ink-muted">
+              No se infiere por categoría. Al seleccionar un local se prellenan
+              arrendador / NIF / retención declarada del local (revisables).
+            </p>
+            {selectedLease?.withholdingStatus === "UNKNOWN" ? (
+              <p className="mt-2 text-xs text-amber-800">
+                Este local tiene retención «No lo sé». Revisa el local en{" "}
+                <Link href="/fiscal/leases" className="underline">
+                  Alquileres
+                </Link>
+                .
+              </p>
+            ) : null}
+            {selectedLease?.withholdingStatus === "NO" ? (
+              <p className="mt-2 text-xs text-ink-muted">
+                Local declarado sin retención: no se creará FiscalWithholding
+                RENT.
+              </p>
+            ) : null}
+          </div>
+
+          {rentWithholdingYes ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <p className="sm:col-span-2 text-xs text-ink-muted">
+                Retención de alquiler (PRACTICED / RENT) según el local. Editable
+                por documento.
+              </p>
+              <div>
+                <label className="label" htmlFor="withholdingBase">
+                  Base sujeta a retención
+                </label>
+                <input
+                  id="withholdingBase"
+                  name="withholdingBase"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  className="input font-mono"
+                  value={withholdingBase}
+                  onChange={(e) => {
+                    setWithholdingBase(parseFloat(e.target.value) || 0);
+                    setWithholdingAmountManual(null);
+                  }}
+                />
+              </div>
+              <div>
+                <label className="label" htmlFor="withholdingRate">
+                  Tipo de retención %
+                </label>
+                <input
+                  id="withholdingRate"
+                  name="withholdingRate"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  className="input font-mono"
+                  value={withholdingRate}
+                  onChange={(e) => {
+                    setWithholdingRate(parseFloat(e.target.value) || 0);
+                    setWithholdingAmountManual(null);
+                  }}
+                />
+              </div>
+              <div>
+                <label className="label" htmlFor="withholdingAmount">
+                  Retención
+                </label>
+                <input
+                  id="withholdingAmount"
+                  name="withholdingAmount"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  className="input font-mono"
+                  value={withholdingAmount}
+                  onChange={(e) =>
+                    setWithholdingAmountManual(parseFloat(e.target.value) || 0)
+                  }
+                />
+              </div>
+              <div>
+                <label className="label" htmlFor="amountPayableRent">
+                  Importe neto a pagar
+                </label>
+                <input
+                  id="amountPayableRent"
+                  type="number"
+                  step="0.01"
+                  className="input font-mono"
+                  value={amountPayable}
+                  readOnly
+                />
+              </div>
+              <div>
+                <label className="label" htmlFor="withholdingPaymentDate">
+                  Fecha de pago (opcional)
+                </label>
+                <DateInput
+                  id="withholdingPaymentDate"
+                  name="withholdingPaymentDate"
+                  value={withholdingPaymentDate}
+                  onChange={(e) => setWithholdingPaymentDate(e.target.value)}
+                />
+              </div>
+            </div>
+          ) : null}
+        </div>
+
+        {!leaseId ? (
+        <div className="space-y-3 rounded-lg border border-line bg-line/15 p-4">
+          <div>
+            <span className="label">
+              ¿Esta factura está sujeta a retención IRPF practicada?
+            </span>
+            <p className="mt-1 text-xs text-ink-muted">
+              Esta es una retención que tú practicas al proveedor y que
+              posteriormente puede formar parte del Modelo 111. No es el
+              porcentaje de gasto deducible.
+            </p>
+            <div className="mt-2 flex flex-wrap gap-4 text-sm">
+              {(
+                [
+                  ["NO", "No"],
+                  ["YES", "Sí"],
+                  ["UNKNOWN", "No lo sé"],
+                ] as const
+              ).map(([value, label]) => (
+                <label key={value} className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="practicedWithholdingStatus"
+                    value={value}
+                    checked={practicedWithholdingStatus === value}
+                    onChange={() => {
+                      setPracticedWithholdingStatus(value);
+                      if (value === "YES") {
+                        setWithholdingBase(subtotal);
+                        setWithholdingAmountManual(null);
+                      }
+                    }}
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+            {practicedWithholdingStatus === "UNKNOWN" ? (
+              <p className="mt-2 text-xs text-amber-800">
+                Sin confirmar: revisa si el profesional está sujeto a retención.
+                No se creará obligación 111 automáticamente.
+              </p>
+            ) : null}
+          </div>
+
+          {practicedWithholdingStatus === "YES" ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label className="label" htmlFor="withholdingBase">
+                  Base sujeta a retención
+                </label>
+                <input
+                  id="withholdingBase"
+                  name="withholdingBase"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  className="input font-mono"
+                  value={withholdingBase}
+                  onChange={(e) => {
+                    setWithholdingBase(parseFloat(e.target.value) || 0);
+                    setWithholdingAmountManual(null);
+                  }}
+                />
+              </div>
+              <div>
+                <label className="label" htmlFor="withholdingRate">
+                  Tipo de retención %
+                </label>
+                <input
+                  id="withholdingRate"
+                  name="withholdingRate"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  className="input font-mono"
+                  value={withholdingRate}
+                  onChange={(e) => {
+                    setWithholdingRate(parseFloat(e.target.value) || 0);
+                    setWithholdingAmountManual(null);
+                  }}
+                />
+              </div>
+              <div>
+                <label className="label" htmlFor="withholdingAmount">
+                  Retención
+                </label>
+                <input
+                  id="withholdingAmount"
+                  name="withholdingAmount"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  className="input font-mono"
+                  value={withholdingAmount}
+                  onChange={(e) =>
+                    setWithholdingAmountManual(parseFloat(e.target.value) || 0)
+                  }
+                />
+              </div>
+              <div>
+                <label className="label" htmlFor="amountPayableDisplay">
+                  Importe neto a pagar
+                </label>
+                <input
+                  id="amountPayableDisplay"
+                  type="number"
+                  step="0.01"
+                  className="input font-mono"
+                  value={amountPayable}
+                  readOnly
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="label" htmlFor="withholdingPaymentDate">
+                  Fecha de pago (opcional)
+                </label>
+                <DateInput
+                  id="withholdingPaymentDate"
+                  name="withholdingPaymentDate"
+                  value={withholdingPaymentDate}
+                  onChange={(e) => setWithholdingPaymentDate(e.target.value)}
+                />
+                <p className="mt-1 text-xs text-ink-muted">
+                  La fecha de factura se usa como referencia de periodo; la
+                  regla legal del Modelo 111 se fijará más adelante.
+                </p>
+              </div>
+            </div>
+          ) : null}
+        </div>
+        ) : (
+          <input type="hidden" name="practicedWithholdingStatus" value="NO" />
+        )}
 
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <label className="label" htmlFor="irpfDeductiblePct">
-              % deducible IRPF (130)
+              % gasto computable IRPF (130)
             </label>
             <input
               id="irpfDeductiblePct"

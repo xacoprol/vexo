@@ -53,12 +53,19 @@ export async function buildFiscalHealthCheck(
 }
 
 function issueAffectsModel(
-  issue: { model?: string; relatedModels?: string[] },
+  issue: { model?: string; relatedModels?: string[]; code?: string },
   modelType: FiscalModelType
 ): boolean {
-  if (issue.model === modelType || issue.model === "HEALTH") return true;
+  if (issue.model === modelType) return true;
   if (issue.relatedModels?.includes(modelType)) return true;
-  if (!issue.model && issue.relatedModels == null) return true;
+  // HEALTH genérico: solo incompleción de datos del emisor afecta a todos
+  if (issue.model === "HEALTH") {
+    return (
+      issue.code === "FISCAL_DATA_INCOMPLETE" ||
+      issue.code === "CENSUS_PROFILE_INCOMPLETE"
+    );
+  }
+  if (!issue.model && issue.relatedModels == null) return false;
   return false;
 }
 
@@ -70,6 +77,13 @@ export function evaluateFilingGateFromHealth(
     issueAffectsModel(i, modelType)
   );
 
+  const incompleteForModel = health.issues.filter(
+    (i) =>
+      (i.code === "FISCAL_DATA_INCOMPLETE" ||
+        i.code === "CENSUS_PROFILE_INCOMPLETE") &&
+      issueAffectsModel(i, modelType)
+  );
+
   const warnings = health.issues.filter(
     (i) =>
       !i.blocksFiling &&
@@ -77,14 +91,17 @@ export function evaluateFilingGateFromHealth(
       issueAffectsModel(i, modelType)
   );
 
-  const allowed =
-    blockers.length === 0 &&
-    health.status !== "NOT_READY" &&
-    health.status !== "INCOMPLETE";
+  // Aislamiento por modelo: blockers + incompleción relevante (no status global)
+  const allowed = blockers.length === 0 && incompleteForModel.length === 0;
 
   return {
     allowed,
-    status: health.status,
+    status:
+      blockers.length > 0
+        ? "NOT_READY"
+        : incompleteForModel.length > 0
+          ? "INCOMPLETE"
+          : health.status,
     blockers,
     warnings,
   };
@@ -95,7 +112,7 @@ export async function canFileFiscalModel(opts: {
   year: number;
   quarter: number | null;
 }): Promise<FiscalFilingGateResult> {
-  const annualModels: FiscalModelType[] = ["347", "390"];
+  const annualModels: FiscalModelType[] = ["347", "390", "180", "190"];
   const health = await buildFiscalHealthCheck(
     annualModels.includes(opts.modelType)
       ? { year: opts.year }

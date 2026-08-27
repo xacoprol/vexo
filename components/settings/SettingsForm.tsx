@@ -481,7 +481,11 @@ export function SettingsForm({ settings, invoiceSeries, quoteSeries }: Props) {
               </select>
             </div>
             <div>
-              <label className="label" htmlFor="activityKind130">
+              <label
+                className="label"
+                htmlFor="activityKind130"
+                id="activity-kind-130"
+              >
                 Tipo de actividad (obligación presentar 130)
               </label>
               <select
@@ -512,6 +516,242 @@ export function SettingsForm({ settings, invoiceSeries, quoteSeries }: Props) {
                 }
                 placeholder="p. ej. 85"
               />
+            </div>
+            <div>
+              <label className="label" htmlFor="activityStartYear">
+                Año de inicio de actividad
+              </label>
+              <input
+                id="activityStartYear"
+                name="activityStartYear"
+                type="number"
+                min={1990}
+                max={2100}
+                className="input max-w-xs font-mono"
+                defaultValue={
+                  settings.activityStartYear != null
+                    ? String(settings.activityStartYear)
+                    : ""
+                }
+                placeholder="p. ej. 2024"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <span className="label">
+                ¿Practicas retenciones a profesionales?
+              </span>
+              <p className="mt-1 text-xs text-ink-muted">
+                Hecho operativo (no se infiere de gastos). Relacionado con el
+                Modelo 111.
+              </p>
+              <div className="mt-2 flex flex-wrap gap-4">
+                {(
+                  [
+                    ["YES", "Sí"],
+                    ["NO", "No"],
+                    ["UNKNOWN", "No lo sé"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <label key={value} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="radio"
+                      name="paysProfessionalsSubjectToWithholding"
+                      value={value}
+                      defaultChecked={
+                        (settings.paysProfessionalsSubjectToWithholding ??
+                          "UNKNOWN") === value
+                      }
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div>
+              <span className="label">Periodicidad Modelo 111</span>
+              <p className="mt-1 text-xs text-ink-muted">
+                Autónomo PF ordinario: trimestral. No infiere gran empresa.
+              </p>
+              <div className="mt-2 flex flex-wrap gap-4">
+                {(
+                  [
+                    ["QUARTERLY", "Trimestral"],
+                    ["MONTHLY", "Mensual"],
+                    ["UNKNOWN", "No lo sé"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <label key={value} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="radio"
+                      name="model111Periodicity"
+                      value={value}
+                      defaultChecked={
+                        ((settings as { model111Periodicity?: string })
+                          .model111Periodicity ?? "UNKNOWN") === value
+                      }
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div>
+              <span className="label">Periodicidad Modelo 115</span>
+              <p className="mt-1 text-xs text-ink-muted">
+                Autónomo PF ordinario: trimestral. Mensual solo si lo declares
+                (p. ej. gran empresa).
+              </p>
+              <div className="mt-2 flex flex-wrap gap-4">
+                {(
+                  [
+                    ["QUARTERLY", "Trimestral"],
+                    ["MONTHLY", "Mensual"],
+                    ["UNKNOWN", "No lo sé"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <label key={value} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="radio"
+                      name="model115Periodicity"
+                      value={value}
+                      defaultChecked={
+                        ((settings as { model115Periodicity?: string })
+                          .model115Periodicity ?? "UNKNOWN") === value
+                      }
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="card-panel space-y-4 p-6" id="census-profile">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-muted">
+            Perfil censal
+          </h2>
+          <p className="max-w-2xl text-sm text-ink-muted">
+            ¿Qué obligaciones constan en tu situación censal (036/037)? Esto no
+            decide automáticamente si debes presentar: VEXO lo compara con tus
+            operaciones y resolvers. No se actualiza solo al detectar gastos.
+            Los valores «Sin configurar» (UNKNOWN) pueden dejar el cierre en
+            NOT_READY — especialmente Modelo 303 + periodicidad IVA.
+          </p>
+          <p className="text-xs text-ink-muted">
+            Fuente:{" "}
+            {(settings.censusSource ?? "UNKNOWN") === "MANUAL"
+              ? "manual"
+              : (settings.censusSource ?? "UNKNOWN") === "OCR_036"
+                ? "OCR 036"
+                : "desconocida"}
+            {settings.censusLastUpdatedAt
+              ? ` · Actualizado el ${new Date(
+                  settings.censusLastUpdatedAt
+                ).toLocaleDateString("es-ES")}`
+              : ""}
+          </p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {(
+              [
+                ["censusModel130", "Modelo 130", settings.censusModel130],
+                ["censusModel303", "Modelo 303", settings.censusModel303],
+                ["censusModel111", "Modelo 111", settings.censusModel111],
+                ["censusModel115", "Modelo 115", settings.censusModel115],
+                ["censusModel349", "Modelo 349", settings.censusModel349],
+                ["censusModel347", "Modelo 347", settings.censusModel347],
+                ["censusModel390", "Modelo 390", settings.censusModel390],
+                ["censusModel180", "Modelo 180", settings.censusModel180],
+                ["censusModel190", "Modelo 190", settings.censusModel190],
+              ] as const
+            ).map(([name, label, current]) => (
+              <div
+                key={name}
+                id={
+                  name === "censusModel303"
+                    ? "census-303"
+                    : name === "censusModel111"
+                      ? "census-111"
+                      : name === "censusModel115"
+                        ? "census-115"
+                        : name === "censusModel130"
+                          ? "census-130"
+                          : name === "censusModel349"
+                            ? "census-349"
+                            : undefined
+                }
+              >
+                <span className="label">{label}</span>
+                <p className="mt-0.5 text-xs text-ink-muted">
+                  ¿Consta esta obligación en tu censo?
+                </p>
+                <div className="mt-2 flex flex-wrap gap-3 text-sm">
+                  {(
+                    [
+                      ["YES", "Sí"],
+                      ["NO", "No"],
+                      ["UNKNOWN", "Sin configurar"],
+                    ] as const
+                  ).map(([value, optLabel]) => (
+                    <label key={value} className="flex items-center gap-1.5">
+                      <input
+                        type="radio"
+                        name={name}
+                        value={value}
+                        defaultChecked={(current ?? "UNKNOWN") === value}
+                      />
+                      {optLabel}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="border-t border-line pt-4">
+            <h3 className="text-sm font-medium text-ink">Hechos operativos</h3>
+            <div className="mt-3 grid gap-4 sm:grid-cols-2">
+              {(
+                [
+                  [
+                    "hasEmployees",
+                    "¿Tienes trabajadores?",
+                    settings.hasEmployees,
+                  ],
+                  [
+                    "rentsBusinessPremises",
+                    "¿Alquilas un local para tu actividad?",
+                    settings.rentsBusinessPremises,
+                  ],
+                  [
+                    "businessRentSubjectToWithholding",
+                    "¿El alquiler está sujeto a retención?",
+                    settings.businessRentSubjectToWithholding,
+                  ],
+                ] as const
+              ).map(([name, label, current]) => (
+                <div key={name} className="sm:col-span-2">
+                  <span className="label">{label}</span>
+                  <div className="mt-2 flex flex-wrap gap-4 text-sm">
+                    {(
+                      [
+                        ["YES", "Sí"],
+                        ["NO", "No"],
+                        ["UNKNOWN", "Sin configurar"],
+                      ] as const
+                    ).map(([value, optLabel]) => (
+                      <label key={value} className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name={name}
+                          value={value}
+                          defaultChecked={(current ?? "UNKNOWN") === value}
+                        />
+                        {optLabel}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </section>
@@ -550,7 +790,7 @@ export function SettingsForm({ settings, invoiceSeries, quoteSeries }: Props) {
               </div>
             </div>
             <div className="sm:col-span-2">
-              <label className="label" htmlFor="vatPeriodicity">
+              <label className="label" htmlFor="vatPeriodicity" id="vat-periodicity">
                 Periodicidad habitual del IVA
               </label>
               <select
@@ -561,13 +801,12 @@ export function SettingsForm({ settings, invoiceSeries, quoteSeries }: Props) {
               >
                 <option value="QUARTERLY">Trimestral</option>
                 <option value="MONTHLY">Mensual</option>
-                <option value="UNKNOWN">No lo sé</option>
+                <option value="UNKNOWN">Sin configurar</option>
               </select>
+              <p className="mt-1 text-xs text-ink-muted">
+                Junto con el censo 303, evita el blocker OBLIGATION_UNKNOWN.
+              </p>
             </div>
-            <div className="sm:col-span-2">
-              <span className="label">
-                ¿Tributas exclusivamente en territorio común?
-              </span>
               <div className="mt-2 flex flex-wrap gap-4">
                 {(
                   [
@@ -614,7 +853,7 @@ export function SettingsForm({ settings, invoiceSeries, quoteSeries }: Props) {
                 <option value="SIMPLIFIED_AND_URBAN_RENTAL">
                   Régimen simplificado y arrendamiento urbano
                 </option>
-                <option value="UNKNOWN">No lo sé</option>
+                <option value="UNKNOWN">Sin configurar</option>
               </select>
               <p className="mt-1 text-xs text-ink-muted">
                 Solo afecta al supuesto de exoneración trimestral. VEXO no deduce

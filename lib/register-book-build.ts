@@ -170,22 +170,56 @@ async function buildExpenseLines(
     orderBy: { issueDate: "asc" },
   });
 
-  return expenses.map((e, i) => ({
-    sortOrder: i + 1,
-    reference: null,
-    invoiceNumber: e.invoiceNumber,
-    issueDate: e.issueDate,
-    concept:
-      e.description?.trim() ||
-      `${e.category}${e.vatOperationType === "INTRACOMUNITARIA" ? " · Intracom" : e.vatOperationType === "SERVICIO_EXTRACOMUNITARIO" ? " · Extracom" : ""}`,
-    nif: e.supplierNif,
-    counterparty: e.supplierName,
-    base: round2(num(e.subtotal)),
-    vatRate: e.vatRate,
-    vatAmount: round2(num(e.vatAmount)),
-    withholding: 0,
-    total: round2(num(e.total)),
-  }));
+  const expenseIds = expenses.map((e) => e.id);
+  const withholdings =
+    expenseIds.length === 0
+      ? []
+      : await prisma.fiscalWithholding.findMany({
+          where: {
+            sourceType: "EXPENSE",
+            sourceId: { in: expenseIds },
+            direction: "PRACTICED",
+            status: "ACTIVE",
+          },
+          select: {
+            sourceId: true,
+            kind: true,
+            withholdingAmount: true,
+          },
+        });
+  const practicedByExpense = new Map<string, number>();
+  for (const w of withholdings) {
+    practicedByExpense.set(
+      w.sourceId,
+      round2(
+        (practicedByExpense.get(w.sourceId) ?? 0) + num(w.withholdingAmount)
+      )
+    );
+  }
+
+  return expenses.map((e, i) => {
+    const gross = round2(num(e.total));
+    // GASTOS: columna «Retención» = retención PRACTICED (profesional o alquiler).
+    const practiced = practicedByExpense.get(e.id) ?? 0;
+    const leaseHint = e.leaseId ? " · Local arrendado" : "";
+    return {
+      sortOrder: i + 1,
+      reference: null,
+      invoiceNumber: e.invoiceNumber,
+      issueDate: e.issueDate,
+      concept:
+        e.description?.trim() ||
+        `${e.category}${e.vatOperationType === "INTRACOMUNITARIA" ? " · Intracom" : e.vatOperationType === "SERVICIO_EXTRACOMUNITARIO" ? " · Extracom" : ""}${practiced > 0 ? " · Ret. practicada" : ""}${leaseHint}`,
+      nif: e.supplierNif,
+      counterparty: e.supplierName,
+      base: round2(num(e.subtotal)),
+      vatRate: e.vatRate,
+      vatAmount: round2(num(e.vatAmount)),
+      withholding: practiced,
+      // Total Fra. = importe neto pagadero cuando hay retención practicada
+      total: round2(gross - practiced),
+    };
+  });
 }
 
 async function buildAssetLines(year: number): Promise<ParsedRegisterBookLine[]> {

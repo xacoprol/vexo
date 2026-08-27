@@ -3,7 +3,17 @@
  */
 import { geminiConfigured } from "@/lib/gemini-expense";
 
-export type FiscalModelType = "303" | "130" | "390" | "347" | "349" | "036";
+export type FiscalModelType =
+  | "303"
+  | "130"
+  | "390"
+  | "347"
+  | "349"
+  | "036"
+  | "111"
+  | "115"
+  | "180"
+  | "190";
 
 export const FISCAL_MODEL_TYPES: FiscalModelType[] = [
   "303",
@@ -12,11 +22,21 @@ export const FISCAL_MODEL_TYPES: FiscalModelType[] = [
   "347",
   "349",
   "036",
+  "111",
+  "115",
+  "180",
+  "190",
 ];
 
 /** Modelos anuales o censales (sin trimestre). */
 export function isAnnualOrCensusModel(modelType: FiscalModelType): boolean {
-  return modelType === "390" || modelType === "347" || modelType === "036";
+  return (
+    modelType === "390" ||
+    modelType === "347" ||
+    modelType === "036" ||
+    modelType === "180" ||
+    modelType === "190"
+  );
 }
 
 export type FilingBox = {

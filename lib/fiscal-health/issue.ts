@@ -47,22 +47,36 @@ export function resolveHealthStatus(issues: FiscalHealthIssue[]): {
   blockers: FiscalHealthIssue[];
 } {
   const blockers = issues.filter((i) => i.blocksFiling);
-  const hasCriticalOrError = issues.some(
-    (i) => i.severity === "CRITICAL" || i.severity === "ERROR"
+  /** ERROR que no bloquea presentación → no fuerza NOT_READY (avisos). */
+  const blockingErrors = issues.filter(
+    (i) =>
+      i.severity === "ERROR" &&
+      (i.blocksFiling ||
+        i.code.includes("MISSING") ||
+        i.code.includes("INCOMPLETE") ||
+        i.code.startsWith("MODEL303_") ||
+        i.code.includes("DOUBLE_COUNT") ||
+        i.code.includes("EU_OPERATION_MISSING"))
   );
+  const hasCritical = issues.some((i) => i.severity === "CRITICAL");
   const hasIncomplete = issues.some((i) => i.code === "FISCAL_DATA_INCOMPLETE");
-  const hasWarnings = issues.some((i) => i.severity === "WARNING");
+  const hasWarnings = issues.some(
+    (i) =>
+      i.severity === "WARNING" ||
+      i.severity === "INFO" ||
+      (i.severity === "ERROR" && !blockingErrors.includes(i) && !i.blocksFiling)
+  );
 
-  if (blockers.length > 0 || issues.some((i) => i.severity === "CRITICAL")) {
+  if (blockers.length > 0 || hasCritical) {
     return { status: "NOT_READY", blockers };
   }
   if (hasIncomplete) {
     return { status: "INCOMPLETE", blockers };
   }
-  if (hasCriticalOrError) {
-    return { status: "NOT_READY", blockers: issues.filter((i) => i.severity === "ERROR") };
+  if (blockingErrors.length > 0) {
+    return { status: "NOT_READY", blockers: blockingErrors };
   }
-  if (hasWarnings || issues.some((i) => i.severity === "INFO")) {
+  if (hasWarnings) {
     return { status: "READY_WITH_WARNINGS", blockers: [] };
   }
   return { status: "READY", blockers: [] };

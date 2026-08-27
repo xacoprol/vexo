@@ -24,7 +24,7 @@ function formatDateEs(d: Date | null): string {
   return `${dd}/${mm}/${yyyy}`;
 }
 
-const HEADERS = [
+const HEADERS_BASE = [
   "NºOrden",
   "N.Referencia",
   "Núm.Fact.",
@@ -35,9 +35,21 @@ const HEADERS = [
   "Base imponible",
   "%IVA",
   "Cuota",
-  "Retención",
-  "Total Fra.",
 ] as const;
+
+function withholdingHeader(bookType: RegisterBookType): string {
+  // Misma columna física; semántica distinta por libro:
+  // INGRESOS = retención SOPORTADA (cliente me retiene)
+  // GASTOS = retención PRACTICADA (yo retengo al proveedor)
+  if (bookType === "INGRESOS") return "Retención soportada";
+  if (bookType === "GASTOS") return "Retención practicada";
+  return "Retención";
+}
+
+function totalHeader(bookType: RegisterBookType): string {
+  if (bookType === "GASTOS") return "Total / a pagar";
+  return "Total Fra.";
+}
 
 /**
  * Excel compatible con el formato de libros registro de gestoría.
@@ -57,7 +69,11 @@ export function buildRegisterBookExcelBuffer(opts: {
   const aoa: (string | number)[][] = [
     [title],
     [],
-    [...HEADERS],
+    [
+      ...HEADERS_BASE,
+      withholdingHeader(opts.bookType),
+      totalHeader(opts.bookType),
+    ],
   ];
 
   for (const l of opts.lines) {

@@ -27,4 +27,6 @@ export type {
   InvoiceHealthRow,
   ExpenseHealthRow,
   MarketplaceHealthRow,
+  PracticedWithholdingHealthRow,
 } from "@/lib/fiscal-health/context";
+export { runPracticedWithholdingChecks } from "@/lib/fiscal-health/withholding-checks";

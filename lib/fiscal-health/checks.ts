@@ -30,6 +30,12 @@ import {
   runRectificationCrossChecks,
   runObligationChecks,
 } from "@/lib/fiscal-health/extended-checks";
+import { runPracticedWithholdingChecks } from "@/lib/fiscal-health/withholding-checks";
+import { runLeaseHealthChecks } from "@/lib/fiscal-health/lease-checks";
+import { runModel111HealthChecks } from "@/lib/fiscal-health/model111-checks";
+import { runModel115HealthChecks } from "@/lib/fiscal-health/model115-checks";
+import { runModel180HealthChecks } from "@/lib/fiscal-health/model180-checks";
+import { runModel190HealthChecks } from "@/lib/fiscal-health/model190-checks";
 
 export type ChecksOutput = {
   issues: FiscalHealthIssue[];
@@ -72,15 +78,22 @@ function normalizeMotorWarning(
   year: number,
   quarter?: FiscalQuarter | null
 ): FiscalHealthIssue {
-  const blocks =
-    w.code.includes("MISSING") ||
-    w.code.includes("INCOMPLETE") ||
-    w.code.includes("REVIEW_REQUIRED") ||
-    w.code === "IMPORT_DOCUMENT_MISSING";
+  /**
+   * REVIEW_REQUIRED = revisión humana, no defecto de casilla.
+   * MISSING/INCOMPLETE de datos fiscales = ERROR (puede impedir liquidación correcta).
+   * Solo IMPORT_DOCUMENT_MISSING bloquea presentación vía blocksFiling.
+   */
+  const isImportDoc = w.code === "IMPORT_DOCUMENT_MISSING";
+  const isHardGap =
+    isImportDoc ||
+    (w.code.includes("MISSING") && !w.code.includes("REVIEW")) ||
+    (w.code.includes("INCOMPLETE") && !w.code.includes("REVIEW"));
+  const isReviewOnly = w.code.includes("REVIEW_REQUIRED");
+
   return createHealthIssue({
     code: `MOTOR_${w.code}`,
-    severity: blocks ? "ERROR" : "WARNING",
-    blocksFiling: blocks && w.code === "IMPORT_DOCUMENT_MISSING",
+    severity: isHardGap ? "ERROR" : "WARNING",
+    blocksFiling: isImportDoc,
     title: w.message.split(".")[0] ?? w.message,
     description: w.message,
     model: model as FiscalModelType,
@@ -90,6 +103,9 @@ function normalizeMotorWarning(
     originalCode: w.code,
     sourceModel: model,
     sourcePeriod: quarter ? `${quarter}T${year}` : `${year}`,
+    evidence: isReviewOnly
+      ? { classification: "REVIEW_ONLY", blocksClose: false }
+      : undefined,
   });
 }
 
@@ -134,22 +150,55 @@ export function runFiscalHealthChecks(ctx: FiscalHealthContext): ChecksOutput {
       );
     }
     if (!inv.verifactuHash && ctx.settings?.verifactuMode !== "NO_VERIFACTU") {
-      issuedProblems++;
-      issues.push(
-        createHealthIssue({
-          code: "ISSUED_MISSING_VERIFACTU_HASH",
-          severity: "CRITICAL",
-          blocksFiling: true,
-          title: `Factura ${inv.fullNumber} emitida sin sello Veri*Factu`,
-          description:
-            "Una factura ISSUED debe tener huella de registro fiscal cuando el modo Veri*Factu está activo.",
-          sourceType: "invoice",
-          sourceId: inv.id,
-          href: `/invoices/${inv.id}`,
-          year: ctx.year,
-          quarter: ctx.quarter,
-        })
-      );
+      const activation = ctx.verifactuActivationAt;
+      const isLegacyPreVerifactu =
+        activation != null && inv.createdAt.getTime() < activation.getTime();
+
+      if (isLegacyPreVerifactu) {
+        issues.push(
+          createHealthIssue({
+            code: "ISSUED_LEGACY_PRE_VERIFACTU_UNSEALED",
+            severity: "WARNING",
+            blocksFiling: false,
+            title: `Factura ${inv.fullNumber}: legacy previa a Veri*Factu (sin sello)`,
+            description:
+              "Emitida/creada en VEXO antes de la primera huella Veri*Factu del tenant. No se genera hash retrospectivo. Revisión manual si hace falta sellado.",
+            sourceType: "invoice",
+            sourceId: inv.id,
+            href: `/invoices/${inv.id}`,
+            year: ctx.year,
+            quarter: ctx.quarter,
+            evidence: {
+              classification: "LEGACY_PRE_VERIFACTU",
+              createdAt: inv.createdAt.toISOString(),
+              verifactuActivationAt: activation.toISOString(),
+            },
+          })
+        );
+      } else {
+        issuedProblems++;
+        issues.push(
+          createHealthIssue({
+            code: "ISSUED_MISSING_VERIFACTU_HASH",
+            severity: "CRITICAL",
+            blocksFiling: true,
+            title: `Factura ${inv.fullNumber} emitida sin sello Veri*Factu`,
+            description:
+              "Una factura ISSUED debe tener huella de registro fiscal cuando el modo Veri*Factu está activo.",
+            sourceType: "invoice",
+            sourceId: inv.id,
+            href: `/invoices/${inv.id}`,
+            year: ctx.year,
+            quarter: ctx.quarter,
+            evidence: {
+              classification:
+                activation == null
+                  ? "HASH_REQUIRED_MISSING"
+                  : "HASH_REQUIRED_MISSING",
+            },
+          })
+        );
+      }
     }
     if (inv.invoiceFiscalType === INVOICE_FISCAL_TYPE.RECTIFYING) {
       if (!inv.rectifiesInvoiceId) {
@@ -210,6 +259,53 @@ export function runFiscalHealthChecks(ctx: FiscalHealthContext): ChecksOutput {
       "HEALTH"
     )
   );
+
+  // ── UE nature review: category SOFTWARE + INTRACOMUNITARIA (bienes) ──
+  // No reclasifica; pide revisión manual. No usa nombre de proveedor.
+  for (const exp of ctx.expenses) {
+    const op = String(exp.vatOperationType ?? "").toUpperCase();
+    const cat = String(exp.category ?? "").toUpperCase();
+    if (op === "INTRACOMUNITARIA" && cat === "SOFTWARE") {
+      const hasDoc = Boolean(exp.documentId);
+      const desc = String(exp.description ?? "").toLowerCase();
+      const looksService =
+        /suscripci[oó]n|subscription|saas|software|app|plataforma|cloud/.test(
+          desc
+        ) || cat === "SOFTWARE";
+      const insufficient = !hasDoc;
+      issues.push(
+        createHealthIssue({
+          code: "EU_PURCHASE_NATURE_REVIEW",
+          severity: "WARNING",
+          blocksFiling: false,
+          title: insufficient
+            ? `Operación UE SOFTWARE sin documentación suficiente`
+            : `Gasto UE marcado como bienes pero categoría SOFTWARE`,
+          description: insufficient
+            ? "No hay documentación suficiente para determinar si esta operación es un bien o un servicio intracomunitario. Adjunta factura o clasifica manualmente."
+            : "vatOperationType=INTRACOMUNITARIA (349 clave A / AIB) con categoría SOFTWARE. Puede corresponder a SERVICIO_INTRACOMUNITARIO (clave I). Revisión manual — no se reclasifica automáticamente.",
+          model: "349",
+          relatedModels: ["303", "349"],
+          sourceType: "expense",
+          sourceId: exp.id,
+          href: `/fiscal/expenses/${exp.id}/edit`,
+          year: ctx.year,
+          quarter: ctx.quarter,
+          evidence: {
+            classification: insufficient
+              ? "INSUFFICIENT_DATA"
+              : looksService
+                ? "CONFIRMED_SERVICE_CANDIDATE"
+                : "MANUAL_REVIEW",
+            insufficient,
+            hasDocument: hasDoc,
+            vatOperationType: exp.vatOperationType,
+            category: exp.category,
+          },
+        })
+      );
+    }
+  }
 
   // ── 5. Numeración ──
   const issuedByNumber = new Map<string, typeof ctx.invoices>();
@@ -827,6 +923,12 @@ export function runFiscalHealthChecks(ctx: FiscalHealthContext): ChecksOutput {
     runExpenses303Checks(ctx),
     run303349TraceChecks(ctx),
     runRectificationCrossChecks(ctx),
+    runPracticedWithholdingChecks(ctx),
+    runLeaseHealthChecks(ctx),
+    runModel111HealthChecks(ctx),
+    runModel115HealthChecks(ctx),
+    runModel180HealthChecks(ctx),
+    runModel190HealthChecks(ctx),
   ]) {
     issues.push(...part.issues);
     checks.push(...part.checks);

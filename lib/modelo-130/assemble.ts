@@ -154,6 +154,7 @@ export function assembleModel130Chain(opts: {
     incomeWithWithholdingYtd: incomeWithWithholdingQ4,
     isProfessionalActivity: isProfessional,
     priorYearWithholdingPct: opts.config.priorYearWithholdingPct130 ?? null,
+    activityStartYear: opts.config.activityStartYear ?? null,
     currentYear: opts.year,
   });
 

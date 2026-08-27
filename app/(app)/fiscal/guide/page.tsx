@@ -80,7 +80,7 @@ export default async function FiscalGuidePage() {
     presented303: Boolean(presented303),
     presented130: Boolean(presented130),
     has349Ops: draft349.hasOps,
-    incomplete349Nif: draft349.incompleteNif,
+    incomplete349Nif: draft349.incompleteVatId,
     presented349: Boolean(presented349),
     pendingNrcCount: pendingPay.length,
     aeatOpenCount,
@@ -133,22 +133,22 @@ export default async function FiscalGuidePage() {
       href: `/fiscal/130?year=${year}&q=${quarter}`,
     },
     {
-      ok: draft349.incompleteNif
+      ok: draft349.incompleteVatId
         ? false
         : !draft349.hasOps || Boolean(presented349),
-      label: draft349.incompleteNif
+      label: draft349.incompleteVatId
         ? `349 ${quarter}T ${year}: faltan NIF-IVA`
         : draft349.hasOps
           ? `349 ${quarter}T ${year} presentado`
           : `349 ${quarter}T ${year} (no aplica)`,
-      hint: draft349.incompleteNif
+      hint: draft349.incompleteVatId
         ? `${draft349.skippedNoNif.adquisiciones + draft349.skippedNoNif.entregas} ops UE sin VAT ID — complétalas antes de presentar`
         : draft349.hasOps
           ? presented349
             ? `Guardado · ${formatCurrency(presented349.result)}`
             : `Hay ops UE · entregas ${formatCurrency(draft349.totalEntregas)} · adquis. ${formatCurrency(draft349.totalAdquisiciones)}`
           : "Sin ops intracomunitarias este trimestre",
-      href: draft349.incompleteNif
+      href: draft349.incompleteVatId
         ? "/fiscal/expenses?missingNif=1"
         : `/fiscal/349?year=${year}&q=${quarter}`,
     },
@@ -395,7 +395,7 @@ export default async function FiscalGuidePage() {
               349 · {quarter}T {year}
             </h2>
             <p className="form-section-hint">
-              {draft349.incompleteNif
+              {draft349.incompleteVatId
                 ? "Hay operaciones UE sin NIF-IVA: complétalas antes de presentar."
                 : "Operadores a declarar en la sede AEAT."}
             </p>

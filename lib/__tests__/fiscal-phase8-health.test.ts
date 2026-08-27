@@ -33,11 +33,37 @@ function baseContext(
     quarter: 2,
     mode: "quarter" as const,
     queryCount: 0,
+    verifactuActivationAt: null as Date | null,
     settings: {
       nif: "B12345678",
       fiscalRegime: "130",
       verifactuMode: "VERIFACTU",
       simplifiedInvoiceMaxAmount: 400,
+      paysProfessionalsSubjectToWithholding: "UNKNOWN",
+      censusModel111: "UNKNOWN",
+      model111Periodicity: "UNKNOWN",
+      model115Periodicity: "UNKNOWN",
+      censusModel130: "UNKNOWN",
+      censusModel303: "UNKNOWN",
+      censusModel115: "UNKNOWN",
+      censusModel180: "UNKNOWN",
+      censusModel190: "UNKNOWN",
+      censusModel349: "UNKNOWN",
+      censusModel347: "UNKNOWN",
+      censusModel390: "UNKNOWN",
+      hasEmployees: "UNKNOWN",
+      rentsBusinessPremises: "UNKNOWN",
+      businessRentSubjectToWithholding: "UNKNOWN",
+      activityKind130: "UNKNOWN",
+      priorYearWithholdingPct130: null,
+      activityStartYear: null,
+      vatPeriodicity: "UNKNOWN",
+      vatUsesSii: "UNKNOWN",
+      vatTerritory: "UNKNOWN",
+      vatActivity390Scope: "UNKNOWN",
+      lastVatPeriodFilingRequired: "UNKNOWN",
+      censusSource: "UNKNOWN",
+      censusLastUpdatedAt: null,
     },
     periodSummary: null,
     draft349: null,
@@ -48,6 +74,10 @@ function baseContext(
     presented303: null,
     presented130: null,
     presented349: null,
+    presented111: null,
+    presented115: null,
+    presented180: null,
+    presented190: null,
     model390: null,
     draft347: null,
     presented347: null,
@@ -59,6 +89,8 @@ function baseContext(
     invoicesYear: [],
     expensesYear: [],
     marketplaceYear: [],
+    practicedWithholdingsYear: [],
+    leasesActive: [],
     verifactu: emptyVerifactu(),
     filingsYear: [],
   };
@@ -216,9 +248,11 @@ describe("Fase 8 — Fiscal Health Check", () => {
             id: "inv1",
             fullNumber: "2026-001",
             issueDate: new Date("2026-04-01"),
+            createdAt: new Date("2026-08-22"),
             fiscalStatus: "ISSUED",
             status: "EMITIDA",
             verifactuHash: null,
+            verifactuRecordAt: null,
             invoiceKind: "FULL",
             invoiceFiscalType: null,
             rectificationType: null,
@@ -230,15 +264,61 @@ describe("Fase 8 — Fiscal Health Check", () => {
             total: 121,
             clientNif: "B111",
             clientName: "Cliente",
+            irpfAmount: 0,
+            vatOperationType: "SUJETA",
             lineCount: 1,
           },
         ],
+        verifactuActivationAt: new Date("2026-08-21T08:22:13.132Z"),
       });
       const { issues } = runFiscalHealthChecks(ctx);
       const hash = issues.find((i) => i.code === "ISSUED_MISSING_VERIFACTU_HASH");
       assert.ok(hash);
       assert.equal(hash!.severity, "CRITICAL");
       assert.equal(hash!.blocksFiling, true);
+    });
+
+    it("ISSUED legacy pre-VeriFactu sin hash → WARNING no blocker", () => {
+      const ctx = baseContext({
+        invoices: [
+          {
+            id: "inv-leg",
+            fullNumber: "W3D260104",
+            issueDate: new Date("2026-04-01"),
+            createdAt: new Date("2026-07-31"),
+            fiscalStatus: "ISSUED",
+            status: "PAGADA",
+            verifactuHash: null,
+            verifactuRecordAt: null,
+            invoiceKind: "FULL",
+            invoiceFiscalType: null,
+            rectificationType: null,
+            rectificationMethod: null,
+            rectifiesInvoiceId: null,
+            seriesId: "s1",
+            subtotal: 100,
+            vatAmount: 21,
+            total: 121,
+            clientNif: "B111",
+            clientName: "Cliente",
+            irpfAmount: 0,
+            vatOperationType: "SUJETA",
+            lineCount: 1,
+          },
+        ],
+        verifactuActivationAt: new Date("2026-08-21T08:22:13.132Z"),
+      });
+      const { issues } = runFiscalHealthChecks(ctx);
+      const legacy = issues.find(
+        (i) => i.code === "ISSUED_LEGACY_PRE_VERIFACTU_UNSEALED"
+      );
+      assert.ok(legacy);
+      assert.equal(legacy!.severity, "WARNING");
+      assert.equal(legacy!.blocksFiling, false);
+      assert.equal(
+        issues.some((i) => i.code === "ISSUED_MISSING_VERIFACTU_HASH"),
+        false
+      );
     });
 
     it("DRAFT no aparece en modelos — regresión CRITICAL", () => {
@@ -575,11 +655,43 @@ describe("Fase 8 — Fiscal Health Check", () => {
     });
 
     it("INCOMPLETE → not allowed", () => {
+      const incomplete = {
+        code: "FISCAL_DATA_INCOMPLETE",
+        fingerprint: "inc",
+        severity: "WARNING" as const,
+        blocksFiling: false,
+        title: "Falta NIF",
+        description: "",
+        model: "HEALTH" as const,
+        year: 2026,
+      };
       const gate = evaluateFilingGateFromHealth(
-        { status: "INCOMPLETE", blockers: [], issues: [] },
+        { status: "INCOMPLETE", blockers: [], issues: [incomplete] },
         "303"
       );
       assert.equal(gate.allowed, false);
+    });
+
+    it("INCOMPLETE 115 no bloquea 303", () => {
+      const incomplete115 = {
+        code: "OBLIGATION_UNKNOWN",
+        fingerprint: "i115",
+        severity: "WARNING" as const,
+        blocksFiling: false,
+        title: "115 unknown",
+        description: "",
+        model: "115" as const,
+        year: 2026,
+      };
+      const gate = evaluateFilingGateFromHealth(
+        {
+          status: "READY_WITH_WARNINGS",
+          blockers: [],
+          issues: [incomplete115],
+        },
+        "303"
+      );
+      assert.equal(gate.allowed, true);
     });
   });
 });

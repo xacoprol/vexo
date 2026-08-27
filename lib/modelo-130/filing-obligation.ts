@@ -80,9 +80,9 @@ export function assess130FilingObligation(opts: {
 
   if (reasons.length === 0) {
     return {
-      status: "UNKNOWN",
+      status: "REQUIRED",
       reasons: [
-        "Datos insuficientes para determinar si existe obligación de presentar el 130.",
+        "Estimación directa: no aplican las exclusiones por retención ≥ 70 %.",
       ],
     };
   }

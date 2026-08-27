@@ -9,6 +9,13 @@ import { normalizeShopifyShop } from "@/lib/shopify-client";
 
 export type SettingsState = { error?: string; success?: boolean };
 
+function parseTri(raw: FormDataEntryValue | null): "YES" | "NO" | "UNKNOWN" {
+  const v = String(raw ?? "UNKNOWN").toUpperCase().trim();
+  if (v === "YES" || v === "SI" || v === "SÍ") return "YES";
+  if (v === "NO") return "NO";
+  return "UNKNOWN";
+}
+
 const LOGO_MAX_BYTES = 1.5 * 1024 * 1024;
 const LOGO_TYPES = new Set([
   "image/png",
@@ -173,6 +180,57 @@ export async function updateSettings(
       if (v === "NO") return "NO";
       return "UNKNOWN";
     })(),
+    paysProfessionalsSubjectToWithholding: (() => {
+      const v = String(
+        formData.get("paysProfessionalsSubjectToWithholding") ?? "UNKNOWN"
+      ).toUpperCase();
+      if (v === "YES" || v === "SI" || v === "SÍ") return "YES";
+      if (v === "NO") return "NO";
+      return "UNKNOWN";
+    })(),
+    censusModel111: (() => {
+      const v = String(formData.get("censusModel111") ?? "UNKNOWN").toUpperCase();
+      if (v === "YES" || v === "SI" || v === "SÍ") return "YES";
+      if (v === "NO") return "NO";
+      return "UNKNOWN";
+    })(),
+    model111Periodicity: (() => {
+      const v = String(
+        formData.get("model111Periodicity") ?? "UNKNOWN"
+      ).toUpperCase();
+      if (v === "QUARTERLY" || v === "TRIMESTRAL") return "QUARTERLY";
+      if (v === "MONTHLY" || v === "MENSUAL") return "MONTHLY";
+      return "UNKNOWN";
+    })(),
+    model115Periodicity: (() => {
+      const v = String(
+        formData.get("model115Periodicity") ?? "UNKNOWN"
+      ).toUpperCase();
+      if (v === "QUARTERLY" || v === "TRIMESTRAL") return "QUARTERLY";
+      if (v === "MONTHLY" || v === "MENSUAL") return "MONTHLY";
+      return "UNKNOWN";
+    })(),
+    censusModel130: parseTri(formData.get("censusModel130")),
+    censusModel303: parseTri(formData.get("censusModel303")),
+    censusModel115: parseTri(formData.get("censusModel115")),
+    censusModel180: parseTri(formData.get("censusModel180")),
+    censusModel190: parseTri(formData.get("censusModel190")),
+    censusModel349: parseTri(formData.get("censusModel349")),
+    censusModel347: parseTri(formData.get("censusModel347")),
+    censusModel390: parseTri(formData.get("censusModel390")),
+    hasEmployees: parseTri(formData.get("hasEmployees")),
+    rentsBusinessPremises: parseTri(formData.get("rentsBusinessPremises")),
+    businessRentSubjectToWithholding: parseTri(
+      formData.get("businessRentSubjectToWithholding")
+    ),
+    activityStartYear: (() => {
+      const raw = String(formData.get("activityStartYear") ?? "").trim();
+      if (!raw) return null;
+      const n = parseInt(raw, 10);
+      return Number.isFinite(n) && n >= 1990 && n <= 2100 ? n : null;
+    })(),
+    censusSource: "MANUAL" as const,
+    censusLastUpdatedAt: new Date(),
     emailSubject: String(formData.get("emailSubject") ?? "").trim(),
     emailBody: String(formData.get("emailBody") ?? "").trim(),
     bankIban: String(formData.get("bankIban") ?? "").trim() || null,
@@ -279,6 +337,8 @@ export async function updateSettings(
   revalidatePath("/settings");
   revalidatePath("/dashboard");
   revalidatePath("/fiscal");
+  revalidatePath("/fiscal/close");
+  revalidatePath("/fiscal/health");
   return { success: true };
 }
 

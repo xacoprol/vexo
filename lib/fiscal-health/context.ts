@@ -24,11 +24,41 @@ export type FiscalHealthContext = {
   quarter: FiscalQuarter | null;
   mode: "quarter" | "annual";
   queryCount: number;
+  /**
+   * Primera huella/registro Veri*Factu observada en el tenant
+   * (min Invoice.verifactuRecordAt). Null si nunca se selló.
+   */
+  verifactuActivationAt: Date | null;
   settings: {
     nif: string | null;
     fiscalRegime: string;
     verifactuMode: string;
     simplifiedInvoiceMaxAmount: number;
+    paysProfessionalsSubjectToWithholding: string;
+    censusModel111: string;
+    model111Periodicity: string;
+    censusModel130: string;
+    censusModel303: string;
+    censusModel115: string;
+    model115Periodicity: string;
+    censusModel180: string;
+    censusModel190: string;
+    censusModel349: string;
+    censusModel347: string;
+    censusModel390: string;
+    hasEmployees: string;
+    rentsBusinessPremises: string;
+    businessRentSubjectToWithholding: string;
+    activityKind130: string;
+    priorYearWithholdingPct130: number | null;
+    activityStartYear: number | null;
+    vatPeriodicity: string;
+    vatUsesSii: string;
+    vatTerritory: string;
+    vatActivity390Scope: string;
+    lastVatPeriodFilingRequired: string;
+    censusSource: string;
+    censusLastUpdatedAt: Date | null;
   } | null;
   periodSummary: FiscalPeriodSummary | null;
   draft349: Model349Result | null;
@@ -37,6 +67,10 @@ export type FiscalHealthContext = {
   presented303: PresentedFilingView | null;
   presented130: PresentedFilingView | null;
   presented349: PresentedFilingView | null;
+  presented111: PresentedFilingView | null;
+  presented115: PresentedFilingView | null;
+  presented180: PresentedFilingView | null;
+  presented190: PresentedFilingView | null;
   model390: Model390Result | null;
   draft347: Model347Result | null;
   presented347: PresentedFilingView | null;
@@ -52,6 +86,9 @@ export type FiscalHealthContext = {
   invoicesYear: InvoiceHealthRow[];
   expensesYear: ExpenseHealthRow[];
   marketplaceYear: MarketplaceHealthRow[];
+  practicedWithholdingsYear: PracticedWithholdingHealthRow[];
+  /** Locales arrendados activos (Fase 9.3). */
+  leasesActive: LeaseHealthRow[];
   invoices: InvoiceHealthRow[];
   expenses: ExpenseHealthRow[];
   marketplace: MarketplaceHealthRow[];
@@ -59,13 +96,50 @@ export type FiscalHealthContext = {
   filingsYear: Awaited<ReturnType<typeof listPresentedForYear>>;
 };
 
+export type LeaseHealthRow = {
+  id: string;
+  propertyAddress: string;
+  cadastralReference: string | null;
+  active: boolean;
+  activityUse: string;
+  withholdingStatus: string;
+  withholdingExemptionReason: string | null;
+  defaultWithholdingRate: number | null;
+  landlordName: string;
+  landlordTaxId: string;
+  counterpartyId: string;
+  requiresReview: boolean;
+};
+
+export type PracticedWithholdingHealthRow = {
+  id: string;
+  direction: string;
+  kind: string;
+  sourceType: string;
+  sourceId: string;
+  status: string;
+  baseAmount: unknown;
+  rate: number;
+  withholdingAmount: unknown;
+  accrualDate: Date;
+  paymentDate: Date | null;
+  year: number;
+  quarter: number;
+  perceptionKey: string | null;
+  perceptionSubKey: string | null;
+  counterpartyTaxId: string | null;
+  counterpartyName: string | null;
+};
+
 export type InvoiceHealthRow = {
   id: string;
   fullNumber: string;
   issueDate: Date;
+  createdAt: Date;
   fiscalStatus: string;
   status: string;
   verifactuHash: string | null;
+  verifactuRecordAt: Date | null;
   invoiceKind: string;
   invoiceFiscalType: string | null;
   rectificationType: string | null;
@@ -86,12 +160,17 @@ export type ExpenseHealthRow = {
   id: string;
   issueDate: Date;
   supplierName: string;
+  supplierNif: string | null;
+  category: string;
   vatOperationType: string;
   subtotal: unknown;
   vatAmount: unknown;
+  total: unknown;
   vatDeductiblePct: number;
   irpfDeductiblePct: number;
   isInvestment: boolean;
+  practicedWithholdingStatus: string;
+  leaseId: string | null;
   documentId: string | null;
   importDuaBase: unknown;
   importDuaVat: unknown;
@@ -131,7 +210,7 @@ export async function loadFiscalHealthContext(opts: {
       ? quarterRange(opts.year, quarter)
       : { from: yearFrom, to: yearTo };
 
-  const [settings, invoices, expenses, marketplace, verifactu, filingsYear] =
+  const [settings, invoices, expenses, marketplace, withholdings, leases, verifactu, filingsYear] =
     await Promise.all([
       countQuery(
         prisma.companySettings.findFirst({
@@ -140,6 +219,31 @@ export async function loadFiscalHealthContext(opts: {
             fiscalRegime: true,
             verifactuMode: true,
             simplifiedInvoiceMaxAmount: true,
+            paysProfessionalsSubjectToWithholding: true,
+            censusModel111: true,
+            model111Periodicity: true,
+            censusModel130: true,
+            censusModel303: true,
+            censusModel115: true,
+            model115Periodicity: true,
+            censusModel180: true,
+            censusModel190: true,
+            censusModel349: true,
+            censusModel347: true,
+            censusModel390: true,
+            hasEmployees: true,
+            rentsBusinessPremises: true,
+            businessRentSubjectToWithholding: true,
+            activityKind130: true,
+            priorYearWithholdingPct130: true,
+            activityStartYear: true,
+            vatPeriodicity: true,
+            vatUsesSii: true,
+            vatTerritory: true,
+            vatActivity390Scope: true,
+            lastVatPeriodFilingRequired: true,
+            censusSource: true,
+            censusLastUpdatedAt: true,
           },
         })
       ),
@@ -153,6 +257,8 @@ export async function loadFiscalHealthContext(opts: {
             fiscalStatus: true,
             status: true,
             verifactuHash: true,
+            verifactuRecordAt: true,
+            createdAt: true,
             invoiceKind: true,
             invoiceFiscalType: true,
             rectificationType: true,
@@ -162,8 +268,7 @@ export async function loadFiscalHealthContext(opts: {
             subtotal: true,
             vatAmount: true,
             total: true,
-            clientNif: true,
-            clientName: true,
+            client: { select: { nif: true, name: true } },
             irpfAmount: true,
             vatOperationType: true,
             _count: { select: { lines: true } },
@@ -178,12 +283,17 @@ export async function loadFiscalHealthContext(opts: {
             id: true,
             issueDate: true,
             supplierName: true,
+            supplierNif: true,
+            category: true,
             vatOperationType: true,
             subtotal: true,
             vatAmount: true,
+            total: true,
             vatDeductiblePct: true,
             irpfDeductiblePct: true,
             isInvestment: true,
+            practicedWithholdingStatus: true,
+            leaseId: true,
             documentId: true,
             importDuaBase: true,
             importDuaVat: true,
@@ -208,6 +318,50 @@ export async function loadFiscalHealthContext(opts: {
           },
         })
       ),
+      countQuery(
+        prisma.fiscalWithholding.findMany({
+          where: { year: opts.year },
+          select: {
+            id: true,
+            direction: true,
+            kind: true,
+            sourceType: true,
+            sourceId: true,
+            status: true,
+            baseAmount: true,
+            rate: true,
+            withholdingAmount: true,
+            accrualDate: true,
+            paymentDate: true,
+            year: true,
+            quarter: true,
+            perceptionKey: true,
+            perceptionSubKey: true,
+            counterparty: {
+              select: { taxId: true, name: true },
+            },
+          },
+        })
+      ),
+      countQuery(
+        prisma.businessPremisesLease.findMany({
+          where: { active: true },
+          select: {
+            id: true,
+            propertyAddress: true,
+            cadastralReference: true,
+            active: true,
+            activityUse: true,
+            withholdingStatus: true,
+            withholdingExemptionReason: true,
+            defaultWithholdingRate: true,
+            counterpartyId: true,
+            counterparty: {
+              select: { name: true, taxId: true, requiresReview: true },
+            },
+          },
+        })
+      ),
       auditVerifactuChain(),
       countQuery(listPresentedForYear(opts.year)),
     ]);
@@ -216,9 +370,11 @@ export async function loadFiscalHealthContext(opts: {
     id: i.id,
     fullNumber: i.fullNumber,
     issueDate: i.issueDate,
+    createdAt: i.createdAt,
     fiscalStatus: i.fiscalStatus,
     status: i.status,
     verifactuHash: i.verifactuHash,
+    verifactuRecordAt: i.verifactuRecordAt,
     invoiceKind: i.invoiceKind,
     invoiceFiscalType: i.invoiceFiscalType,
     rectificationType: i.rectificationType,
@@ -228,16 +384,73 @@ export async function loadFiscalHealthContext(opts: {
     subtotal: i.subtotal,
     vatAmount: i.vatAmount,
     total: i.total,
-    clientNif: i.clientNif,
-    clientName: i.clientName,
+    clientNif: i.client.nif || null,
+    clientName: i.client.name || null,
     irpfAmount: i.irpfAmount,
     vatOperationType: i.vatOperationType,
     lineCount: i._count.lines,
   }));
 
   const invoiceRowsYear = invoiceRows;
-  const expenseRowsYear = expenses as ExpenseHealthRow[];
+  const expenseRowsYear: ExpenseHealthRow[] = expenses.map((e) => ({
+    id: e.id,
+    issueDate: e.issueDate,
+    supplierName: e.supplierName,
+    supplierNif: e.supplierNif,
+    category: e.category,
+    vatOperationType: e.vatOperationType,
+    subtotal: e.subtotal,
+    vatAmount: e.vatAmount,
+    total: e.total,
+    vatDeductiblePct: e.vatDeductiblePct,
+    irpfDeductiblePct: e.irpfDeductiblePct,
+    isInvestment: e.isInvestment,
+    practicedWithholdingStatus: e.practicedWithholdingStatus,
+    leaseId: e.leaseId ?? null,
+    documentId: e.documentId,
+    importDuaBase: e.importDuaBase,
+    importDuaVat: e.importDuaVat,
+    importDuaNumber: e.importDuaNumber,
+    importDuaDate: e.importDuaDate,
+    importDuaDocumentId: e.importDuaDocumentId,
+    invoiceNumber: e.invoiceNumber,
+  }));
   const marketplaceRowsYear = marketplace as MarketplaceHealthRow[];
+  const practicedWithholdingsYear: PracticedWithholdingHealthRow[] =
+    withholdings.map((w) => ({
+      id: w.id,
+      direction: w.direction,
+      kind: w.kind,
+      sourceType: w.sourceType,
+      sourceId: w.sourceId,
+      status: w.status,
+      baseAmount: w.baseAmount,
+      rate: w.rate,
+      withholdingAmount: w.withholdingAmount,
+      accrualDate: w.accrualDate,
+      paymentDate: w.paymentDate ?? null,
+      year: w.year,
+      quarter: w.quarter,
+      perceptionKey: w.perceptionKey ?? null,
+      perceptionSubKey: w.perceptionSubKey ?? null,
+      counterpartyTaxId: w.counterparty.taxId,
+      counterpartyName: w.counterparty.name,
+    }));
+
+  const leasesActive: LeaseHealthRow[] = leases.map((l) => ({
+    id: l.id,
+    propertyAddress: l.propertyAddress,
+    cadastralReference: l.cadastralReference ?? null,
+    active: l.active,
+    activityUse: l.activityUse,
+    withholdingStatus: l.withholdingStatus,
+    withholdingExemptionReason: l.withholdingExemptionReason,
+    defaultWithholdingRate: l.defaultWithholdingRate,
+    landlordName: l.counterparty.name,
+    landlordTaxId: l.counterparty.taxId,
+    counterpartyId: l.counterpartyId,
+    requiresReview: l.counterparty.requiresReview,
+  }));
 
   const invoicesInPeriod = invoiceRowsYear.filter(
     (i) => i.issueDate >= from && i.issueDate <= to
@@ -258,16 +471,31 @@ export async function loadFiscalHealthContext(opts: {
   let presented303: PresentedFilingView | null = null;
   let presented130: PresentedFilingView | null = null;
   let presented349: PresentedFilingView | null = null;
+  let presented111: PresentedFilingView | null = null;
+  let presented115: PresentedFilingView | null = null;
+  let presented180: PresentedFilingView | null = null;
+  let presented190: PresentedFilingView | null = null;
 
   if (mode === "quarter" && quarter != null) {
     let motorChains: Awaited<ReturnType<typeof buildFiscalMotorChains>>;
-    [periodSummary, draft349, presented303, presented130, presented349, draft349All, motorChains] =
-      await Promise.all([
+    [
+      periodSummary,
+      draft349,
+      presented303,
+      presented130,
+      presented349,
+      presented111,
+      presented115,
+      draft349All,
+      motorChains,
+    ] = await Promise.all([
         countQuery(buildFiscalPeriodSummary(opts.year, quarter)),
         countQuery(buildModelo349Draft(opts.year, quarter)),
         countQuery(getPresentedFiling("303", opts.year, quarter)),
         countQuery(getPresentedFiling("130", opts.year, quarter)),
         countQuery(getPresentedFiling("349", opts.year, quarter)),
+        countQuery(getPresentedFiling("111", opts.year, quarter)),
+        countQuery(getPresentedFiling("115", opts.year, quarter)),
         countQuery(
           Promise.all(
             ([1, 2, 3, 4] as FiscalQuarter[]).map((q) =>
@@ -289,7 +517,7 @@ export async function loadFiscalHealthContext(opts: {
     null;
 
   if (mode === "annual") {
-    [model390, draft347, presented347, presented390, yearSummary, draft349Year] =
+    [model390, draft347, presented347, presented390, yearSummary, draft349Year, presented180, presented190] =
       await Promise.all([
         countQuery(buildModel390Result(opts.year)),
         countQuery(buildModelo347Draft(opts.year)),
@@ -303,6 +531,8 @@ export async function loadFiscalHealthContext(opts: {
             )
           )
         ),
+        countQuery(getPresentedFiling("180", opts.year, null)),
+        countQuery(getPresentedFiling("190", opts.year, null)),
       ]);
     chain303 = yearSummary?.chain303 ?? null;
     chain130 = yearSummary?.chain130 ?? null;
@@ -314,12 +544,51 @@ export async function loadFiscalHealthContext(opts: {
     quarter,
     mode,
     queryCount: queryCounter,
+    verifactuActivationAt: (() => {
+      const times = invoiceRowsYear
+        .map((i) => i.verifactuRecordAt)
+        .filter((d): d is Date => d != null)
+        .map((d) => d.getTime());
+      if (!times.length) return null;
+      return new Date(Math.min(...times));
+    })(),
     settings: settings
       ? {
           nif: settings.nif,
           fiscalRegime: settings.fiscalRegime,
           verifactuMode: settings.verifactuMode,
           simplifiedInvoiceMaxAmount: Number(settings.simplifiedInvoiceMaxAmount),
+          paysProfessionalsSubjectToWithholding:
+            settings.paysProfessionalsSubjectToWithholding ?? "UNKNOWN",
+          censusModel111: settings.censusModel111 ?? "UNKNOWN",
+          model111Periodicity: settings.model111Periodicity ?? "UNKNOWN",
+          censusModel130: settings.censusModel130 ?? "UNKNOWN",
+          censusModel303: settings.censusModel303 ?? "UNKNOWN",
+          censusModel115: settings.censusModel115 ?? "UNKNOWN",
+          model115Periodicity: settings.model115Periodicity ?? "UNKNOWN",
+          censusModel180: settings.censusModel180 ?? "UNKNOWN",
+          censusModel190: settings.censusModel190 ?? "UNKNOWN",
+          censusModel349: settings.censusModel349 ?? "UNKNOWN",
+          censusModel347: settings.censusModel347 ?? "UNKNOWN",
+          censusModel390: settings.censusModel390 ?? "UNKNOWN",
+          hasEmployees: settings.hasEmployees ?? "UNKNOWN",
+          rentsBusinessPremises: settings.rentsBusinessPremises ?? "UNKNOWN",
+          businessRentSubjectToWithholding:
+            settings.businessRentSubjectToWithholding ?? "UNKNOWN",
+          activityKind130: settings.activityKind130 ?? "UNKNOWN",
+          priorYearWithholdingPct130:
+            settings.priorYearWithholdingPct130 != null
+              ? Number(settings.priorYearWithholdingPct130)
+              : null,
+          activityStartYear: settings.activityStartYear ?? null,
+          vatPeriodicity: settings.vatPeriodicity ?? "UNKNOWN",
+          vatUsesSii: settings.vatUsesSii ?? "UNKNOWN",
+          vatTerritory: settings.vatTerritory ?? "UNKNOWN",
+          vatActivity390Scope: settings.vatActivity390Scope ?? "UNKNOWN",
+          lastVatPeriodFilingRequired:
+            settings.lastVatPeriodFilingRequired ?? "UNKNOWN",
+          censusSource: settings.censusSource ?? "UNKNOWN",
+          censusLastUpdatedAt: settings.censusLastUpdatedAt ?? null,
         }
       : null,
     periodSummary,
@@ -328,6 +597,10 @@ export async function loadFiscalHealthContext(opts: {
     presented303,
     presented130,
     presented349,
+    presented111,
+    presented115,
+    presented180,
+    presented190,
     model390,
     draft347,
     presented347,
@@ -339,6 +612,8 @@ export async function loadFiscalHealthContext(opts: {
     invoicesYear: invoiceRowsYear,
     expensesYear: expenseRowsYear,
     marketplaceYear: marketplaceRowsYear,
+    practicedWithholdingsYear,
+    leasesActive,
     invoices: invoicesInPeriod,
     expenses: expensesInPeriod,
     marketplace: marketplaceInPeriod,

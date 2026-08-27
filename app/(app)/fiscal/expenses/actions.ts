@@ -11,6 +11,15 @@ import {
   parseExpenseVatOperationType,
 } from "@/lib/fiscal";
 import { stashSourceDocument } from "@/lib/fiscal-blob";
+import {
+  expectedWithholdingAmount,
+  parsePracticedWithholdingStatus,
+  PRACTICED_WITHHOLDING_STATUS,
+  deleteExpensePracticedWithholdings,
+  syncExpensePracticedWithholding,
+  syncExpenseRentWithholding,
+  validatePracticedWithholding,
+} from "@/lib/fiscal-withholding";
 import { buildLinearAmortization } from "@/lib/investment-amortization";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/session";
@@ -146,10 +155,47 @@ function parseExpenseForm(formData: FormData) {
     })(),
     importDuaDocumentId:
       String(formData.get("importDuaDocumentId") ?? "").trim() || null,
+    practicedWithholdingStatus: parsePracticedWithholdingStatus(
+      formData.get("practicedWithholdingStatus")
+    ),
+    withholdingBase: (() => {
+      const raw = String(formData.get("withholdingBase") ?? "").trim();
+      if (!raw) return subtotal;
+      const n = parseFloat(raw.replace(",", "."));
+      return Number.isFinite(n) ? n : subtotal;
+    })(),
+    withholdingRate: (() => {
+      const raw = String(formData.get("withholdingRate") ?? "").trim();
+      if (!raw) return 15;
+      const n = parseFloat(raw.replace(",", "."));
+      return Number.isFinite(n) ? n : 15;
+    })(),
+    withholdingAmount: (() => {
+      const raw = String(formData.get("withholdingAmount") ?? "").trim();
+      if (!raw) return null as number | null;
+      const n = parseFloat(raw.replace(",", "."));
+      return Number.isFinite(n) ? n : null;
+    })(),
+    paymentDate: (() => {
+      const raw = String(formData.get("withholdingPaymentDate") ?? "").trim();
+      if (!raw) return null;
+      const d = new Date(raw);
+      return Number.isNaN(d.getTime()) ? null : d;
+    })(),
+    leaseId: String(formData.get("leaseId") ?? "").trim() || null,
   };
 }
 
-function validate(data: ReturnType<typeof parseExpenseForm>) {
+function resolveWithholdingAmount(
+  data: ReturnType<typeof parseExpenseForm>
+): number {
+  if (data.withholdingAmount != null) {
+    return round2(Math.max(0, data.withholdingAmount));
+  }
+  return expectedWithholdingAmount(data.withholdingBase, data.withholdingRate);
+}
+
+async function validate(data: ReturnType<typeof parseExpenseForm>) {
   if (!data.supplierName) return "El proveedor es obligatorio";
   if (!(data.issueDate instanceof Date) || Number.isNaN(data.issueDate.getTime())) {
     return "Fecha no válida";
@@ -163,6 +209,41 @@ function validate(data: ReturnType<typeof parseExpenseForm>) {
     !nif
   ) {
     return "En compras intracomunitarias el NIF-IVA del proveedor es obligatorio (modelo 349)";
+  }
+
+  const whStatus = parsePracticedWithholdingStatus(
+    data.practicedWithholdingStatus
+  );
+  if (whStatus === PRACTICED_WITHHOLDING_STATUS.YES && !data.leaseId) {
+    const amount = resolveWithholdingAmount(data);
+    const wh = validatePracticedWithholding({
+      counterpartyTaxId: data.supplierNif,
+      counterpartyName: data.supplierName,
+      baseAmount: data.withholdingBase,
+      rate: data.withholdingRate,
+      withholdingAmount: amount,
+      accrualDate: data.issueDate,
+    });
+    if (!wh.ok) return wh.message;
+  }
+  if (data.leaseId) {
+    const lease = await prisma.businessPremisesLease.findUnique({
+      where: { id: data.leaseId },
+      include: { counterparty: true },
+    });
+    if (!lease) return "Local arrendado no encontrado";
+    if (lease.withholdingStatus === "YES") {
+      const amount = resolveWithholdingAmount(data);
+      const wh = validatePracticedWithholding({
+        counterpartyTaxId: lease.counterparty.taxId,
+        counterpartyName: lease.counterparty.name,
+        baseAmount: data.withholdingBase,
+        rate: data.withholdingRate,
+        withholdingAmount: amount,
+        accrualDate: data.issueDate,
+      });
+      if (!wh.ok) return wh.message;
+    }
   }
   return null;
 }
@@ -361,6 +442,7 @@ function revalidateExpensePaths(id?: string) {
   revalidatePath("/fiscal/303");
   revalidatePath("/fiscal/390");
   revalidatePath("/fiscal/130");
+  revalidatePath("/fiscal/health");
   if (id) revalidatePath(`/fiscal/expenses/${id}/edit`);
 }
 
@@ -371,7 +453,7 @@ async function insertExpense(
   | { ok: true; id: string }
   | { ok: false; error: string; duplicateId?: string }
 > {
-  const err = validate(data);
+  const err = await validate(data);
   if (err) return { ok: false, error: err };
 
   const dup = await findDuplicateExpense(data);
@@ -398,16 +480,54 @@ async function insertExpense(
       vatRate: data.vatRate,
       vatAmount: data.vatAmount,
       total: data.total,
+      practicedWithholdingStatus: data.leaseId
+        ? PRACTICED_WITHHOLDING_STATUS.NO
+        : data.practicedWithholdingStatus,
       deductible: data.deductible,
       vatDeductiblePct: data.vatDeductiblePct,
       irpfDeductiblePct: data.irpfDeductiblePct,
       isInvestment: data.isInvestment,
       notes: data.notes,
       documentId: data.documentId || null,
+      leaseId: data.leaseId,
       ...importDuaWriteFields(data, duaDocId),
     },
   });
-  await syncInvestmentAsset(created.id, data, null);
+  try {
+    await syncInvestmentAsset(created.id, data, null);
+    const rentLease = data.leaseId
+      ? await prisma.businessPremisesLease.findUnique({
+          where: { id: data.leaseId },
+          select: { withholdingStatus: true },
+        })
+      : null;
+    const rentYes = rentLease?.withholdingStatus === "YES";
+    await syncExpensePracticedWithholding(created.id, {
+      practicedWithholdingStatus: rentYes
+        ? PRACTICED_WITHHOLDING_STATUS.NO
+        : data.practicedWithholdingStatus,
+      supplierName: data.supplierName,
+      supplierNif: data.supplierNif,
+      issueDate: data.issueDate,
+      withholdingBase: data.withholdingBase,
+      withholdingRate: data.withholdingRate,
+      withholdingAmount: resolveWithholdingAmount(data),
+      paymentDate: data.paymentDate,
+    });
+    await syncExpenseRentWithholding(created.id, {
+      leaseId: data.leaseId,
+      issueDate: data.issueDate,
+      withholdingBase: data.withholdingBase,
+      withholdingRate: data.withholdingRate,
+      withholdingAmount: resolveWithholdingAmount(data),
+      paymentDate: data.paymentDate,
+    });
+  } catch (e) {
+    // Compensación Neon HTTP: no dejar gasto a medias con retención inválida
+    await deleteExpensePracticedWithholdings(created.id).catch(() => null);
+    await prisma.expense.delete({ where: { id: created.id } }).catch(() => null);
+    throw e;
+  }
   revalidateExpensePaths();
   return { ok: true, id: created.id };
 }
@@ -487,6 +607,18 @@ function fromDraftInput(input: ExpenseDraftInput): ExpenseWriteData {
         : 4,
     notes: String(input.notes ?? "").trim() || null,
     documentId: String(input.documentId ?? "").trim() || null,
+    importDuaType: null,
+    importDuaNumber: null,
+    importDuaDate: null,
+    importDuaBase: null,
+    importDuaVat: null,
+    importDuaDocumentId: null,
+    practicedWithholdingStatus: PRACTICED_WITHHOLDING_STATUS.UNKNOWN,
+    withholdingBase: subtotal,
+    withholdingRate: 15,
+    withholdingAmount: null,
+    paymentDate: null,
+    leaseId: null,
   };
 }
 
@@ -543,7 +675,7 @@ export async function updateExpense(
   try {
     const data = parseExpenseForm(formData);
     data.isInvestment = formData.has("isInvestment");
-    const err = validate(data);
+    const err = await validate(data);
     if (err) return { error: err };
 
     const dup = await findDuplicateExpense(data, id);
@@ -565,6 +697,14 @@ export async function updateExpense(
       data.issueDate
     );
 
+    const rentLease = data.leaseId
+      ? await prisma.businessPremisesLease.findUnique({
+          where: { id: data.leaseId },
+          select: { withholdingStatus: true },
+        })
+      : null;
+    const rentYes = rentLease?.withholdingStatus === "YES";
+
     await prisma.expense.update({
       where: { id },
       data: {
@@ -579,11 +719,15 @@ export async function updateExpense(
         vatRate: data.vatRate,
         vatAmount: data.vatAmount,
         total: data.total,
+        practicedWithholdingStatus: data.leaseId
+          ? PRACTICED_WITHHOLDING_STATUS.NO
+          : data.practicedWithholdingStatus,
         notes: data.notes,
         deductible: data.deductible,
         vatDeductiblePct: data.vatDeductiblePct,
         irpfDeductiblePct: data.irpfDeductiblePct,
         isInvestment: data.isInvestment,
+        leaseId: data.leaseId,
         ...(data.documentId ? { documentId: data.documentId } : {}),
         ...importDuaWriteFields(
           data,
@@ -592,6 +736,26 @@ export async function updateExpense(
       },
     });
     await syncInvestmentAsset(id, data, existing.investmentAssetId);
+    await syncExpensePracticedWithholding(id, {
+      practicedWithholdingStatus: rentYes
+        ? PRACTICED_WITHHOLDING_STATUS.NO
+        : data.practicedWithholdingStatus,
+      supplierName: data.supplierName,
+      supplierNif: data.supplierNif,
+      issueDate: data.issueDate,
+      withholdingBase: data.withholdingBase,
+      withholdingRate: data.withholdingRate,
+      withholdingAmount: resolveWithholdingAmount(data),
+      paymentDate: data.paymentDate,
+    });
+    await syncExpenseRentWithholding(id, {
+      leaseId: data.leaseId,
+      issueDate: data.issueDate,
+      withholdingBase: data.withholdingBase,
+      withholdingRate: data.withholdingRate,
+      withholdingAmount: resolveWithholdingAmount(data),
+      paymentDate: data.paymentDate,
+    });
     revalidateExpensePaths(id);
     redirect("/fiscal/expenses");
   } catch (e) {
@@ -606,6 +770,8 @@ export async function deleteExpense(id: string) {
     where: { id },
     select: { investmentAssetId: true },
   });
+  // Neon HTTP: borrar withholdings antes del gasto (sin huérfanos)
+  await deleteExpensePracticedWithholdings(id);
   await prisma.expense.delete({ where: { id } });
   if (existing?.investmentAssetId) {
     await prisma.investmentAsset

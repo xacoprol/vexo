@@ -368,12 +368,16 @@ export function presentedQuarterFromFiling(opts: {
   result: number;
   boxes: { code: string; value: number }[];
 }): PresentedQuarter130 {
+  const box07 = boxValueFromPresented(opts.boxes, "07");
+  const box19 = boxValueFromPresented(opts.boxes, "19") ?? opts.result;
   return {
     quarter: opts.quarter,
     presented: true,
-    box07: boxValueFromPresented(opts.boxes, "07"),
+    // OCR gestoría a menudo omite cas. 07 cuando coincide con el resultado (19).
+    // Sin fallback, el trimestre siguiente toma box05=0 pese a haber filing presentado.
+    box07: box07 ?? box19,
     box16: boxValueFromPresented(opts.boxes, "16"),
-    box19: boxValueFromPresented(opts.boxes, "19") ?? opts.result,
+    box19,
   };
 }
 

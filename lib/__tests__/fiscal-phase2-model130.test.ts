@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { computeExpenseDeductibility } from "../expense-deductibility";
 import { assembleModel130Chain, model130ResultToModeloBoxes } from "../modelo-130/assemble";
-import { buildModel130Chain, buildModel130Quarter, computeModel130Liquidation } from "../modelo-130/engine";
+import {
+  buildModel130Chain,
+  buildModel130Quarter,
+  computeModel130Liquidation,
+  presentedQuarterFromFiling,
+} from "../modelo-130/engine";
 import { assess130FilingObligation } from "../modelo-130/filing-obligation";
 import { aggregateIrpfWithholdings } from "../modelo-130/irpf-withholdings";
 import { IRPF_SIMPLIFIED_HARD_TO_JUSTIFY_MAX_ANNUAL } from "../modelo-130/constants";
@@ -281,6 +286,35 @@ describe("Model 130 — casilla 16", () => {
     assert.equal(chain[2].boxes.box05, 1260);
     assert.ok(chain[2].boxes.box16 > 0);
     assert.equal(chain[3].boxes.box16, 0);
+  });
+
+  it("OCR legacy sin cas.07: fallback a resultado para no anular box05 del trimestre siguiente", () => {
+    const presented = presentedQuarterFromFiling({
+      quarter: 1,
+      result: 944.7,
+      boxes: [
+        { code: "01", value: 11471.59 },
+        { code: "04", value: 944.7 },
+        { code: "19", value: 944.7 },
+      ],
+    });
+    assert.equal(presented.box07, 944.7);
+    assert.equal(presented.box19, 944.7);
+
+    const chain = buildModel130Chain({
+      year: 2026,
+      config: baseConfig,
+      presented: { 1: presented },
+      quarters: {
+        1: quarterData({ income: 10000, expenses: 2000, withheld: 0 }),
+        2: quarterData({ income: 20000, expenses: 5000, withheld: 235.2 }),
+        3: quarterData({ income: 20000, expenses: 5000 }),
+        4: quarterData({ income: 20000, expenses: 5000 }),
+      },
+    });
+
+    assert.equal(chain[2].boxes.box05, 944.7);
+    assert.equal(chain[2].priorPaymentsProvisional, false);
   });
 });
 

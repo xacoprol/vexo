@@ -458,6 +458,7 @@ async function fetchModel130Config(): Promise<Model130Config> {
       fiscalRegime: true,
       activityKind130: true,
       priorYearWithholdingPct130: true,
+      activityStartYear: true,
     },
   });
   const activityRaw = String(s?.activityKind130 ?? "UNKNOWN").toUpperCase();
@@ -493,6 +494,10 @@ async function fetchModel130Config(): Promise<Model130Config> {
     priorYearWithholdingPct130:
       s?.priorYearWithholdingPct130 != null
         ? Number(s.priorYearWithholdingPct130)
+        : null,
+    activityStartYear:
+      s?.activityStartYear != null && Number.isFinite(s.activityStartYear)
+        ? Math.floor(Number(s.activityStartYear))
         : null,
     hasCashAccountingInvoices: false,
   };

@@ -15,6 +15,12 @@ import {
   createFiscalDocument,
   blobConfigured,
 } from "@/lib/fiscal-blob";
+import {
+  attachFiscalSnapshotV1,
+  buildFiscalModelSnapshotV1,
+  boxesArrayToRecord,
+  hasFiscalSnapshotV1,
+} from "@/lib/fiscal-snapshot";
 
 export type FilingDraftInput = {
   modelType: FiscalModelType;
@@ -71,8 +77,14 @@ function revalidateFilings() {
   revalidatePath("/fiscal/390");
   revalidatePath("/fiscal/347");
   revalidatePath("/fiscal/349");
+  revalidatePath("/fiscal/111");
+  revalidatePath("/fiscal/115");
+  revalidatePath("/fiscal/180");
+  revalidatePath("/fiscal/190");
   revalidatePath("/fiscal/036");
   revalidatePath("/fiscal/annual");
+  revalidatePath("/fiscal/close");
+  revalidatePath("/fiscal/health");
   revalidatePath("/stats");
 }
 
@@ -93,10 +105,46 @@ export async function upsertFiscalFiling(
   }));
 
   const boxesJson = boxes as Prisma.InputJsonValue;
-  const rawJson =
-    input.rawExtract != null
-      ? (input.rawExtract as Prisma.InputJsonValue)
-      : undefined;
+
+  // Snapshot v1 para filings nuevos desde VEXO (no reconstruye OCR legacy).
+  let rawMerged: Record<string, unknown> =
+    input.rawExtract != null && typeof input.rawExtract === "object"
+      ? { ...input.rawExtract }
+      : { source: "manual-mark-presented" };
+
+  const isLegacyOcrImport =
+    Boolean(input.sourceFileName) ||
+    Boolean(rawMerged.sourceFileName) ||
+    String(rawMerged.source ?? "").toLowerCase().includes("ocr") ||
+    String(rawMerged.source ?? "").toLowerCase().includes("gestoria");
+
+  if (!isLegacyOcrImport && !hasFiscalSnapshotV1(rawMerged, input.modelType)) {
+    const snap = buildFiscalModelSnapshotV1({
+      model: input.modelType,
+      year: input.year,
+      quarter,
+      period:
+        quarter != null
+          ? `${quarter}T ${input.year}`
+          : String(input.year),
+      result: round2(input.result),
+      boxes: boxesArrayToRecord(boxes),
+      bases: {
+        incomeBase: input.incomeBase,
+        expensesBase: input.expensesBase,
+        vatRepercutida: input.vatRepercutida,
+        vatDeductible: input.vatDeductible,
+      },
+      sourceIds: {},
+      warnings: [],
+      census: {},
+      bookCutoffAt: new Date(),
+      computedAt: new Date(),
+    });
+    rawMerged = attachFiscalSnapshotV1(rawMerged, snap);
+  }
+
+  const rawJson = rawMerged as Prisma.InputJsonValue;
 
   const toDec = (n: number | null) =>
     n == null ? null : new Prisma.Decimal(round2(n));

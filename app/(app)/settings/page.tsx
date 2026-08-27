@@ -1,7 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import { SettingsForm } from "@/components/settings/SettingsForm";
 import { IntegrationHealthPanel } from "@/components/settings/IntegrationHealthPanel";
+import { CensusSuggestionsPanel } from "@/components/settings/CensusSuggestionsPanel";
 import { getIntegrationHealth } from "@/lib/integration-health";
+import { buildFiscalCensusSuggestions } from "@/lib/fiscal-census-suggestions";
 
 export default async function SettingsPage() {
   const [settings, invoiceSeries, quoteSeries] = await Promise.all([
@@ -15,6 +17,7 @@ export default async function SettingsPage() {
   }
 
   const health = getIntegrationHealth();
+  const suggestions = await buildFiscalCensusSuggestions(prisma, settings);
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -25,6 +28,7 @@ export default async function SettingsPage() {
         </p>
       </div>
       <IntegrationHealthPanel items={health} />
+      <CensusSuggestionsPanel suggestions={suggestions} />
       <SettingsForm
         settings={settings}
         invoiceSeries={invoiceSeries}

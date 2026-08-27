@@ -101,6 +101,55 @@ model CompanySettings {
   /** @deprecated Legacy — REDEME/grupo no son motivos de exoneración 390. Solo SII migrado a vatUsesSii. */
   vat390ExemptionReason String?
 
+  /**
+   * Hecho operativo: ¿practicas retenciones a profesionales?
+   * YES | NO | UNKNOWN — no se infiere automáticamente de gastos históricos.
+   */
+  paysProfessionalsSubjectToWithholding String @default("UNKNOWN")
+  /**
+   * Obligación censal declarada Modelo 111 (036): YES | NO | UNKNOWN.
+   * No implica que VEXO calcule aún el 111; sirve para Health mismatch/review.
+   * Reutilizado como censusModel111 del perfil censal (Fase 9.2).
+   */
+  censusModel111 String @default("UNKNOWN")
+
+  /**
+   * Periodicidad Modelo 111: QUARTERLY | MONTHLY | UNKNOWN.
+   * UNKNOWN → el motor asume trimestral (autónomo PF ordinario) con aviso.
+   * No infiere gran empresa.
+   */
+  model111Periodicity String @default("UNKNOWN")
+
+  /**
+   * Periodicidad Modelo 115: QUARTERLY | MONTHLY | UNKNOWN.
+   * UNKNOWN → asume trimestral (autónomo PF ordinario) con aviso.
+   * MONTHLY solo si se declara (p. ej. gran empresa).
+   */
+  model115Periodicity String @default("UNKNOWN")
+
+  // ─── Perfil censal (Fase 9.2) — hechos declarados, NO conclusiones legales ───
+  /** Obligaciones censales 036: YES | NO | UNKNOWN */
+  censusModel130 String @default("UNKNOWN")
+  censusModel303 String @default("UNKNOWN")
+  censusModel115 String @default("UNKNOWN")
+  censusModel180 String @default("UNKNOWN")
+  censusModel190 String @default("UNKNOWN")
+  censusModel349 String @default("UNKNOWN")
+  censusModel347 String @default("UNKNOWN")
+  censusModel390 String @default("UNKNOWN")
+
+  /** Hechos operativos mínimos (tri-state) */
+  hasEmployees String @default("UNKNOWN") // YES | NO | UNKNOWN
+  rentsBusinessPremises String @default("UNKNOWN")
+  businessRentSubjectToWithholding String @default("UNKNOWN")
+
+  /** Inicio de actividad (año) — usado por assess130FilingObligation */
+  activityStartYear Int?
+
+  /** MANUAL | OCR_036 | UNKNOWN — no auto-actualizar desde operaciones */
+  censusSource String @default("UNKNOWN")
+  censusLastUpdatedAt DateTime?
+
   // Shopify Admin API (ingresos marketplace) — Dev Dashboard 2026+
   shopifyShop          String? // tienda.myshopify.com
   shopifyClientId      String? // Client ID de la app
@@ -445,7 +494,20 @@ model Expense {
   subtotal       Decimal
   vatRate        Float    @default(21)
   vatAmount      Decimal
+  /**
+   * Importe bruto del documento fiscal.
+   * Interior: subtotal + IVA. Reverse charge: normalmente = subtotal (sin IVA ES).
+   * NO es el importe neto a pagar cuando hay retención practicada.
+   * amountPayable = total − retención practicada (ver lib/fiscal-withholding).
+   */
   total          Decimal
+  /**
+   * Clasificación fiscal explícita: ¿esta factura está sujeta a retención
+   * IRPF practicada por el autónomo? YES | NO | UNKNOWN.
+   * NO se infiere solo por category = PROFESIONALES.
+   * Histórico sin datos → UNKNOWN (no inventar FiscalWithholding).
+   */
+  practicedWithholdingStatus String @default("UNKNOWN")
   /**
    * @deprecated Legacy binario. Preferir vatDeductiblePct / irpfDeductiblePct.
    * Se mantiene sincronizado: true ↔ ambos pct a 100; false ↔ ambos a 0
@@ -472,6 +534,12 @@ model Expense {
   importDuaDocument   FiscalDocument? @relation("ExpenseImportDua", fields: [importDuaDocumentId], references: [id], onDelete: SetNull)
   investmentAssetId String? @unique
   investmentAsset   InvestmentAsset? @relation(fields: [investmentAssetId], references: [id], onDelete: SetNull)
+  /**
+   * Vínculo opcional a local arrendado (Fase 9.3).
+   * No se infiere por category; el usuario vincula explícitamente.
+   */
+  leaseId        String?
+  lease          BusinessPremisesLease? @relation(fields: [leaseId], references: [id], onDelete: SetNull)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -481,6 +549,129 @@ model Expense {
   @@index([invoiceNumber])
   @@index([documentId])
   @@index([isInvestment])
+  @@index([practicedWithholdingStatus])
+  @@index([leaseId])
+}
+
+// ─── Fiscal: arrendamiento de inmueble afecto (base 115/180) ─────────────────
+//
+// Fuente de verdad fiscal del local/arrendador. No CRM inmobiliario.
+// Retenciones viven en FiscalWithholding (PRACTICED/RENT), no embebidas aquí.
+// withholdingStatus = YES|NO|UNKNOWN (declarado; no inferir por Expense.category).
+// Imputación temporal al Modelo 115: pendiente motor futuro (devengo vs pago).
+
+model BusinessPremisesLease {
+  id              String   @id @default(cuid())
+  counterpartyId  String
+  counterparty    FiscalCounterparty @relation(fields: [counterpartyId], references: [id], onDelete: Restrict)
+
+  propertyAddress String
+  postalCode      String?
+  municipality    String?
+  province        String?
+  countryCode     String   @default("ES")
+  cadastralReference String?
+
+  startDate       DateTime
+  endDate         DateTime?
+
+  /// FULL | PARTIAL | UNKNOWN — afectación a la actividad
+  activityUse     String   @default("UNKNOWN")
+  /// YES | NO | UNKNOWN — sujeción a retención practicada (declarada)
+  withholdingStatus String @default("UNKNOWN")
+  /**
+   * Motivo declarado si withholdingStatus=NO:
+   * LOW_ANNUAL_AMOUNT | LANDLORD_IAE_EXEMPTION | EMPLOYEE_HOUSING |
+   * FINANCIAL_LEASE | EXEMPT_ENTITY | OTHER | UNKNOWN
+   */
+  withholdingExemptionReason String?
+  /// Tipo % habitual declarado (p. ej. 19). No es regla legal automática.
+  defaultWithholdingRate Float?
+
+  active          Boolean  @default(true)
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  expenses Expense[]
+
+  @@index([counterpartyId])
+  @@index([active])
+  @@index([withholdingStatus])
+  @@index([startDate])
+}
+
+// ─── Fiscal: contrapartes (perceptores de retención / futuros 111·190·115·180) ─
+
+model FiscalCounterparty {
+  id              String   @id @default(cuid())
+  /// NIF/CIF tal como se introdujo
+  taxId           String
+  /// NIF normalizado (sin espacios/guiones/puntos, mayúsculas) — clave de dedupe
+  normalizedTaxId String
+  name            String
+  countryCode     String   @default("ES")
+  /// PROFESSIONAL | LANDLORD | EMPLOYEE | OTHER
+  kind            String   @default("PROFESSIONAL")
+  /// Ambigüedad (placeholder, VARIOS, etc.) — no fusionar automáticamente
+  requiresReview  Boolean  @default(false)
+  reviewReason    String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  withholdings FiscalWithholding[]
+  leases       BusinessPremisesLease[]
+
+  @@unique([normalizedTaxId])
+  @@index([kind])
+  @@index([name])
+}
+
+// ─── Fiscal: retenciones (practicadas / soportadas) ───────────────────────────
+//
+// PRACTICED = yo retengo a un tercero → futuros Modelos 111/115 (y anuales 190/180).
+// SUFFERED  = un cliente me retiene en mis ingresos → hoy vive en Invoice.irpfAmount
+//             (Modelo 130). Migración Invoice→FiscalWithholding SUFFERED: futura.
+//
+// Fechas (Fase 9.1): accrualDate = fecha factura/devengo del documento fuente;
+// paymentDate opcional. year/quarter se derivan de accrualDate SOLO para indexación.
+// La regla legal de imputación temporal al Modelo 111 NO se fija aquí (Fase 9.4).
+
+model FiscalWithholding {
+  id                String   @id @default(cuid())
+  /// PRACTICED | SUFFERED
+  direction         String
+  /// PROFESSIONAL | RENT | SALARY | OTHER
+  kind              String
+  counterpartyId    String
+  counterparty      FiscalCounterparty @relation(fields: [counterpartyId], references: [id], onDelete: Restrict)
+  /// EXPENSE | INVOICE | LEASE_PAYMENT | MANUAL
+  sourceType        String
+  sourceId          String
+  perceptionKey     String?
+  perceptionSubKey  String?
+  baseAmount        Decimal
+  rate              Float
+  withholdingAmount Decimal
+  accrualDate       DateTime
+  paymentDate       DateTime?
+  year              Int
+  quarter           Int
+  /// ACTIVE | RECTIFIED | SUPERSEDED — prepara correcciones futuras sin borrar histórico
+  status            String   @default("ACTIVE")
+  rectifiesId       String?
+  rectifies         FiscalWithholding?  @relation("WithholdingRectification", fields: [rectifiesId], references: [id], onDelete: SetNull)
+  rectifiedBy       FiscalWithholding[] @relation("WithholdingRectification")
+  notes             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([direction, kind, year, quarter])
+  @@index([sourceType, sourceId])
+  @@index([counterpartyId])
+  @@index([status])
+  @@index([accrualDate])
+  @@index([rectifiesId])
 }
 
 // ─── Fiscal: archivo documental (Vercel Blob) ────────────────────────────────
@@ -697,6 +888,71 @@ model FiscalReminderLog {
 
   @@unique([periodKey, kind])
   @@index([sentAt])
+}
+
+// ─── Fiscal: revisión pre-presentación (Fase 14) ─────────────────────────────
+// Congela el cálculo revisado por el usuario. NO es un FiscalFiling presentado.
+// Si el libro/censo/motor cambian → STALE_REVIEW (snapshot no se borra).
+
+model FiscalPreFilingReview {
+  id            String    @id @default(cuid())
+  /// e.g. "2026:2"
+  periodKey     String
+  year          Int
+  quarter       Int
+  /// FiscalPreFilingSnapshotV1 JSON
+  payload       Json
+  sourceHash    String
+  censusHash    String
+  engineVersion String
+  healthStatus  String
+  readyToFile   Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  createdBy     String?
+  /// Si se crea una revisión nueva, la anterior puede marcarse superseded
+  supersededAt  DateTime?
+
+  @@index([periodKey, createdAt])
+  @@index([year, quarter])
+}
+
+// ─── Fiscal: intento de presentación (Fase 16) ───────────────────────────────
+// Inmutable/auditable. Canal asistido o registro MANUAL_AEAT.
+// No hay submit automático a AEAT en esta fase (0 network calls).
+
+model FiscalSubmissionAttempt {
+  id                 String    @id @default(cuid())
+  /// Single-tenant hoy; campo preparado para multi-tenant.
+  tenantId           String    @default("default")
+  model              String
+  year               Int
+  quarter            Int
+  preFilingReviewId  String
+  declarationHash    String
+  startedAt          DateTime  @default(now())
+  finishedAt         DateTime?
+  /// PREPARED | SUBMITTING | ACCEPTED | REJECTED | TECHNICAL_ERROR |
+  /// USER_ACTION_REQUIRED | PAYMENT_REQUIRED | SUBMISSION_STATUS_UNKNOWN
+  status             String
+  /// ASSISTED_WEB | MANUAL_AEAT | FILE_IMPORT | DIRECT_API
+  channel            String
+  requestFingerprint String?
+  responseCode       String?
+  errorCode          String?
+  /// Justificante / CSV (no payloads personales completos)
+  receiptId          String?
+  filingId           String?
+  paymentRequirement String?
+  /// FILED_MATCHES_REVIEW | FILED_DIFFERS_FROM_REVIEW
+  reviewMatchFlag    String?
+  safeMessage        String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([tenantId, model, year, quarter, declarationHash])
+  @@index([preFilingReviewId])
+  @@index([status])
+  @@index([filingId])
 }
 
 // ─── Fiscal: ingresos marketplace (Amazon / Shopify) ─────────────────────────
