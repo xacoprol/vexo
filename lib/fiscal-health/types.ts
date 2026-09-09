@@ -16,7 +16,14 @@ export type FiscalHealthSourceType =
   | "filing"
   | "model"
   | "series"
-  | "system";
+  | "system"
+  | "withholding"
+  | "amortization"
+  | "hard_to_justify"
+  | "prior_payment"
+  | "prior_housing_deduction"
+  | "reduction_110_3c"
+  | "negative_carry";
 
 export type FiscalHealthIssue = {
   code: string;

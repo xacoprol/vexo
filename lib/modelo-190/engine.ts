@@ -10,6 +10,7 @@ import {
 import type {
   Model190Outcome,
   Model190Result,
+  Model190Warning,
   Model190WithholdingRow,
 } from "@/lib/modelo-190/types";
 import {
@@ -37,7 +38,7 @@ function resolveOutcome(opts: {
 }
 
 export function buildModel190(input: BuildModel190Input): Model190Result {
-  const warnings = [];
+  const warnings: Model190Warning[] = [];
   const hasEmployees = String(input.hasEmployees ?? "UNKNOWN").toUpperCase();
 
   if (hasEmployees === "YES") {
@@ -85,8 +86,8 @@ export function buildModel190(input: BuildModel190Input): Model190Result {
     hasRelevantPerceptions: hasOps,
     totalWithholdingAmount: summary.totalWithholdingAmount,
     requiresReview,
-    hasEmployees: input.hasEmployees,
-    censusModel111: input.censusModel111,
+    hasEmployees: input.hasEmployees ?? undefined,
+    censusModel111: input.censusModel111 ?? undefined,
   });
 
   const quarters =

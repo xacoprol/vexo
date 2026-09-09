@@ -74,14 +74,9 @@ async function loadQuarter115ForReconcile(
       baseAmount: Number(snap.boxes.box02) || 0,
       withholdingAmount: Number(snap.boxes.box03) || 0,
       presented: true,
-      withholdingIds: draft.trace?.map
-        ? // Model115 may expose landlords with traces
-          draft.landlords.flatMap((l) =>
-            (l.trace ?? []).map((t) => t.withholdingId)
-          )
-        : draft.landlords.flatMap((l) =>
-            (l.trace ?? []).map((t) => t.withholdingId)
-          ),
+      withholdingIds: draft.landlords.flatMap((l) =>
+        (l.trace ?? []).map((t) => t.withholdingId)
+      ),
       byLease: [...byLeaseMap.values()],
     };
   }

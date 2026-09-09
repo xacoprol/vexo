@@ -149,7 +149,7 @@ export function buildModel111(input: BuildModel111Input): Model111Result {
     hasSubjectBaseWithZeroWithholding,
     requiresReview,
     paysProfessionalsSubjectToWithholding:
-      input.paysProfessionalsSubjectToWithholding,
+      input.paysProfessionalsSubjectToWithholding ?? undefined,
   });
 
   const outcome = resolveOutcome({

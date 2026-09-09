@@ -115,7 +115,7 @@ export type FiscalCensusProfile = {
 export type CensusMismatch = {
   code: string;
   model: ObligationModelCode | "HEALTH";
-  severity: "WARNING" | "INFO";
+  severity: "CRITICAL" | "ERROR" | "WARNING" | "INFO";
   title: string;
   description: string;
 };

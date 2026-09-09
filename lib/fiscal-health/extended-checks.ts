@@ -812,11 +812,12 @@ export function hasPostFilingRectification(
   const filing = ctx.filingsYear.find(
     (f) => f.modelType === modelType && f.quarter === quarter
   );
-  if (!filing?.filedAt) return false;
+  const filedAt = filing?.filedAt;
+  if (!filedAt) return false;
   return ctx.invoicesYear.some(
     (inv) =>
       inv.invoiceFiscalType === INVOICE_FISCAL_TYPE.RECTIFYING &&
       isInvoiceIssued(inv) &&
-      inv.issueDate > filing.filedAt
+      inv.issueDate > filedAt
   );
 }

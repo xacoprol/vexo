@@ -2,6 +2,8 @@ import type { FiscalQuarter } from "@/lib/fiscal";
 import type { LastPeriodAnnual303Info } from "@/lib/modelo-303/last-period-annual";
 import type { Model303Trace, Model303Warning } from "@/lib/modelo-303/types";
 
+export type Model390Warning = Model303Warning;
+
 export type Model390FilingObligationStatus = "REQUIRED" | "EXEMPT" | "UNKNOWN";
 
 export type Model390FilingObligation = {

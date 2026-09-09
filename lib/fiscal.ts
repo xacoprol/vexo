@@ -197,8 +197,8 @@ type ExpenseRow = {
   isInvestment: boolean;
   description?: string | null;
   supplierName?: string | null;
-  importDuaBase?: unknown;
-  importDuaVat?: unknown;
+  importDuaBase?: number | null;
+  importDuaVat?: number | null;
   importDuaDocumentId?: string | null;
 };
 
@@ -339,6 +339,7 @@ export function parseExpenseVatOperationType(
     EU_GOODS: "INTRACOMUNITARIA",
     EU_SERVICES: "SERVICIO_INTRACOMUNITARIO",
     NON_EU_SERVICES: "SERVICIO_EXTRACOMUNITARIO",
+    REVERSE_CHARGE_DOMESTIC: "INTERIOR",
     IMPORT_GOODS: "IMPORTACION_BIENES",
   } as const;
   const v = legacy[kind];

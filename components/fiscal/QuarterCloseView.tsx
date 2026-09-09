@@ -228,7 +228,7 @@ export function QuarterCloseView({ validation }: Props) {
                   model={m}
                   year={validation.period.year}
                   quarter={validation.period.quarter as FiscalQuarter}
-                  reviewId={lifecycle.preFiling!.reviewId}
+                  reviewId={lifecycle.preFiling!.reviewId ?? ""}
                 />
               ))}
             </div>

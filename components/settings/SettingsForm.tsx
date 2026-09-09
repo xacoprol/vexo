@@ -807,6 +807,10 @@ export function SettingsForm({ settings, invoiceSeries, quoteSeries }: Props) {
                 Junto con el censo 303, evita el blocker OBLIGATION_UNKNOWN.
               </p>
             </div>
+            <div className="sm:col-span-2">
+              <span className="label">
+                ¿Tributas exclusivamente en territorio común?
+              </span>
               <div className="mt-2 flex flex-wrap gap-4">
                 {(
                   [
@@ -821,7 +825,10 @@ export function SettingsForm({ settings, invoiceSeries, quoteSeries }: Props) {
                       name="vatTerritory"
                       value={value}
                       defaultChecked={
-                        (settings.vatTerritory ?? "UNKNOWN") === value
+                        (settings.vatTerritory ?? "UNKNOWN") === value ||
+                        (value === "YES" &&
+                          settings.vatTerritory === "COMMON_ONLY") ||
+                        (value === "NO" && settings.vatTerritory === "OTHER")
                       }
                     />
                     {label}

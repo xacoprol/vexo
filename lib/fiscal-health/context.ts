@@ -162,6 +162,7 @@ export type ExpenseHealthRow = {
   supplierName: string;
   supplierNif: string | null;
   category: string;
+  description?: string | null;
   vatOperationType: string;
   subtotal: unknown;
   vatAmount: unknown;

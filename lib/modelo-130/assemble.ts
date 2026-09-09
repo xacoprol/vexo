@@ -180,6 +180,8 @@ export function model130ResultToModeloBoxes(
   result: number;
   warnings: typeof result.warnings;
   trace: typeof result.trace;
+  filingObligation: typeof result.filingObligation;
+  scopeNote: typeof result.scopeNote;
 } {
   const mode = parseIrpfDirectEstimationMode(config.irpfDirectEstimationMode);
   return {

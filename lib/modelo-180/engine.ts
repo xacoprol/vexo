@@ -11,6 +11,7 @@ import type {
   Model180LeaseRef,
   Model180Outcome,
   Model180Result,
+  Model180Warning,
   Model180WithholdingRow,
 } from "@/lib/modelo-180/types";
 import { MODEL180_SCOPE_NOTE } from "@/lib/modelo-180/types";
@@ -35,7 +36,7 @@ function resolveOutcome(opts: {
 
 export function buildModel180(input: BuildModel180Input): Model180Result {
   const leasesById = new Map(input.leases.map((l) => [l.id, l]));
-  const warnings = [];
+  const warnings: Model180Warning[] = [];
 
   const collected = collectEffective180Withholdings({
     withholdings: input.withholdings,
@@ -75,7 +76,7 @@ export function buildModel180(input: BuildModel180Input): Model180Result {
     totalWithholdingAmount: summary.totalWithholdingAmount,
     requiresReview,
     hasActiveLeaseWithoutRent,
-    censusModel115: input.censusModel115,
+    censusModel115: input.censusModel115 ?? undefined,
   });
 
   const quarters =

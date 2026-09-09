@@ -36,7 +36,7 @@ type Props = {
 
 export function LeaseForm({ lease }: Props) {
   const action = lease ? updateLease.bind(null, lease.id) : createLease;
-  const [state, formAction] = useActionState<LeaseFormState, FormData>(
+  const [state, formAction, pending] = useActionState<LeaseFormState, FormData>(
     action,
     {}
   );
@@ -270,9 +270,13 @@ export function LeaseForm({ lease }: Props) {
       <input type="hidden" name="countryCode" value={lease?.countryCode ?? "ES"} />
       <input type="hidden" name="active" value={lease?.active === false ? "0" : "1"} />
 
-      <ButtonPending className="btn-primary">
-        {lease ? "Guardar" : "Crear local"}
-      </ButtonPending>
+      <button type="submit" className="btn-primary" disabled={pending}>
+        <ButtonPending
+          pending={pending}
+          idle={lease ? "Guardar" : "Crear local"}
+          busy="Guardando…"
+        />
+      </button>
     </form>
   );
 }

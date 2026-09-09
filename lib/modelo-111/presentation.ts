@@ -41,9 +41,10 @@ export function parse111PresentedSnapshot(
 
 export function draft111BoxesList(
   draft: Model111Result
-): { code: string; value: number }[] {
+): { code: string; label: string; value: number }[] {
   return draft.boxList.map((b) => ({
     code: b.code,
+    label: b.label,
     value: round2(b.value),
   }));
 }

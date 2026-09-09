@@ -160,8 +160,9 @@ export function buildModel115(input: BuildModel115Input): Model115Result {
     hasSubjectBaseWithZeroWithholding: boxes.box02 > 0 && boxes.box03 <= 0,
     requiresReview,
     hasLeaseWithholdingUnknown,
-    rentsBusinessPremises: input.rentsBusinessPremises,
-    businessRentSubjectToWithholding: input.businessRentSubjectToWithholding,
+    rentsBusinessPremises: input.rentsBusinessPremises ?? undefined,
+    businessRentSubjectToWithholding:
+      input.businessRentSubjectToWithholding ?? undefined,
   });
 
   const outcome = resolveOutcome({

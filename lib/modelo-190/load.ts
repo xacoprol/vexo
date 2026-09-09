@@ -40,10 +40,7 @@ async function loadQuarter111ForReconcile(
       perceptionAmount: Number(snap.boxes.box08) || 0,
       withholdingAmount: Number(snap.boxes.box09) || 0,
       presented: true,
-      withholdingIds: draft.includedWithholdingIds
-        ? // Model111Result doesn't have includedWithholdingIds - use trace
-          draft.trace.box08.map((t) => t.withholdingId)
-        : draft.trace.box08.map((t) => t.withholdingId),
+      withholdingIds: draft.trace.box08.map((t) => t.withholdingId),
       byCounterparty: (snap.payees ?? []).map((p) => ({
         counterpartyId: p.counterpartyId,
         name: p.name,

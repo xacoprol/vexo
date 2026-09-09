@@ -515,7 +515,7 @@ export function ExpenseForm({
                   id="importDuaDate"
                   name="importDuaDate"
                   value={importDuaDate}
-                  onChange={setImportDuaDate}
+                  onChange={(e) => setImportDuaDate(e.target.value)}
                 />
               </div>
               <div>

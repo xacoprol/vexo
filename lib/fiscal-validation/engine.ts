@@ -15,6 +15,7 @@ import type {
   FiscalPeriodValidation,
   ModelValidationEntry,
   QuarterCloseModelCode,
+  ReconciliationStatus,
 } from "@/lib/fiscal-validation/types";
 import { evaluateFilingGateFromHealth } from "@/lib/fiscal-health";
 import type { FiscalModelType } from "@/lib/gemini-fiscal-filing";

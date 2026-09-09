@@ -9,6 +9,7 @@ import {
   RECTIFICATION_METHOD,
   suggestedLegalTypesForCause,
   type RectificationCause,
+  type RectificationType,
 } from "@/lib/invoice-rectification";
 import { parseInvoiceKind } from "@/lib/invoice-issuance";
 import { createRectificationDraft } from "@/app/(app)/invoices/rectification-actions";
@@ -163,7 +164,9 @@ export function RectifyInvoiceWizard({ original }: Props) {
             <select
               className="mt-2 w-full rounded-lg border border-line bg-bg px-3 py-2 text-sm"
               value={legalType}
-              onChange={(e) => setLegalType(e.target.value)}
+              onChange={(e) =>
+                setLegalType(e.target.value as RectificationType)
+              }
             >
               {RECTIFICATION_LEGAL_OPTIONS.map((opt) => (
                 <option key={opt.code} value={opt.code}>

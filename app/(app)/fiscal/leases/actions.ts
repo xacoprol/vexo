@@ -1,7 +1,6 @@
 "use server";
 
 import {
-  LEASE_EXEMPTION_REASON_LABELS,
   parseLeaseActivityUse,
   parseLeaseExemptionReason,
   parseLeaseWithholdingStatus,
@@ -199,5 +198,3 @@ export async function deactivateLease(id: string) {
   revalidateLeasePaths();
   redirect("/fiscal/leases");
 }
-
-export { LEASE_EXEMPTION_REASON_LABELS };
