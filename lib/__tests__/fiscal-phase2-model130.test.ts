@@ -265,7 +265,7 @@ describe("Model 130 — casilla 16", () => {
       year: 2026,
       config: eligibleConfig,
       presented: {
-        1: { quarter: 1, presented: true, box07: 1400, box16: 140, box19: 1260 },
+        1: { quarter: 1, presented: true, box07: 1400, box15: 0, box16: 140, box19: 1260 },
       },
       quarters: {
         1: quarterData({ income: 8000, expenses: 1000 }),

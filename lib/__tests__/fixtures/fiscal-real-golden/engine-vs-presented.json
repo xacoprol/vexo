@@ -1,0 +1,978 @@
+{
+  "censusAdapters": {
+    "111": {
+      "status": "UNKNOWN",
+      "reason": "Sin rentas relevantes en el período y censo 111 UNKNOWN. No se infiere NOT_APPLICABLE.",
+      "codes": [
+        "CENSUS_111_UNKNOWN",
+        "NO_RELEVANT_PAYMENTS",
+        "ZERO_OPS"
+      ]
+    },
+    "115": {
+      "status": "UNKNOWN",
+      "reason": "Sin rentas relevantes en el período y censo 115 UNKNOWN. No se infiere NOT_APPLICABLE.",
+      "codes": [
+        "CENSUS_115_UNKNOWN",
+        "NO_RELEVANT_PAYMENTS",
+        "ZERO_OPS"
+      ]
+    },
+    "130": {
+      "status": "UNKNOWN",
+      "reason": "No está configurado si la actividad es profesional o empresarial.",
+      "codes": [
+        "130_REASON_0",
+        "130_REASON_1"
+      ]
+    },
+    "303": {
+      "status": "UNKNOWN",
+      "reason": "Falta periodicidad IVA y el censo 303 está en UNKNOWN. Completa Ajustes.",
+      "codes": [
+        "VAT_PERIODICITY_UNKNOWN",
+        "CENSUS_303_UNKNOWN"
+      ]
+    },
+    "349": {
+      "status": "REQUIRED",
+      "reason": "Hay operaciones intracomunitarias; censo 349 UNKNOWN — presenta y confirma ROI.",
+      "codes": [
+        "HAS_OPS",
+        "CENSUS_349_UNKNOWN"
+      ]
+    }
+  },
+  "counts": {
+    "whCount": 0,
+    "leaseCount": 0,
+    "practicedYesQ2": 0,
+    "q3inv": 4,
+    "q3exp": 29
+  },
+  "q2invoices": [
+    {
+      "num": "W3D260104",
+      "date": "2026-04-01",
+      "sub": 148.8,
+      "vat": 31.26,
+      "irpf": 0,
+      "kind": "DOMESTIC_TAXABLE",
+      "raw": "SUJETA",
+      "country": "ES"
+    },
+    {
+      "num": "W3D260109",
+      "date": "2026-04-28",
+      "sub": 275,
+      "vat": 0,
+      "irpf": 19.25,
+      "kind": "CANARY_ISLANDS",
+      "raw": "CANARIAS",
+      "country": "ES"
+    },
+    {
+      "num": "W3D260110",
+      "date": "2026-04-29",
+      "sub": 285,
+      "vat": 59.85,
+      "irpf": 19.95,
+      "kind": "DOMESTIC_TAXABLE",
+      "raw": "SUJETA",
+      "country": "ES"
+    },
+    {
+      "num": "W3D260105",
+      "date": "2026-04-10",
+      "sub": 700,
+      "vat": 147,
+      "irpf": 49,
+      "kind": "DOMESTIC_TAXABLE",
+      "raw": "SUJETA",
+      "country": "ES"
+    },
+    {
+      "num": "W3D260107",
+      "date": "2026-04-11",
+      "sub": 1560,
+      "vat": 327.6,
+      "irpf": 109.2,
+      "kind": "DOMESTIC_TAXABLE",
+      "raw": "SUJETA",
+      "country": "ES"
+    },
+    {
+      "num": "W3D260108",
+      "date": "2026-04-21",
+      "sub": 450,
+      "vat": 94.5,
+      "irpf": 31.5,
+      "kind": "DOMESTIC_TAXABLE",
+      "raw": "SUJETA",
+      "country": "ES"
+    },
+    {
+      "num": "W3D260106",
+      "date": "2026-04-10",
+      "sub": 90,
+      "vat": 0,
+      "irpf": 6.3,
+      "kind": "CANARY_ISLANDS",
+      "raw": "CANARIAS",
+      "country": "ES"
+    }
+  ],
+  "q2euExpenses": [
+    {
+      "date": "2026-04-02",
+      "supplier": "Bambulab GmbH",
+      "nif": "DE360354704",
+      "type": "INTRACOMUNITARIA",
+      "kind": "EU_GOODS",
+      "subtotal": 104.09,
+      "vat": 0,
+      "inv": "BBLEU2697KJ90QD28",
+      "dua": null
+    },
+    {
+      "date": "2026-04-17",
+      "supplier": "Anysphere, Inc. (Cursor)",
+      "nif": "87-4436547",
+      "type": "SERVICIO_EXTRACOMUNITARIO",
+      "kind": "NON_EU_SERVICES",
+      "subtotal": 20,
+      "vat": 4.2,
+      "inv": "YDLLZA1W-0001",
+      "dua": null
+    },
+    {
+      "date": "2026-06-05",
+      "supplier": "Shopify International Limited",
+      "nif": "IE3347697KH",
+      "type": "INTRACOMUNITARIA",
+      "kind": "EU_GOODS",
+      "subtotal": 34.78,
+      "vat": 7.3,
+      "inv": "539791116",
+      "dua": null
+    },
+    {
+      "date": "2026-05-25",
+      "supplier": "Makeblock Europe B.V. (xTool Europe Store)",
+      "nif": "DE351952217",
+      "type": "INTRACOMUNITARIA",
+      "kind": "EU_GOODS",
+      "subtotal": 140.76,
+      "vat": 29.56,
+      "inv": "EU-47722",
+      "dua": null
+    },
+    {
+      "date": "2026-05-28",
+      "supplier": "Makeblock Europe B.V. (xTool)",
+      "nif": "DE351952217",
+      "type": "INTRACOMUNITARIA",
+      "kind": "EU_GOODS",
+      "subtotal": 108.78,
+      "vat": 22.84,
+      "inv": "INVOICE EU-47936",
+      "dua": null
+    },
+    {
+      "date": "2026-04-11",
+      "supplier": "Cursor / Anysphere, Inc.",
+      "nif": null,
+      "type": "SERVICIO_EXTRACOMUNITARIO",
+      "kind": "NON_EU_SERVICES",
+      "subtotal": 20,
+      "vat": 4.2,
+      "inv": "WAUELEBD-0001",
+      "dua": null
+    },
+    {
+      "date": "2026-06-05",
+      "supplier": "APPLE",
+      "nif": "IE9700053D",
+      "type": "INTRACOMUNITARIA",
+      "kind": "EU_GOODS",
+      "subtotal": 14.99,
+      "vat": 3.15,
+      "inv": "8199",
+      "dua": null
+    },
+    {
+      "date": "2026-05-06",
+      "supplier": "Shopify International Limited",
+      "nif": "IE3347697KH",
+      "type": "INTRACOMUNITARIA",
+      "kind": "EU_GOODS",
+      "subtotal": 33.71,
+      "vat": 7.08,
+      "inv": "525847898",
+      "dua": null
+    },
+    {
+      "date": "2026-05-29",
+      "supplier": "PIXARTPRINTING SPA",
+      "nif": "IT04061550275",
+      "type": "INTRACOMUNITARIA",
+      "kind": "EU_GOODS",
+      "subtotal": 50.91,
+      "vat": 10.69,
+      "inv": "7261923081",
+      "dua": null
+    },
+    {
+      "date": "2026-05-30",
+      "supplier": "PIXARTPRINTING SPA",
+      "nif": "IT04061550275",
+      "type": "INTRACOMUNITARIA",
+      "kind": "EU_GOODS",
+      "subtotal": 114.34,
+      "vat": 24.01,
+      "inv": "7261924753",
+      "dua": null
+    },
+    {
+      "date": "2026-05-19",
+      "supplier": "Makeblock Europe B.V. (xTool)",
+      "nif": "DE351952217",
+      "type": "INTRACOMUNITARIA",
+      "kind": "EU_GOODS",
+      "subtotal": 157.67,
+      "vat": 33.11,
+      "inv": "EU-47427",
+      "dua": null
+    },
+    {
+      "date": "2026-05-19",
+      "supplier": "Makeblock Europe B.V. (xTool Europe Store)",
+      "nif": "DE351952217",
+      "type": "INTRACOMUNITARIA",
+      "kind": "EU_GOODS",
+      "subtotal": 133.61,
+      "vat": 28.06,
+      "inv": "EU-47431",
+      "dua": null
+    },
+    {
+      "date": "2026-06-20",
+      "supplier": "Makeblock Europe B.V. (xTool)",
+      "nif": "DE351952217",
+      "type": "INTRACOMUNITARIA",
+      "kind": "EU_GOODS",
+      "subtotal": 496.5,
+      "vat": 104.27,
+      "inv": "EU-49370",
+      "dua": null
+    },
+    {
+      "date": "2026-04-11",
+      "supplier": "Anysphere, Inc. (Cursor)",
+      "nif": "87-4436547",
+      "type": "SERVICIO_EXTRACOMUNITARIO",
+      "kind": "NON_EU_SERVICES",
+      "subtotal": 20,
+      "vat": 4.2,
+      "inv": "WAUELEBD-0001",
+      "dua": null
+    }
+  ],
+  "q2euTotals": {
+    "EU_GOODS": 1390.14,
+    "NON_EU_SERVICES": 60
+  },
+  "vexo303q2": {
+    "box01": 0,
+    "box02": 4,
+    "box03": 0,
+    "box04": 0,
+    "box05": 10,
+    "box06": 0,
+    "box07": 6646.28,
+    "box08": 21,
+    "box09": 1391.01,
+    "box10": 1390.14,
+    "box11": 291.93,
+    "box12": 60,
+    "box13": 12.6,
+    "box16": 0,
+    "box17": 0,
+    "box27": 1831.98,
+    "box28": 4750.55,
+    "box29": 803.98,
+    "box30": 0,
+    "box31": 0,
+    "box32": 0,
+    "box33": 0,
+    "box34": 0,
+    "box35": 0,
+    "box36": 893.64,
+    "box37": 187.66,
+    "box38": 496.5,
+    "box39": 104.27,
+    "box41": 0,
+    "box42": 0,
+    "box43": 0,
+    "box44": 0,
+    "box45": 1095.91,
+    "box46": 736.07,
+    "box59": 0,
+    "box60": 365,
+    "box66": 736.07,
+    "box68": 0,
+    "box69": 736.07,
+    "box70": 0,
+    "box71": 736.07,
+    "box77": 0,
+    "box78": 0,
+    "box87": 0,
+    "box108": 0,
+    "box109": 0,
+    "box110": 0,
+    "box123": 116.5,
+    "baseExenta": 2602.8,
+    "otherBase": 578.89,
+    "otherQuota": 136.44
+  },
+  "vexo303warnings": [
+    {
+      "code": "RECTIFICATION_NOT_SUPPORTED",
+      "message": "Devolución marketplace: el IVA puede requerir revisión manual (rectificativa no automatizada).",
+      "sourceId": "cms84ssac0029jt04qeavrpym"
+    },
+    {
+      "code": "RECTIFICATION_NOT_SUPPORTED",
+      "message": "Devolución marketplace: el IVA puede requerir revisión manual (rectificativa no automatizada).",
+      "sourceId": "cms84stub002ljt046akg7y0x"
+    },
+    {
+      "code": "RECTIFICATION_NOT_SUPPORTED",
+      "message": "Devolución marketplace: el IVA puede requerir revisión manual (rectificativa no automatizada).",
+      "sourceId": "cms84swap0034jt04y4fuu43i"
+    },
+    {
+      "code": "RECTIFICATION_NOT_SUPPORTED",
+      "message": "Devolución marketplace: el IVA puede requerir revisión manual (rectificativa no automatizada).",
+      "sourceId": "cms84syqi003njt045p6dibil"
+    },
+    {
+      "code": "RECTIFICATION_NOT_SUPPORTED",
+      "message": "Devolución marketplace: el IVA puede requerir revisión manual (rectificativa no automatizada).",
+      "sourceId": "cms84t1ax0047jt04bp6p086t"
+    },
+    {
+      "code": "RECTIFICATION_NOT_SUPPORTED",
+      "message": "Devolución marketplace: el IVA puede requerir revisión manual (rectificativa no automatizada).",
+      "sourceId": "cms8njzaa0013jl04wnwg43b9"
+    },
+    {
+      "code": "RECTIFICATION_NOT_SUPPORTED",
+      "message": "Devolución marketplace: el IVA puede requerir revisión manual (rectificativa no automatizada).",
+      "sourceId": "cms8nkf49004ijl04wezrq7gy"
+    },
+    {
+      "code": "RECTIFICATION_NOT_SUPPORTED",
+      "message": "Devolución marketplace: el IVA puede requerir revisión manual (rectificativa no automatizada).",
+      "sourceId": "cms8nkpwl006ujl04cr4133a3"
+    },
+    {
+      "code": "RECTIFICATION_NOT_SUPPORTED",
+      "message": "Devolución marketplace: el IVA puede requerir revisión manual (rectificativa no automatizada).",
+      "sourceId": "cms8nkuxe007xjl0433j9pidj"
+    },
+    {
+      "code": "RECTIFICATION_NOT_SUPPORTED",
+      "message": "Devolución marketplace: el IVA puede requerir revisión manual (rectificativa no automatizada).",
+      "sourceId": "cms8pq8h2000oky04yz3bv4zn"
+    },
+    {
+      "code": "RECTIFICATION_NOT_SUPPORTED",
+      "message": "Devolución marketplace: el IVA puede requerir revisión manual (rectificativa no automatizada).",
+      "sourceId": "cms8pqyck0067ky04jqzxetk4"
+    },
+    {
+      "code": "RECTIFICATION_NOT_SUPPORTED",
+      "message": "Devolución marketplace: el IVA puede requerir revisión manual (rectificativa no automatizada).",
+      "sourceId": "cms8ps1rh007vky04iiiy2qn2"
+    },
+    {
+      "code": "RECTIFICATION_NOT_SUPPORTED",
+      "message": "Devolución marketplace: el IVA puede requerir revisión manual (rectificativa no automatizada).",
+      "sourceId": "cms8ps25z007yky04eqvupjgr"
+    },
+    {
+      "code": "RECTIFICATION_NOT_SUPPORTED",
+      "message": "Devolución marketplace: el IVA puede requerir revisión manual (rectificativa no automatizada).",
+      "sourceId": "cms8ps4a9008eky045ca60rk5"
+    },
+    {
+      "code": "RECTIFICATION_NOT_SUPPORTED",
+      "message": "Devolución marketplace: el IVA puede requerir revisión manual (rectificativa no automatizada).",
+      "sourceId": "cms8ps6ev008uky0489q5o81k"
+    },
+    {
+      "code": "RECTIFICATION_NOT_SUPPORTED",
+      "message": "Devolución marketplace: el IVA puede requerir revisión manual (rectificativa no automatizada).",
+      "sourceId": "cms8ps7qt0094ky040vz4hyk8"
+    },
+    {
+      "code": "RECTIFICATION_NOT_SUPPORTED",
+      "message": "Devolución marketplace: el IVA puede requerir revisión manual (rectificativa no automatizada).",
+      "sourceId": "cms8psera00alky049ymesjm3"
+    },
+    {
+      "code": "RECTIFICATION_NOT_SUPPORTED",
+      "message": "Devolución marketplace: el IVA puede requerir revisión manual (rectificativa no automatizada).",
+      "sourceId": "cms8pshec00b5ky04xzfq76tu"
+    },
+    {
+      "code": "RECTIFICATION_NOT_SUPPORTED",
+      "message": "Devolución marketplace: el IVA puede requerir revisión manual (rectificativa no automatizada).",
+      "sourceId": "cms8pslie00c0ky04r30bg829"
+    },
+    {
+      "code": "RECTIFICATION_NOT_SUPPORTED",
+      "message": "Devolución marketplace: el IVA puede requerir revisión manual (rectificativa no automatizada).",
+      "sourceId": "cms8psqqy00d3ky049dug2zhz"
+    },
+    {
+      "code": "RECTIFICATION_NOT_SUPPORTED",
+      "message": "Devolución marketplace: el IVA puede requerir revisión manual (rectificativa no automatizada).",
+      "sourceId": "cms8psrji00d9ky04wbb4cwsi"
+    },
+    {
+      "code": "VAT_PRORATA_REVIEW_REQUIRED",
+      "message": "Actividad mixta (sujeta + exenta) en el periodo. VEXO no calcula prorrata general de actividad."
+    }
+  ],
+  "vexo303result": 736.07,
+  "presented303q2": {
+    "result": 808.49,
+    "boxes": [
+      {
+        "code": "07",
+        "label": "Base imponible general",
+        "value": 7218.79
+      },
+      {
+        "code": "09",
+        "label": "Cuota general",
+        "value": 1530.69
+      },
+      {
+        "code": "10",
+        "label": "Base AIB",
+        "value": 104.09
+      },
+      {
+        "code": "11",
+        "label": "Cuota AIB",
+        "value": 21.86
+      },
+      {
+        "code": "27",
+        "label": "Total cuota devengada",
+        "value": 1552.55
+      },
+      {
+        "code": "28",
+        "label": "Base soportada operaciones interiores",
+        "value": 3451.15
+      },
+      {
+        "code": "29",
+        "label": "Cuota soportada operaciones interiores",
+        "value": 724.76
+      },
+      {
+        "code": "36",
+        "label": "Base AIB deducible",
+        "value": 104.09
+      },
+      {
+        "code": "37",
+        "label": "Cuota AIB deducible",
+        "value": 21.86
+      },
+      {
+        "code": "45",
+        "label": "Total a deducir",
+        "value": 744.06
+      },
+      {
+        "code": "46",
+        "label": "Resultado régimen general",
+        "value": 808.49
+      },
+      {
+        "code": "66",
+        "label": "Atribuible a la Administración del Estado",
+        "value": 808.49
+      },
+      {
+        "code": "78",
+        "label": "Cuotas a compensar aplicadas",
+        "value": 0
+      },
+      {
+        "code": "87",
+        "label": "Cuotas a compensar pendientes",
+        "value": 0
+      },
+      {
+        "code": "110",
+        "label": "Cuotas a compensar periodos anteriores",
+        "value": 0
+      }
+    ],
+    "ocr": [
+      {
+        "code": "07",
+        "label": "Base imponible general",
+        "value": 7218.79
+      },
+      {
+        "code": "09",
+        "label": "Cuota general",
+        "value": 1530.69
+      },
+      {
+        "code": "10",
+        "label": "Base AIB",
+        "value": 104.09
+      },
+      {
+        "code": "11",
+        "label": "Cuota AIB",
+        "value": 21.86
+      },
+      {
+        "code": "27",
+        "label": "Total cuota devengada",
+        "value": 1552.55
+      },
+      {
+        "code": "28",
+        "label": "Base soportada operaciones interiores",
+        "value": 3451.15
+      },
+      {
+        "code": "29",
+        "label": "Cuota soportada operaciones interiores",
+        "value": 724.76
+      },
+      {
+        "code": "36",
+        "label": "Base AIB deducible",
+        "value": 104.09
+      },
+      {
+        "code": "37",
+        "label": "Cuota AIB deducible",
+        "value": 21.86
+      },
+      {
+        "code": "45",
+        "label": "Total a deducir",
+        "value": 744.06
+      },
+      {
+        "code": "46",
+        "label": "Resultado régimen general",
+        "value": 808.49
+      },
+      {
+        "code": "66",
+        "label": "Atribuible a la Administración del Estado",
+        "value": 808.49
+      },
+      {
+        "code": "78",
+        "label": "Cuotas a compensar aplicadas",
+        "value": 0
+      },
+      {
+        "code": "87",
+        "label": "Cuotas a compensar pendientes",
+        "value": 0
+      },
+      {
+        "code": "110",
+        "label": "Cuotas a compensar periodos anteriores",
+        "value": 0
+      }
+    ],
+    "source": "303_2T_2026_BLANCO PROL JACOBO.PDF"
+  },
+  "vexo130q1": {
+    "box01": 11361.4,
+    "box02": 5630.41,
+    "box03": 5730.99,
+    "box04": 1146.2,
+    "box05": 0,
+    "box06": 0,
+    "box07": 1146.2,
+    "box08": 0,
+    "box09": 0,
+    "box10": 0,
+    "box11": 0,
+    "box12": 1146.2,
+    "box13": 0,
+    "box14": 1146.2,
+    "box15": 0,
+    "box16": 0,
+    "box17": 1146.2,
+    "box18": 0,
+    "box19": 1146.2
+  },
+  "vexo130q2": {
+    "box01": 21670.87,
+    "box02": 11343.47,
+    "box03": 10327.4,
+    "box04": 2065.48,
+    "box05": 1146.2,
+    "box06": 235.2,
+    "box07": 684.08,
+    "box08": 0,
+    "box09": 0,
+    "box10": 0,
+    "box11": 0,
+    "box12": 684.08,
+    "box13": 0,
+    "box14": 684.08,
+    "box15": 0,
+    "box16": 0,
+    "box17": 684.08,
+    "box18": 0,
+    "box19": 684.08
+  },
+  "vexo130warnings": [
+    {
+      "code": "REDUCTION_110_3C",
+      "message": "Rendimiento neto del ejercicio anterior desconocido: no se aplica minoración casilla 13 (no se asume 0 €)."
+    },
+    {
+      "code": "PROVISIONAL_PRIOR_PAYMENTS",
+      "message": "Casilla 05 incluye pagos de trimestres anteriores no presentados (provisional)."
+    }
+  ],
+  "presented130q1": {
+    "result": 944.7,
+    "boxes": [
+      {
+        "code": "01",
+        "label": "Ingresos computables",
+        "value": 11471.59
+      },
+      {
+        "code": "02",
+        "label": "Gastos deducibles",
+        "value": 6748.1
+      },
+      {
+        "code": "03",
+        "label": "Rendimiento neto",
+        "value": 4723.49
+      },
+      {
+        "code": "04",
+        "label": "20% del rendimiento neto",
+        "value": 944.7
+      },
+      {
+        "code": "19",
+        "label": "Resultado de la autoliquidación",
+        "value": 944.7
+      }
+    ],
+    "ocr": [
+      {
+        "code": "01",
+        "label": "Ingresos computables",
+        "value": 11471.59
+      },
+      {
+        "code": "02",
+        "label": "Gastos deducibles",
+        "value": 6748.1
+      },
+      {
+        "code": "03",
+        "label": "Rendimiento neto",
+        "value": 4723.49
+      },
+      {
+        "code": "04",
+        "label": "20% del rendimiento neto",
+        "value": 944.7
+      },
+      {
+        "code": "19",
+        "label": "Resultado de la autoliquidación",
+        "value": 944.7
+      }
+    ]
+  },
+  "presented130q2": {
+    "result": 281.11,
+    "boxes": [
+      {
+        "code": "01",
+        "label": "Ingresos computables",
+        "value": 21785.72
+      },
+      {
+        "code": "02",
+        "label": "Gastos deducibles",
+        "value": 14480.67
+      },
+      {
+        "code": "03",
+        "label": "Rendimiento neto",
+        "value": 7305.05
+      },
+      {
+        "code": "04",
+        "label": "20 por 100 del rendimiento",
+        "value": 1461.01
+      },
+      {
+        "code": "05",
+        "label": "Pagos trimestres anteriores",
+        "value": 944.7
+      },
+      {
+        "code": "06",
+        "label": "Retenciones e ingresos a cuenta",
+        "value": 235.2
+      },
+      {
+        "code": "07",
+        "label": "Pago fraccionado previo",
+        "value": 281.11
+      },
+      {
+        "code": "19",
+        "label": "Resultado de la autoliquidación",
+        "value": 281.11
+      }
+    ],
+    "ocr": [
+      {
+        "code": "01",
+        "label": "Ingresos computables",
+        "value": 21785.72
+      },
+      {
+        "code": "02",
+        "label": "Gastos deducibles",
+        "value": 14480.67
+      },
+      {
+        "code": "03",
+        "label": "Rendimiento neto",
+        "value": 7305.05
+      },
+      {
+        "code": "04",
+        "label": "20 por 100 del rendimiento",
+        "value": 1461.01
+      },
+      {
+        "code": "05",
+        "label": "Pagos trimestres anteriores",
+        "value": 944.7
+      },
+      {
+        "code": "06",
+        "label": "Retenciones e ingresos a cuenta",
+        "value": 235.2
+      },
+      {
+        "code": "07",
+        "label": "Pago fraccionado previo",
+        "value": 281.11
+      },
+      {
+        "code": "19",
+        "label": "Resultado de la autoliquidación",
+        "value": 281.11
+      }
+    ],
+    "source": "130_2T_2026_BLANCO PROL JACOBO.PDF"
+  },
+  "draft349": {
+    "hasOps": true,
+    "incompleteVatId": false,
+    "totalsByKey": {
+      "A": 1390.14
+    },
+    "ops": [
+      {
+        "key": "A",
+        "vatId": "DE351952217",
+        "amount": 1037.32,
+        "name": "Makeblock Europe B.V. (xTool Europe Store)"
+      },
+      {
+        "key": "A",
+        "vatId": "IT04061550275",
+        "amount": 165.25,
+        "name": "PIXARTPRINTING SPA"
+      },
+      {
+        "key": "A",
+        "vatId": "DE360354704",
+        "amount": 104.09,
+        "name": "Bambulab GmbH"
+      },
+      {
+        "key": "A",
+        "vatId": "IE3347697KH",
+        "amount": 68.49,
+        "name": "Shopify International Limited"
+      },
+      {
+        "key": "A",
+        "vatId": "IE9700053D",
+        "amount": 14.99,
+        "name": "APPLE"
+      }
+    ],
+    "warnings": [
+      {
+        "code": "MARKETPLACE_349_REVIEW_REQUIRED",
+        "message": "Ingreso AMAZON OSS/marketplace collected — no entra en 349 B2B.",
+        "sourceId": "cms8njydp000wjl04z4fizbm2"
+      },
+      {
+        "code": "MARKETPLACE_349_REVIEW_REQUIRED",
+        "message": "Ingreso AMAZON OSS/marketplace collected — no entra en 349 B2B.",
+        "sourceId": "cms8njyrl000zjl04e4xmt0sw"
+      },
+      {
+        "code": "MARKETPLACE_349_REVIEW_REQUIRED",
+        "message": "Ingreso AMAZON OSS/marketplace collected — no entra en 349 B2B.",
+        "sourceId": "cms8nk1h1001kjl04vk7ows3m"
+      },
+      {
+        "code": "MARKETPLACE_349_REVIEW_REQUIRED",
+        "message": "Ingreso AMAZON OSS/marketplace collected — no entra en 349 B2B.",
+        "sourceId": "cms8nk3ol0021jl04wdrgfbor"
+      },
+      {
+        "code": "MARKETPLACE_349_REVIEW_REQUIRED",
+        "message": "Ingreso AMAZON OSS/marketplace collected — no entra en 349 B2B.",
+        "sourceId": "cms8nkg0o004pjl04nmhfd7il"
+      },
+      {
+        "code": "MARKETPLACE_349_REVIEW_REQUIRED",
+        "message": "Ingreso AMAZON OSS/marketplace collected — no entra en 349 B2B.",
+        "sourceId": "cms8nkjd1005fjl04jv21aode"
+      },
+      {
+        "code": "MARKETPLACE_349_REVIEW_REQUIRED",
+        "message": "Ingreso AMAZON OSS/marketplace collected — no entra en 349 B2B.",
+        "sourceId": "cms8nkjvg005jjl04kt2aabhb"
+      },
+      {
+        "code": "MARKETPLACE_349_REVIEW_REQUIRED",
+        "message": "Ingreso SHOPIFY a IVA sin NIF-IVA B2B — revisar antes de 349.",
+        "sourceId": "cms8nt0b10000jt045wm8tru1"
+      },
+      {
+        "code": "MARKETPLACE_349_REVIEW_REQUIRED",
+        "message": "Ingreso AMAZON OSS/marketplace collected — no entra en 349 B2B.",
+        "sourceId": "cms8pqaeu0013ky04qo9dppea"
+      },
+      {
+        "code": "MARKETPLACE_349_REVIEW_REQUIRED",
+        "message": "Ingreso AMAZON OSS/marketplace collected — no entra en 349 B2B.",
+        "sourceId": "cms8pqcqd001lky04l9vl9lyf"
+      },
+      {
+        "code": "MARKETPLACE_349_REVIEW_REQUIRED",
+        "message": "Ingreso AMAZON OSS/marketplace collected — no entra en 349 B2B.",
+        "sourceId": "cms8pqul7005eky04nktqvow2"
+      },
+      {
+        "code": "MARKETPLACE_349_REVIEW_REQUIRED",
+        "message": "Ingreso AMAZON OSS/marketplace collected — no entra en 349 B2B.",
+        "sourceId": "cms8pqy350065ky04hvca3psu"
+      },
+      {
+        "code": "MARKETPLACE_349_REVIEW_REQUIRED",
+        "message": "Ingreso SHOPIFY a IVA sin NIF-IVA B2B — revisar antes de 349.",
+        "sourceId": "cms8pr9sq00d9la047pkn9n08"
+      },
+      {
+        "code": "MARKETPLACE_349_REVIEW_REQUIRED",
+        "message": "Ingreso SHOPIFY a IVA sin NIF-IVA B2B — revisar antes de 349.",
+        "sourceId": "cms8prohx00dala044ttgjt6m"
+      },
+      {
+        "code": "MARKETPLACE_349_REVIEW_REQUIRED",
+        "message": "Ingreso AMAZON a PT sin NIF-IVA B2B — revisar antes de 349.",
+        "sourceId": "cms8ps33l0085ky04cvsjbh5v"
+      },
+      {
+        "code": "MARKETPLACE_349_REVIEW_REQUIRED",
+        "message": "Ingreso AMAZON OSS/marketplace collected — no entra en 349 B2B.",
+        "sourceId": "cms8ps8es0099ky043s7nl3yn"
+      },
+      {
+        "code": "MARKETPLACE_349_REVIEW_REQUIRED",
+        "message": "Ingreso AMAZON OSS/marketplace collected — no entra en 349 B2B.",
+        "sourceId": "cms8psdty00aeky04fxib23ye"
+      },
+      {
+        "code": "MARKETPLACE_349_REVIEW_REQUIRED",
+        "message": "Ingreso AMAZON OSS/marketplace collected — no entra en 349 B2B.",
+        "sourceId": "cms8psfju00arky04zf75dugm"
+      },
+      {
+        "code": "MARKETPLACE_349_REVIEW_REQUIRED",
+        "message": "Ingreso AMAZON OSS/marketplace collected — no entra en 349 B2B.",
+        "sourceId": "cms8psmeb00c6ky04jy1y2xti"
+      },
+      {
+        "code": "MARKETPLACE_349_REVIEW_REQUIRED",
+        "message": "Ingreso AMAZON OSS/marketplace collected — no entra en 349 B2B.",
+        "sourceId": "cms8psomr00cnky04bsqpqw0y"
+      }
+    ]
+  },
+  "presented349": {
+    "result": 104.09,
+    "boxes": [
+      {
+        "code": "01",
+        "label": "Número total de operadores intracomunitarios",
+        "value": 1
+      },
+      {
+        "code": "02",
+        "label": "Importe de las operaciones intracomunitarias",
+        "value": 104.09
+      }
+    ],
+    "ocr": [
+      {
+        "code": "01",
+        "label": "Número total de operadores intracomunitarios",
+        "value": 1
+      },
+      {
+        "code": "02",
+        "label": "Importe de las operaciones intracomunitarias",
+        "value": 104.09
+      }
+    ],
+    "source": "349_2T_2026_BLANCO PROL JACOBO.PDF"
+  },
+  "presented303q1": {
+    "result": 273.71
+  },
+  "priorYearCompensation": 0
+}

@@ -45,6 +45,8 @@ export type OperationsSignal = "HAS_OPS" | "ZERO_OPS" | "UNKNOWN";
 
 export type FilingStatus =
   | "FILED"
+  /** Presentado después del plazo; evidencia histórica de extemporaneidad. */
+  | "FILED_LATE"
   | "DUE"
   | "UPCOMING"
   | "OVERDUE"

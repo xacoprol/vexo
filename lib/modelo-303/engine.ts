@@ -92,8 +92,15 @@ export function buildModel303(input: Model303EngineInput): Model303Result {
     box11,
     box13,
     box17,
-    otherDevengadoQuota: otherQuota,
+    otherDevengadoQuota: 0,
   });
+  if (otherQuota > 0 || otherBase > 0) {
+    warnings.push({
+      code: "NON_STANDARD_VAT_RATE_REVIEW_REQUIRED",
+      message:
+        "Hay bases/cuotas a tipos distintos de 4/10/21 % que no mapean a casillas 01–09. No se incluyen en la casilla 27 hasta clasificar (OSS, error de dato o régimen no soportado).",
+    });
+  }
 
   const box28 = round2(Math.max(0, input.domesticDeductibleBase));
   const box29 = round2(
@@ -287,7 +294,11 @@ export function buildModel303(input: Model303EngineInput): Model303Result {
     },
     { code: "45", label: "Total IVA deducible", value: boxes.box45 },
     { code: "46", label: "Resultado régimen general (27 − 45)", value: boxes.box46 },
-    { code: "59", label: "Entregas intracomunitarias (base)", value: boxes.box59 },
+    {
+      code: "59",
+      label: "Entregas / prestaciones intracomunitarias (base)",
+      value: boxes.box59,
+    },
     {
       code: "60",
       label: "Exportaciones y asimiladas (incl. Canarias)",

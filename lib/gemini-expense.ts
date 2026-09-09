@@ -66,6 +66,55 @@ function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
+/**
+ * Parse monetary amounts preserving sign (credit notes / abonos).
+ * Accepts numbers or strings like "-5,09", "-EUR 5.09", "€ -1.07", "(5.09)".
+ */
+export function parseSignedMoney(raw: unknown): number {
+  if (typeof raw === "number") {
+    return Number.isFinite(raw) ? round2(raw) : 0;
+  }
+  if (raw == null) return 0;
+  let s = String(raw).trim();
+  if (!s) return 0;
+
+  let negative = false;
+  if (/^\(.*\)$/.test(s)) {
+    negative = true;
+    s = s.slice(1, -1).trim();
+  }
+  if (s.endsWith("-") && !s.startsWith("-")) {
+    negative = true;
+    s = s.slice(0, -1).trim();
+  }
+
+  s = s
+    .replace(/\s/g, "")
+    .replace(/EUR/gi, "")
+    .replace(/€/g, "")
+    .replace(/\u00a0/g, "");
+
+  if (s.startsWith("-")) {
+    negative = true;
+    s = s.slice(1);
+  } else if (s.startsWith("+")) {
+    s = s.slice(1);
+  }
+
+  // European thousands: 1.234,56 → 1234.56; plain 5,09 → 5.09
+  if (/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(s)) {
+    s = s.replace(/\./g, "").replace(",", ".");
+  } else if (s.includes(",") && !s.includes(".")) {
+    s = s.replace(",", ".");
+  } else {
+    s = s.replace(/,/g, "");
+  }
+
+  const n = Number(s);
+  if (!Number.isFinite(n)) return 0;
+  return round2(negative ? -Math.abs(n) : n);
+}
+
 function categoryIds(): string[] {
   return EXPENSE_CATEGORIES.map((c) => c.id);
 }
@@ -109,6 +158,53 @@ function normalizeActivityFit(raw: unknown): ActivityFit {
   return "ok";
 }
 
+/** Normalize Gemini/JSON draft amounts — preserves negative credit-note signs. */
+export function normalizeExpenseDraftAmounts(parsed: {
+  subtotal?: unknown;
+  vatRate?: unknown;
+  vatAmount?: unknown;
+  total?: unknown;
+  vatOperationType?: unknown;
+}): {
+  subtotal: number;
+  vatRate: number;
+  vatAmount: number;
+  total: number;
+  vatOperationType: ExpenseVatOperationType;
+} {
+  const subtotal = parseSignedMoney(parsed.subtotal);
+  const vatOperationType = parseExpenseVatOperationType(
+    parsed.vatOperationType
+  );
+  const reverseCharge = isExpenseReverseCharge(vatOperationType);
+  let vatRate = normalizeVatRate(parsed.vatRate);
+  if (reverseCharge && vatRate === 0) vatRate = 21;
+  let vatAmount = parseSignedMoney(parsed.vatAmount);
+  let total = parseSignedMoney(parsed.total);
+
+  if (reverseCharge) {
+    if (Math.abs(vatAmount) < 0.005 && Math.abs(subtotal) >= 0.005) {
+      vatAmount = round2(subtotal * (vatRate / 100));
+    }
+    // Lo pagado al proveedor (UE/EEUU) suele ser la base sin IVA ES
+    if (
+      Math.abs(total) < 0.005 ||
+      Math.abs(total - (subtotal + vatAmount)) < 0.05
+    ) {
+      total = subtotal;
+    }
+  } else {
+    if (Math.abs(vatAmount) < 0.005 && Math.abs(subtotal) >= 0.005 && vatRate) {
+      vatAmount = round2(subtotal * (vatRate / 100));
+    }
+    if (Math.abs(total) < 0.005 && Math.abs(subtotal) >= 0.005) {
+      total = round2(subtotal + vatAmount);
+    }
+  }
+
+  return { subtotal, vatRate, vatAmount, total, vatOperationType };
+}
+
 function parseDraftFromText(text: string): ParsedExpenseDraft {
   if (!text.trim()) {
     throw new Error("Gemini no devolvió datos. Prueba con otra imagen/PDF.");
@@ -123,32 +219,8 @@ function parseDraftFromText(text: string): ParsedExpenseDraft {
     parsed = JSON.parse(m[0]) as Record<string, unknown>;
   }
 
-  const subtotal = round2(Math.max(0, Number(parsed.subtotal) || 0));
-  const vatOperationType = parseExpenseVatOperationType(
-    parsed.vatOperationType
-  );
-  const reverseCharge = isExpenseReverseCharge(vatOperationType);
-  let vatRate = normalizeVatRate(parsed.vatRate);
-  if (reverseCharge && vatRate === 0) vatRate = 21;
-  let vatAmount = round2(Math.max(0, Number(parsed.vatAmount) || 0));
-  let total = round2(Math.max(0, Number(parsed.total) || 0));
-
-  if (reverseCharge) {
-    if (!vatAmount && subtotal) {
-      vatAmount = round2(subtotal * (vatRate / 100));
-    }
-    // Lo pagado al proveedor (UE/EEUU) suele ser la base sin IVA ES
-    if (!total || Math.abs(total - (subtotal + vatAmount)) < 0.05) {
-      total = subtotal;
-    }
-  } else {
-    if (!vatAmount && subtotal && vatRate) {
-      vatAmount = round2(subtotal * (vatRate / 100));
-    }
-    if (!total) {
-      total = round2(subtotal + vatAmount);
-    }
-  }
+  const { subtotal, vatRate, vatAmount, total, vatOperationType } =
+    normalizeExpenseDraftAmounts(parsed);
 
   const confidenceRaw = String(parsed.confidence ?? "medium").toLowerCase();
   const confidence =
@@ -237,14 +309,15 @@ Devuelve SOLO un JSON válido con esta forma exacta:
 
 Reglas de extracción:
 - Importes en euros (número, no string). Usa punto decimal.
+- NOTAS DE CRÉDITO / ABONOS / CREDIT NOTES / "nota de crédito de impuestos" / rectificativas de proveedor: los importes de base, IVA y total DEBEN ser NEGATIVOS (p. ej. subtotal: -5.09, vatAmount: -1.07, total: -6.16). NUNCA los conviertas a 0 ni a positivos. Siguen siendo un GASTO (minoración), no un ingreso.
 - Si la factura está en USD u otra divisa: convierte a EUR con un tipo de cambio razonable (≈ BCE del mes) y anota el importe original en notes (p. ej. "Original: 60 USD").
-- subtotal = base imponible en EUR (sin IVA español). vatAmount = cuota IVA a autorrepercutir. total = lo pagado al proveedor (normalmente = subtotal).
-- invoiceNumber = nº de factura/ticket del emisor (Factura nº, Nº, Invoice #…). Si no se lee, null.
+- subtotal = base imponible en EUR (sin IVA español; negativa si es abono). vatAmount = cuota IVA (negativa si es abono). total = lo pagado al proveedor (o importe del documento; negativo si es abono). En INTERIOR normalmente total = subtotal + vatAmount.
+- invoiceNumber = nº de factura/ticket/nota de crédito del emisor (Factura nº, Nº, Invoice #, ES-CN-AEU-…). Si no se lee, null.
 - Si hay varios tipos de IVA, usa el predominante o el del total; anótalo en notes.
 - Si no hay IVA en factura interior española, vatRate=0, vatAmount=0, total=subtotal.
 - vatOperationType = INTRACOMUNITARIA si: proveedor en la UE (VAT ID europeo DE/IE/FR/IT…), compra de bienes/servicios UE sin IVA español, "intra-community", AIB. subtotal = importe factura, vatRate = 21 (casi siempre), vatAmount = subtotal×21/100, total = subtotal. supplierNif = VAT ID UE.
 - vatOperationType = SERVICIO_EXTRACOMUNITARIO si: proveedor fuera de la UE (EEUU, UK post-Brexit sin VAT UE, etc.), factura en USD, EIN/TIN en lugar de VAT, o texto "reverse charge" / "tax to be paid on reverse charge" sin VAT ID europeo (p. ej. Cursor/Anysphere, SaaS USA). Misma lógica numérica que intracom (base + 21% cuota, total = base). supplierNif = EIN/TIN si aparece, o null. NO es intracomunitaria UE.
-- Si no hay indicios claros de intracom ni extracom → INTERIOR.
+- Si no hay indicios claros de intracom ni extracom → INTERIOR (incl. Amazon ES / sucursal España con IVA español en la nota).
 - No inventes NIF: si no se lee claramente, null.
 - La fecha es la de la factura/ticket, no la de hoy.
 - category: elige la más razonable (SOFTWARE, SUMINISTROS, MATERIAL, DIETAS, PROFESIONALES, OTROS).

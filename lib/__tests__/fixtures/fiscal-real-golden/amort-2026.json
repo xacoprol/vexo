@@ -1,0 +1,65 @@
+[
+  {
+    "yearAmount": 325.93,
+    "assetId": "a1",
+    "desc": "IMPRESORA MULTIFUNCIONAL",
+    "purchaseDate": "2024-04-01",
+    "startYear": 2024,
+    "usefulLifeYears": 4,
+    "assetBase": 1303.7
+  },
+  {
+    "yearAmount": 333.12,
+    "assetId": "a2",
+    "desc": "IMPRESORA MULTIFUNCIONAL",
+    "purchaseDate": "2024-05-08",
+    "startYear": 2024,
+    "usefulLifeYears": 4,
+    "assetBase": 1332.48
+  },
+  {
+    "yearAmount": 375.83,
+    "assetId": "a3",
+    "desc": "DIODE LASER CUTTER",
+    "purchaseDate": "2024-06-24",
+    "startYear": 2024,
+    "usefulLifeYears": 4,
+    "assetBase": 1503.31
+  },
+  {
+    "yearAmount": 504.79,
+    "assetId": "a4",
+    "desc": "S FRA 43 3",
+    "purchaseDate": "2025-04-25",
+    "startYear": 2025,
+    "usefulLifeYears": 4,
+    "assetBase": 2019.15
+  },
+  {
+    "yearAmount": 500,
+    "assetId": "a5",
+    "desc": "S FRA 148",
+    "purchaseDate": "2025-08-19",
+    "startYear": 2025,
+    "usefulLifeYears": 4,
+    "assetBase": 2000
+  },
+  {
+    "yearAmount": 303.51,
+    "assetId": "a6",
+    "desc": "S FRA 153",
+    "purchaseDate": "2025-09-12",
+    "startYear": 2025,
+    "usefulLifeYears": 4,
+    "assetBase": 1214.05
+  },
+  {
+    "yearAmount": 124.13,
+    "assetId": "a7",
+    "desc": "S FRA 117",
+    "purchaseDate": "2026-06-20",
+    "startYear": 2026,
+    "usefulLifeYears": 4,
+    "assetBase": 496.5
+  }
+]

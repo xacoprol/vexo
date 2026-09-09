@@ -104,11 +104,12 @@ export function adapt111Obligation(opts: {
 
   let mismatch: CensusMismatch | null = null;
   if (hasOps && census === "NO") {
+    reasonCodes.push("CENSUS_CONTRADICTS_BOOKS");
     mismatch = {
-      code: "CENSUS_MODEL111_MISMATCH",
+      code: "CENSUS_CONTRADICTS_BOOKS",
       model: "111",
-      severity: "WARNING",
-      title: "Mismatch censal Modelo 111",
+      severity: "CRITICAL",
+      title: "Censo 111 contradice los libros",
       description:
         "Hay retenciones practicadas a profesionales, pero censusModel111 = NO.",
     };

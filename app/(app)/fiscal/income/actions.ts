@@ -15,7 +15,7 @@ import { parseShopifyIvaSummaryDraft } from "@/lib/shopify-sales-report";
 import type { AmazonTaxReportRow } from "@/lib/amazon-tax-report";
 import { Prisma } from "@prisma/client";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
-import { convertMarketplaceIncomeInTransaction } from "@/lib/marketplace-invoice";
+import { convertMarketplaceIncomeToInvoiceRecord } from "@/lib/marketplace-invoice";
 
 export type ParseMarketplaceIncomeResult =
   | {
@@ -490,17 +490,22 @@ export async function convertMarketplaceIncomeToInvoice(incomeId: string) {
     });
     if (existing?.invoiceId) redirect(`/invoices/${existing.invoiceId}`);
 
-    const invoiceId = await prisma.$transaction((tx) =>
-      convertMarketplaceIncomeInTransaction(tx, incomeId)
+    // PrismaNeonHTTP: sin $transaction interactiva — secuencia + compensación.
+    const invoiceId = await convertMarketplaceIncomeToInvoiceRecord(
+      prisma,
+      incomeId
     );
 
     revalidateMarketplaceIncome();
     redirect(`/invoices/${invoiceId}`);
   } catch (err) {
     if (isRedirectError(err)) throw err;
-    throw err instanceof Error
-      ? err
-      : new Error("No se pudo convertir en factura");
+    const msg =
+      err instanceof Error ? err.message : "No se pudo convertir en factura";
+    console.error("[convertMarketplaceIncomeToInvoice]", msg);
+    redirect(
+      `/fiscal/income?convertError=${encodeURIComponent(msg.slice(0, 180))}`
+    );
   }
 }
 

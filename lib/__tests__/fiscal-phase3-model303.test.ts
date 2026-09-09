@@ -410,6 +410,41 @@ describe("Model 303 — fórmulas 27 y 45", () => {
   });
 });
 
+describe("Model 303 — tipos no estándar (fail-closed)", () => {
+  it("23 % marketplace no entra en 07/09/27 y exige revisión", () => {
+    const r = aggregateModel303Period({
+      invoices: [],
+      expenses: [],
+      assets: [],
+      marketplace: [
+        {
+          id: "m-pt",
+          issueDate: new Date("2026-04-15"),
+          subtotal: 578.89,
+          vatAmount: 136.44,
+          vatRate: 23,
+          vatStatus: "TAXABLE",
+          channel: "SHOPIFY",
+          shipToCountry: "PT",
+        },
+      ],
+      ...period("2026-04-01", "2026-06-30"),
+    });
+    const b = r.modelo303.boxes;
+    assert.equal(b.box07, 0);
+    assert.equal(b.box09, 0);
+    assert.equal(b.otherBase, 578.89);
+    assert.equal(b.otherQuota, 136.44);
+    assert.equal(b.box27, 0);
+    assert.equal(b.box71, 0);
+    assert.ok(
+      r.modelo303.warnings.some(
+        (w) => w.code === "NON_STANDARD_VAT_RATE_REVIEW_REQUIRED"
+      )
+    );
+  });
+});
+
 describe("Model 303 — liquidación y compensaciones", () => {
   it("box87 = 110 − 78", () => {
     const r = aggregateModel303Period({

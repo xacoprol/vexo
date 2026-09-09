@@ -58,7 +58,7 @@ export function assess115FilingObligation(opts: {
       reasons.push(
         "Hay retenciones RENT practicadas pero el censo 115 = NO."
       );
-      reasonCodes.push("CENSUS_MODEL115_MISMATCH");
+      reasonCodes.push("CENSUS_MODEL115_MISMATCH", "CENSUS_CONTRADICTS_BOOKS");
       return {
         status: "UNKNOWN",
         reasons,

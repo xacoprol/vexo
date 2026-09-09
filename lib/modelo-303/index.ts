@@ -4,8 +4,10 @@ export {
   isPurchaseReverseCharge,
   isEuIntracomPurchase,
   isOtherIspPurchase,
+  isStandardSpanishVatRate,
   purchaseKindToLegacyExpenseType,
   PURCHASE_VAT_KIND_LABELS,
+  SPANISH_303_STANDARD_RATES,
   type SalesVatKind,
   type PurchaseVatKind,
 } from "@/lib/modelo-303/vat-classification";

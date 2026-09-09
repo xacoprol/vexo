@@ -18,6 +18,8 @@ function filingLabel(status: FiscalObligationEntry["filingStatus"]): string {
   switch (status) {
     case "FILED":
       return "Presentado";
+    case "FILED_LATE":
+      return "Presentado fuera de plazo";
     case "DUE":
       return "Pendiente (plazo cercano)";
     case "UPCOMING":
@@ -45,12 +47,12 @@ const HREF: Record<string, (year: number, q?: number | null) => string> = {
   "130": (y, q) => `/fiscal/130?year=${y}&q=${q ?? 1}`,
   "303": (y, q) => `/fiscal/303?year=${y}&q=${q ?? 1}`,
   "349": (y, q) => `/fiscal/349?year=${y}&q=${q ?? 1}`,
+  "111": (y, q) => `/fiscal/111?year=${y}&q=${q ?? 1}`,
+  "115": (y, q) => `/fiscal/115?year=${y}&q=${q ?? 1}`,
   "347": (y) => `/fiscal/347?year=${y}`,
   "390": (y) => `/fiscal/390?year=${y}`,
-  "111": () => "/settings",
-  "115": () => "/settings",
-  "180": () => "/settings",
-  "190": () => "/settings",
+  "180": (y) => `/fiscal/180?year=${y}`,
+  "190": (y) => `/fiscal/190?year=${y}`,
 };
 
 type Props = {

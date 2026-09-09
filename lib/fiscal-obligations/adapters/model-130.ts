@@ -1,5 +1,6 @@
 import type { FiscalQuarter } from "@/lib/fiscal";
 import { assess130FilingObligation } from "@/lib/modelo-130/filing-obligation";
+import { resolveCensusNoAgainstBooks } from "@/lib/fiscal-obligations/census-contradiction";
 import { compareResolverVsCensus } from "@/lib/fiscal-obligations/compare-census";
 import {
   resolveFilingStatus,
@@ -37,11 +38,39 @@ export function adapt130Obligation(opts: {
     currentYear: opts.year,
   });
 
+  const hasOps = opts.incomeBaseYtd > 0;
+  const censusNo = resolveCensusNoAgainstBooks({
+    model: "130",
+    census,
+    hasOps,
+  });
+
   let obligationStatus: ObligationStatus = resolved.status;
   let statusSource: FiscalObligationEntry["statusSource"] = "RESOLVER";
+  const reasonCodes: string[] = resolved.reasons.map(
+    (_, i) => `130_REASON_${i}`
+  );
+  let reason = resolved.reasons[0] ?? "Obligación 130";
+  let mismatch: CensusMismatch | null = null;
 
-  // Si el resolver es UNKNOWN por datos faltantes, statusSource = INSUFFICIENT_DATA
-  if (resolved.status === "UNKNOWN") {
+  if (censusNo?.contradicts) {
+    obligationStatus = censusNo.obligationStatus;
+    statusSource = censusNo.statusSource;
+    reason = censusNo.reason;
+    reasonCodes.push(...censusNo.reasonCodes);
+    mismatch = {
+      code: "CENSUS_CONTRADICTS_BOOKS",
+      model: "130",
+      severity: "CRITICAL",
+      title: "Censo 130 contradice los libros",
+      description: censusNo.reason,
+    };
+  } else if (census === "NO") {
+    obligationStatus = "NOT_APPLICABLE";
+    statusSource = "CENSUS";
+    reason = "Perfil censal: Modelo 130 = NO.";
+    reasonCodes.push("CENSUS_130_NO");
+  } else if (resolved.status === "UNKNOWN") {
     statusSource = "INSUFFICIENT_DATA";
   }
 
@@ -59,11 +88,13 @@ export function adapt130Obligation(opts: {
     now: opts.now,
   });
 
-  const mismatch = compareResolverVsCensus({
-    model: "130",
-    resolverStatus: resolved.status,
-    censusSignal: census,
-  });
+  if (!mismatch) {
+    mismatch = compareResolverVsCensus({
+      model: "130",
+      resolverStatus: obligationStatus,
+      censusSignal: census,
+    });
+  }
 
   return {
     entry: {
@@ -75,11 +106,11 @@ export function adapt130Obligation(opts: {
         label: `${opts.quarter}T ${opts.year}`,
       },
       obligationStatus,
-      reason: resolved.reasons[0] ?? "Obligación 130",
-      reasonCodes: resolved.reasons.map((_, i) => `130_REASON_${i}`),
+      reason,
+      reasonCodes,
       statusSource,
       censusSignal: census,
-      operationsSignal: "UNKNOWN",
+      operationsSignal: hasOps ? "HAS_OPS" : "ZERO_OPS",
       filingStatus,
       dueDate: due.dueDate,
       dueDateReliable: due.reliable,

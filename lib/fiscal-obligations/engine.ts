@@ -44,6 +44,8 @@ export type FiscalObligationsSnapshot = {
   incomeWithWithholdingYtd?: number;
   /** hasOps por trimestre 349 */
   model349HasOps?: Partial<Record<FiscalQuarter, boolean>>;
+  /** Actividad IVA (303) por trimestre: facturas/gastos con IVA o sujetos */
+  model303HasVatActivity?: Partial<Record<FiscalQuarter, boolean>>;
   /** 347: hay operadores declarables */
   model347HasDeclarableOps?: boolean | null;
   /** 390 precomputed */
@@ -136,6 +138,10 @@ export function buildFiscalObligationsFromSnapshot(
       filed: Boolean(f303),
       filingId: f303?.id ?? null,
       now,
+      hasVatActivity:
+        snap.model303HasVatActivity?.[q] != null
+          ? snap.model303HasVatActivity[q]!
+          : null,
     });
     obligations.push(a303.entry);
     if (a303.mismatch) mismatches.push(a303.mismatch);
@@ -231,6 +237,7 @@ export function buildFiscalObligationsFromSnapshot(
     now,
   });
   obligations.push(a347.entry);
+  if (a347.mismatch) mismatches.push(a347.mismatch);
 
   const f180 = findFiling(snap.filings, "180", year, null);
   const a180 = adapt180Obligation({

@@ -36,6 +36,7 @@ export type Model130Warning = {
 export type PresentedQuarter130 = {
   quarter: FiscalQuarter;
   box07: number | null;
+  box15: number | null;
   box16: number | null;
   box19: number | null;
   presented: boolean;

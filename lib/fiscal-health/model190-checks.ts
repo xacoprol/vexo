@@ -129,11 +129,30 @@ export function runModel190HealthChecks(ctx: FiscalHealthContext): {
     if (w.code === "MODEL190_EMPLOYEE_DATA_NOT_SUPPORTED") {
       issues.push(
         createHealthIssue({
-          code: "MODEL190_EMPLOYEE_DATA_NOT_SUPPORTED",
+          code: "UNSUPPORTED_FISCAL_CASE",
           severity: "ERROR",
           blocksFiling: true,
-          title: "190 incompleto: hay empleados",
+          title: "190: empleados/nómina no soportados",
           description: w.message,
+          model: "190",
+          year: ctx.year,
+          originalCode: "MODEL190_EMPLOYEE_DATA_NOT_SUPPORTED",
+          evidence: {
+            kind: "UNSUPPORTED",
+            professionalReview: true,
+            recommendation:
+              "Revisión profesional puntual. VEXO no genera un 190 completo omitiendo trabajo.",
+          },
+        })
+      );
+      issues.push(
+        createHealthIssue({
+          code: "NEEDS_PROFESSIONAL_REVIEW",
+          severity: "ERROR",
+          blocksFiling: true,
+          title: "Revisión profesional: nómina/empleados",
+          description:
+            "Caso fuera de cobertura VEXO (rendimientos del trabajo). El software funciona; el supuesto requiere asesoría.",
           model: "190",
           year: ctx.year,
         })
@@ -142,13 +161,14 @@ export function runModel190HealthChecks(ctx: FiscalHealthContext): {
     if (w.code === "MODEL190_UNSUPPORTED_SECTION") {
       issues.push(
         createHealthIssue({
-          code: "MODEL190_UNSUPPORTED_SECTION",
+          code: "UNSUPPORTED_FISCAL_CASE",
           severity: "ERROR",
           blocksFiling: true,
-          title: "Sección 190 no soportada",
+          title: "190: sección no soportada",
           description: w.message,
           model: "190",
           year: ctx.year,
+          originalCode: "MODEL190_UNSUPPORTED_SECTION",
         })
       );
     }

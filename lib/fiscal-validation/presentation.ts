@@ -22,7 +22,9 @@ export function lifecycleLabel(
 ): string {
   switch (status) {
     case "CLOSED":
-      return "CIERRE COMPLETO";
+      return "CIERRE TRIMESTRAL";
+    case "AMENDMENT_REVIEW_REQUIRED":
+      return "REVISIÓN ENMIENDA (libro ≠ filing)";
     case "FILED":
       return "PRESENTADO";
     case "READY_FOR_SUBMISSION":
@@ -57,6 +59,8 @@ export function filingStatusLabel(status: string): string {
   switch (status) {
     case "FILED":
       return "PRESENTADO";
+    case "FILED_LATE":
+      return "PRESENTADO FUERA DE PLAZO";
     case "DUE":
       return "PENDIENTE";
     case "UPCOMING":

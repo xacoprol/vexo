@@ -19,9 +19,9 @@ import {
   isEuIntracomPurchase,
   isOtherIspPurchase,
   isPurchaseReverseCharge,
+  isStandardSpanishVatRate,
   parsePurchaseVatKind,
   parseSalesVatKind,
-  type PurchaseVatKind,
 } from "@/lib/modelo-303/vat-classification";
 
 function round2(n: number): number {
@@ -157,26 +157,29 @@ function expenseLabel(e: Model303ExpenseRow): string {
 }
 
 function reverseChargeQuota(sub: number, vat: number, rate: number): number {
-  return vat > 0 ? vat : round2(sub * (rate / 100));
+  // Keep signed quotas (credit notes). Only derive from base when missing.
+  if (Math.abs(vat) >= 0.005) return round2(vat);
+  return round2(sub * (rate / 100));
 }
 
 function pctFromExpense(e: Model303ExpenseRow): {
   vatPct: number;
   irpfPct: number;
+  unresolved: boolean;
 } {
-  const vatPct =
-    e.vatDeductiblePct != null
-      ? clampPct(e.vatDeductiblePct)
-      : e.deductible === false
-        ? 0
-        : 100;
-  const irpfPct =
-    e.irpfDeductiblePct != null
-      ? clampPct(e.irpfDeductiblePct)
-      : e.deductible === false
-        ? 0
-        : 100;
-  return { vatPct, irpfPct };
+  const ded = computeExpenseDeductibility({
+    subtotal: Number(e.subtotal) || 0,
+    vatAmount: Number(e.vatAmount) || 0,
+    vatDeductiblePct: e.vatDeductiblePct,
+    irpfDeductiblePct: e.irpfDeductiblePct,
+    deductible: e.deductible,
+    isInvestment: e.isInvestment,
+  });
+  return {
+    vatPct: ded.vatDeductiblePct,
+    irpfPct: ded.irpfDeductiblePct,
+    unresolved: ded.unresolvedDeductibility,
+  };
 }
 
 export function aggregateModel303Period(opts: {
@@ -273,6 +276,33 @@ export function aggregateModel303Period(opts: {
       });
       continue;
     }
+    /**
+     * Prestación B2B UE (localización en destinatario): no sujeta en ES.
+     * Casilla 59 (base informativa), NUNCA 01–09. Coherente con clave S del 349.
+     */
+    if (kind === "EU_SERVICE") {
+      baseIntracom = round2(baseIntracom + subtotal);
+      const lineVat = inv.lines.length
+        ? inv.lines.reduce((s, l) => s + Number(l.lineVat), 0)
+        : Number(inv.vatAmount);
+      if (Math.abs(lineVat) > 0.009) {
+        warnings.push({
+          code: "EU_SERVICE_UNEXPECTED_VAT",
+          message:
+            "Prestación UE B2B con cuota IVA en factura: revisar. No se incluye en IVA repercutido interior (01–09).",
+          sourceId: inv.id,
+        });
+      }
+      pushTrace(trace, "59", {
+        sourceType: "invoice",
+        sourceId: inv.id,
+        description: label,
+        vatKind: kind,
+        base: subtotal,
+        boxCodes: ["59"],
+      });
+      continue;
+    }
     if (kind === "CANARY_ISLANDS") {
       baseCanarias = round2(baseCanarias + subtotal);
       pushTrace(trace, "60", {
@@ -303,6 +333,14 @@ export function aggregateModel303Period(opts: {
         const base = Number(line.lineSubtotal);
         const quota = Number(line.lineVat);
         addBucket(vatMap, line.vatRate, base, quota);
+        if (!isStandardSpanishVatRate(line.vatRate)) {
+          warnings.push({
+            code: "NON_STANDARD_VAT_RATE_REVIEW_REQUIRED",
+            message:
+              `Factura ${label}: tipo ${line.vatRate} % no mapea a casillas 01–09 del 303. No se liquida como IVA español.`,
+            sourceId: inv.id,
+          });
+        }
         const box = line.vatRate === 4 ? "01" : line.vatRate === 10 ? "04" : line.vatRate === 21 ? "07" : "revisar";
         pushTrace(trace, box, {
           sourceType: "invoice",
@@ -320,6 +358,14 @@ export function aggregateModel303Period(opts: {
       const rate =
         subtotal > 0 ? round2((vatAmt / subtotal) * 100) : 21;
       addBucket(vatMap, rate, subtotal, vatAmt);
+      if (!isStandardSpanishVatRate(rate)) {
+        warnings.push({
+          code: "NON_STANDARD_VAT_RATE_REVIEW_REQUIRED",
+          message:
+            `Factura ${label}: tipo ${rate} % no mapea a casillas 01–09 del 303. No se liquida como IVA español.`,
+          sourceId: inv.id,
+        });
+      }
       const box = rate === 4 ? "01" : rate === 10 ? "04" : rate === 21 ? "07" : "revisar";
       pushTrace(trace, box, {
         sourceType: "invoice",
@@ -364,6 +410,14 @@ export function aggregateModel303Period(opts: {
     if (status === "TAXABLE") {
       addBucket(vatMap, m.vatRate || 21, subtotal, vatAmount);
       const rate = m.vatRate || 21;
+      if (!isStandardSpanishVatRate(rate)) {
+        warnings.push({
+          code: "NON_STANDARD_VAT_RATE_REVIEW_REQUIRED",
+          message:
+            `Ingreso marketplace ${label}: tipo ${rate} % no mapea a casillas 01–09 del 303. No se liquida como IVA español (posible OSS).`,
+          sourceId: m.id,
+        });
+      }
       const box = rate === 4 ? "01" : rate === 10 ? "04" : rate === 21 ? "07" : "revisar";
       pushTrace(trace, box, {
         sourceType: "marketplace",
@@ -441,11 +495,20 @@ export function aggregateModel303Period(opts: {
     const sub = Number(e.subtotal);
     const vat = Number(e.vatAmount);
     const tot = Number(e.total);
-    const { vatPct, irpfPct } = pctFromExpense(e);
+    const { vatPct, irpfPct, unresolved } = pctFromExpense(e);
     const rate = e.vatRate > 0 ? e.vatRate : 21;
     const kind = parsePurchaseVatKind(e.vatOperationType);
     const label = expenseLabel(e);
     const accrued = reverseChargeQuota(sub, vat, rate);
+
+    if (unresolved) {
+      warnings.push({
+        code: "EXPENSE_DEDUCTIBILITY_UNRESOLVED",
+        message:
+          "Gasto sin clasificación de deducibilidad IVA/IRPF. No se asume 100 %; clasifica antes de liquidar.",
+        sourceId: e.id,
+      });
+    }
 
     if (kind === "IMPORT_GOODS") {
       const duaBase = e.importDuaBase != null ? Number(e.importDuaBase) : null;
@@ -493,10 +556,15 @@ export function aggregateModel303Period(opts: {
     const ded = computeExpenseDeductibility({
       subtotal: sub,
       vatAmount: isPurchaseReverseCharge(kind) ? accrued : vat,
-      vatDeductiblePct: vatPct,
-      irpfDeductiblePct: irpfPct,
+      vatDeductiblePct: e.vatDeductiblePct,
+      irpfDeductiblePct: e.irpfDeductiblePct,
+      deductible: e.deductible,
       isInvestment: e.isInvestment,
     });
+
+    if (ded.unresolvedDeductibility) {
+      continue;
+    }
 
     if (ded.irpfComputable > 0 || (irpfPct > 0 && !e.isInvestment)) {
       expenseTotal = round2(expenseTotal + tot * (irpfPct / 100));

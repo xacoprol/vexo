@@ -72,7 +72,7 @@ function traceSourceIds(
   return out;
 }
 
-function normalizeMotorWarning(
+export function normalizeMotorWarning(
   w: { code: string; message: string; sourceId?: string },
   model: FiscalModelType | string,
   year: number,
@@ -84,16 +84,31 @@ function normalizeMotorWarning(
    * Solo IMPORT_DOCUMENT_MISSING bloquea presentación vía blocksFiling.
    */
   const isImportDoc = w.code === "IMPORT_DOCUMENT_MISSING";
+  const isEuVatIdGap =
+    w.code === "EU_VAT_ID_MISSING" ||
+    w.code === "EU_VAT_ID_INVALID" ||
+    w.code === "EU_VAT_ID_PLACEHOLDER";
+  const isDeductibilityGap = w.code === "EXPENSE_DEDUCTIBILITY_UNRESOLVED";
+  const isNonStandardVatRate =
+    w.code === "NON_STANDARD_VAT_RATE_REVIEW_REQUIRED";
   const isHardGap =
     isImportDoc ||
+    isEuVatIdGap ||
+    isDeductibilityGap ||
+    isNonStandardVatRate ||
     (w.code.includes("MISSING") && !w.code.includes("REVIEW")) ||
     (w.code.includes("INCOMPLETE") && !w.code.includes("REVIEW"));
-  const isReviewOnly = w.code.includes("REVIEW_REQUIRED");
+  const isReviewOnly =
+    w.code.includes("REVIEW_REQUIRED") && !isNonStandardVatRate;
 
   return createHealthIssue({
     code: `MOTOR_${w.code}`,
     severity: isHardGap ? "ERROR" : "WARNING",
-    blocksFiling: isImportDoc,
+    blocksFiling:
+      isImportDoc ||
+      isEuVatIdGap ||
+      isDeductibilityGap ||
+      isNonStandardVatRate,
     title: w.message.split(".")[0] ?? w.message,
     description: w.message,
     model: model as FiscalModelType,
@@ -443,6 +458,28 @@ export function runFiscalHealthChecks(ctx: FiscalHealthContext): ChecksOutput {
   // ── 14–16. Gastos ──
   let expenseIssues = 0;
   for (const e of ctx.expenses) {
+    const unresolvedDed =
+      e.deductible === null &&
+      e.vatDeductiblePct == null &&
+      e.irpfDeductiblePct == null;
+    if (unresolvedDed) {
+      expenseIssues++;
+      issues.push(
+        createHealthIssue({
+          code: "EXPENSE_DEDUCTIBILITY_UNRESOLVED",
+          severity: "ERROR",
+          blocksFiling: true,
+          title: `Gasto ${e.supplierName}: deducibilidad sin clasificar`,
+          description:
+            "No hay porcentaje IVA/IRPF ni flag deductible. VEXO no asume 100 %; clasifica el gasto.",
+          sourceType: "expense",
+          sourceId: e.id,
+          href: `/fiscal/expenses/${e.id}/edit`,
+          year: ctx.year,
+          quarter: ctx.quarter,
+        })
+      );
+    }
     const vatPct = clampPct(e.vatDeductiblePct);
     const irpfPct = clampPct(e.irpfDeductiblePct);
     if (vatPct < 0 || vatPct > 100 || irpfPct < 0 || irpfPct > 100) {
@@ -687,11 +724,28 @@ export function runFiscalHealthChecks(ctx: FiscalHealthContext): ChecksOutput {
     if (ctx.draft347.requiresReview) {
       issues.push(
         createHealthIssue({
-          code: "MODEL347_REQUIRES_REVIEW",
-          severity: "WARNING",
-          blocksFiling: false,
-          title: "347 requiere revisión",
-          description: "El motor 347 señala operaciones o RECC incompletos.",
+          code: "UNSUPPORTED_347_CASE",
+          severity: "ERROR",
+          blocksFiling: true,
+          title: "347: casuística no segura para preparar",
+          description:
+            "El motor 347 señala operaciones o RECC incompletos. VEXO no inventa ni omite silenciosamente.",
+          model: "347",
+          year: ctx.year,
+          evidence: {
+            kind: "UNSUPPORTED",
+            professionalReview: true,
+          },
+        })
+      );
+      issues.push(
+        createHealthIssue({
+          code: "NEEDS_PROFESSIONAL_REVIEW",
+          severity: "ERROR",
+          blocksFiling: true,
+          title: "Revisión profesional: Modelo 347",
+          description:
+            "Supuesto fuera de cobertura segura del 347 (p. ej. RECC/metálico/anexos).",
           model: "347",
           year: ctx.year,
         })

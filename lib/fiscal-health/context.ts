@@ -166,8 +166,9 @@ export type ExpenseHealthRow = {
   subtotal: unknown;
   vatAmount: unknown;
   total: unknown;
-  vatDeductiblePct: number;
-  irpfDeductiblePct: number;
+  deductible?: boolean | null;
+  vatDeductiblePct: number | null;
+  irpfDeductiblePct: number | null;
   isInvestment: boolean;
   practicedWithholdingStatus: string;
   leaseId: string | null;
@@ -291,6 +292,7 @@ export async function loadFiscalHealthContext(opts: {
             total: true,
             vatDeductiblePct: true,
             irpfDeductiblePct: true,
+            deductible: true,
             isInvestment: true,
             practicedWithholdingStatus: true,
             leaseId: true,
@@ -404,6 +406,7 @@ export async function loadFiscalHealthContext(opts: {
     total: e.total,
     vatDeductiblePct: e.vatDeductiblePct,
     irpfDeductiblePct: e.irpfDeductiblePct,
+    deductible: e.deductible,
     isInvestment: e.isInvestment,
     practicedWithholdingStatus: e.practicedWithholdingStatus,
     leaseId: e.leaseId ?? null,

@@ -322,8 +322,13 @@ export function buildModel130Chain(
     out[q] = result;
     hardToJustifyUsed = round2(hardToJustifyUsed + result.hardToJustifyAmount);
     housingDeductionUsed = round2(housingDeductionUsed + result.boxes.box16);
-    unusedNegative = result.unusedNegativeResultsAfter;
 
+    /**
+     * Fuente única del saldo de negativos pendientes:
+     * - Borrador: unusedNegativeResultsAfter de la liquidación (ya aplica +|box19| / −box15).
+     * - Presentado: reconstruir desde pool de entrada + box15/box19 oficiales.
+     * Nunca sumar |box19| otra vez encima de unusedNegativeResultsAfter.
+     */
     if (q < 4) {
       if (presented?.presented) {
         priorPayments = round2(
@@ -334,19 +339,20 @@ export function buildModel130Chain(
         priorHousingIn05 = round2(
           priorHousingIn05 + positiveOnly(presented.box16 ?? 0)
         );
-        if (presented.box19 != null && presented.box19 < 0) {
-          unusedNegative = round2(unusedNegative + Math.abs(presented.box19));
+        const poolIn = unusedNegative;
+        const box15 = positiveOnly(presented.box15 ?? 0);
+        const box19 = presented.box19;
+        let poolOut = round2(Math.max(0, poolIn - box15));
+        if (box19 != null && box19 < 0) {
+          poolOut = round2(poolOut + Math.abs(box19));
         }
+        unusedNegative = poolOut;
       } else {
         anyProvisional = true;
         priorPayments = round2(
           priorPayments + positiveOnly(result.boxes.box07)
         );
-        if (result.boxes.box19 < 0) {
-          unusedNegative = round2(
-            unusedNegative + Math.abs(result.boxes.box19)
-          );
-        }
+        unusedNegative = result.unusedNegativeResultsAfter;
       }
     }
   }
@@ -376,6 +382,7 @@ export function presentedQuarterFromFiling(opts: {
     // OCR gestoría a menudo omite cas. 07 cuando coincide con el resultado (19).
     // Sin fallback, el trimestre siguiente toma box05=0 pese a haber filing presentado.
     box07: box07 ?? box19,
+    box15: boxValueFromPresented(opts.boxes, "15"),
     box16: boxValueFromPresented(opts.boxes, "16"),
     box19,
   };

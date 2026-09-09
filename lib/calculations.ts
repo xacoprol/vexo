@@ -117,10 +117,11 @@ export function calculateDocument(
 
 export function formatCurrency(value: number | string): string {
   const n = typeof value === "string" ? parseFloat(value) : value;
+  const amount = Number.isFinite(n) ? n : 0;
   return new Intl.NumberFormat("es-ES", {
     style: "currency",
     currency: "EUR",
-  }).format(n || 0);
+  }).format(amount);
 }
 
 export function formatDate(date: Date | string | null | undefined): string {

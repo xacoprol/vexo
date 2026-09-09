@@ -1,5 +1,4 @@
 import {
-  clampPct,
   computeExpenseDeductibility,
 } from "@/lib/expense-deductibility";
 import type { Model130TraceLine } from "@/lib/modelo-130/types";
@@ -58,31 +57,33 @@ export function aggregateIrpfExpenses(opts: {
 
     const sub = Number(e.subtotal);
     const vat = Number(e.vatAmount);
-    const vatPct =
-      e.vatDeductiblePct != null
-        ? clampPct(e.vatDeductiblePct)
-        : e.deductible === false
-          ? 0
-          : 100;
-    const irpfPct =
-      e.irpfDeductiblePct != null
-        ? clampPct(e.irpfDeductiblePct)
-        : e.deductible === false
-          ? 0
-          : 100;
     const rate = e.vatRate > 0 ? e.vatRate : 21;
-    const reverseQuota = vat > 0 ? vat : round2(sub * (rate / 100));
+    // Prefer stored quota (incl. negative credit notes); else derive from base.
+    const reverseQuota =
+      Math.abs(vat) >= 0.005 ? round2(vat) : round2(sub * (rate / 100));
 
     const ded = computeExpenseDeductibility({
       subtotal: sub,
       vatAmount:
         parseExpenseOp(e.vatOperationType) !== "INTERIOR" ? reverseQuota : vat,
-      vatDeductiblePct: vatPct,
-      irpfDeductiblePct: irpfPct,
+      vatDeductiblePct: e.vatDeductiblePct,
+      irpfDeductiblePct: e.irpfDeductiblePct,
+      deductible: e.deductible,
       isInvestment: e.isInvestment,
     });
 
-    if (ded.irpfComputable <= 0) continue;
+    if (ded.unresolvedDeductibility) {
+      lines.push({
+        sourceType: "expense",
+        sourceId: e.id,
+        description: `${e.description?.trim() || e.supplierName?.trim() || `Gasto ${e.id.slice(0, 8)}`} · deducibilidad sin clasificar (excluido)`,
+        amount: 0,
+      });
+      continue;
+    }
+
+    // Include negative computable amounts (abonos / notas de crédito).
+    if (Math.abs(ded.irpfComputable) < 0.005) continue;
 
     ordinaryBase = round2(ordinaryBase + ded.irpfComputable);
     const op = parseExpenseOp(e.vatOperationType);
@@ -101,7 +102,7 @@ export function aggregateIrpfExpenses(opts: {
     lines.push({
       sourceType: "expense",
       sourceId: e.id,
-      description: `${desc}${opLabel} · IRPF ${irpfPct}% · IVA nd ${round2(ded.nonDeductibleVat)} €`,
+      description: `${desc}${opLabel} · IRPF ${ded.irpfDeductiblePct}% · IVA nd ${round2(ded.nonDeductibleVat)} €`,
       amount: ded.irpfComputable,
     });
   }

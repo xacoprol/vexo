@@ -24,6 +24,13 @@ export type PurchaseVatKind =
   | "REVERSE_CHARGE_DOMESTIC"
   | "IMPORT_GOODS";
 
+/** Tipos oficiales de casillas 01–09 del Modelo 303 (territorio común). */
+export const SPANISH_303_STANDARD_RATES = [4, 10, 21] as const;
+
+export function isStandardSpanishVatRate(rate: number): boolean {
+  return SPANISH_303_STANDARD_RATES.some((r) => Math.abs(rate - r) < 0.01);
+}
+
 export const PURCHASE_VAT_KIND_LABELS: Record<PurchaseVatKind, string> = {
   DOMESTIC: "Operación interior",
   EU_GOODS: "Adquisición intracomunitaria de bienes (AIB)",
@@ -45,7 +52,8 @@ export function parseSalesVatKind(raw: unknown): SalesVatKind {
   ) {
     return "EU_SERVICE";
   }
-  if (v === "INTRACOMUNITARIA" || v === "INTRACOM") return "EU_DELIVERY";
+  if (v === "INTRACOMUNITARIA" || v === "INTRACOM" || v === "EU_DELIVERY")
+    return "EU_DELIVERY";
   if (v === "EXPORTACION" || v === "EXPORT") return "EXPORT";
   if (v === "CANARIAS" || v === "CEUTA" || v === "MELILLA") return "CANARY_ISLANDS";
   return "DOMESTIC_TAXABLE";

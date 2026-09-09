@@ -139,7 +139,7 @@ export function leaseFixture(
 
 export function makeObligation(opts: {
   model: FiscalObligationEntry["model"];
-  quarter: 1 | 2 | 3 | 4;
+  quarter: 1 | 2 | 3 | 4 | null;
   year?: number;
   obligationStatus: FiscalObligationEntry["obligationStatus"];
   operationsSignal?: FiscalObligationEntry["operationsSignal"];
@@ -153,7 +153,8 @@ export function makeObligation(opts: {
     period: {
       year,
       quarter: opts.quarter,
-      label: `${opts.quarter}T ${year}`,
+      label:
+        opts.quarter == null ? `Año ${year}` : `${opts.quarter}T ${year}`,
     },
     obligationStatus: opts.obligationStatus,
     reason: `fixture ${opts.model}`,
@@ -162,7 +163,10 @@ export function makeObligation(opts: {
     censusSignal: "YES",
     operationsSignal: opts.operationsSignal ?? "HAS_OPS",
     filingStatus: opts.filingStatus ?? "UPCOMING",
-    dueDate: new Date(year, opts.quarter * 3, 20),
+    dueDate:
+      opts.quarter == null
+        ? new Date(year + 1, 0, 30)
+        : new Date(year, opts.quarter * 3, 20),
     dueDateReliable: true,
     filingId: opts.filingId ?? null,
     warnings: [],

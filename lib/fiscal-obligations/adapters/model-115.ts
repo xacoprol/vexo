@@ -101,11 +101,12 @@ export function adapt115Obligation(opts: {
 
   let mismatch: CensusMismatch | null = null;
   if (hasOps && census === "NO") {
+    reasonCodes.push("CENSUS_CONTRADICTS_BOOKS");
     mismatch = {
-      code: "CENSUS_MODEL115_MISMATCH",
+      code: "CENSUS_CONTRADICTS_BOOKS",
       model: "115",
-      severity: "WARNING",
-      title: "Mismatch censal Modelo 115",
+      severity: "CRITICAL",
+      title: "Censo 115 contradice los libros",
       description:
         "Hay retenciones practicadas de alquiler, pero censusModel115 = NO.",
     };

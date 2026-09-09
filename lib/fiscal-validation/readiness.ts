@@ -87,23 +87,37 @@ export function resolvePeriodReadiness(opts: {
     return { status: "NOT_READY", blockers, warnings };
   }
 
+  // Fail-closed: cualquier UNKNOWN en modelos del trimestre → NOT_READY
+  // (no READY: VEXO no puede demostrar REQUIRED ni NOT_APPLICABLE)
+  if (hasUnknownRequiredish) {
+    const unknownModels = quarterObs
+      .filter((o) => o.obligationStatus === "UNKNOWN")
+      .map((o) => o.model);
+    return {
+      status: "NOT_READY",
+      blockers: [
+        ...blockers,
+        ...unknownModels.map((model) => ({
+          code: "OBLIGATION_UNKNOWN",
+          title: `${model}: obligación desconocida`,
+          model,
+          href: "/settings",
+        })),
+      ],
+      warnings,
+    };
+  }
+
   if (
     opts.health.status === "INCOMPLETE" ||
-    profileInsufficient ||
-    (hasUnknownRequiredish &&
-      quarterObs.some(
-        (o) =>
-          o.obligationStatus === "UNKNOWN" &&
-          o.operationsSignal === "HAS_OPS"
-      ))
+    profileInsufficient
   ) {
     return { status: "INCOMPLETE", blockers, warnings };
   }
 
   if (
     warnings.length > 0 ||
-    opts.health.status === "READY_WITH_WARNINGS" ||
-    hasUnknownRequiredish
+    opts.health.status === "READY_WITH_WARNINGS"
   ) {
     return { status: "READY_WITH_WARNINGS", blockers, warnings };
   }
@@ -144,7 +158,9 @@ export function resolveCloseLifecycle(opts: {
   );
   const requiredModels = required.map((o) => o.model as CloseModelCode);
   const filedRequiredModels = required
-    .filter((o) => o.filingStatus === "FILED")
+    .filter(
+      (o) => o.filingStatus === "FILED" || o.filingStatus === "FILED_LATE"
+    )
     .map((o) => o.model as CloseModelCode);
   const unknownModels = unknown.map((o) => o.model as CloseModelCode);
 
@@ -165,9 +181,28 @@ export function resolveCloseLifecycle(opts: {
   const closed =
     unknownModels.length === 0 &&
     required.length > 0 &&
-    required.every((o) => o.filingStatus === "FILED");
+    required.every(
+      (o) => o.filingStatus === "FILED" || o.filingStatus === "FILED_LATE"
+    );
 
   if (closed) {
+    const overduePending = required.some(
+      (o) => o.filingStatus === "OVERDUE"
+    );
+    if (overduePending) {
+      return {
+        status: "OPEN",
+        readyToFile: false,
+        readyForSubmission: false,
+        closed: false,
+        requiredModels,
+        filedRequiredModels,
+        unknownModels,
+        reason:
+          "Hay obligaciones REQUIRED fuera de plazo sin filing; no es CLOSED.",
+        preFiling,
+      };
+    }
     return {
       status: "CLOSED",
       readyToFile: false,
@@ -178,6 +213,22 @@ export function resolveCloseLifecycle(opts: {
       unknownModels,
       reason:
         "Todas las obligaciones REQUIRED del período tienen FiscalFiling presentado.",
+      preFiling,
+    };
+  }
+
+  // UNKNOWN en trimestre → nunca READY_TO_FILE
+  if (unknownModels.length > 0 && !readyToFile) {
+    return {
+      status: "OPEN",
+      readyToFile: false,
+      readyForSubmission: false,
+      closed: false,
+      requiredModels,
+      filedRequiredModels,
+      unknownModels,
+      reason:
+        "Hay obligaciones UNKNOWN: el trimestre no está READY ni CLOSED.",
       preFiling,
     };
   }
@@ -230,15 +281,15 @@ export function resolveCloseLifecycle(opts: {
 
   if (unknownModels.length > 0) {
     return {
-      status: readyToFile ? "READY_TO_FILE" : "OPEN",
-      readyToFile,
+      status: "OPEN",
+      readyToFile: false,
       readyForSubmission: false,
       closed: false,
       requiredModels,
       filedRequiredModels,
       unknownModels,
       reason:
-        "Hay obligaciones UNKNOWN: el trimestre no puede mostrarse como CLOSED definitivo.",
+        "Hay obligaciones UNKNOWN: el trimestre no está READY_TO_FILE ni CLOSED.",
       preFiling,
     };
   }

@@ -148,6 +148,32 @@ export function runObligationChecks(
     incomeBaseYtd: Number(incomeYtd) || 0,
     incomeWithWithholdingYtd: 0,
     model349HasOps,
+    model303HasVatActivity: {
+      1: Boolean(
+        ctx.chain303?.[1] &&
+          Object.values(ctx.chain303[1]).some(
+            (v) => typeof v === "number" && Math.abs(v) > 0.009
+          )
+      ),
+      2: Boolean(
+        ctx.chain303?.[2] &&
+          Object.values(ctx.chain303[2]).some(
+            (v) => typeof v === "number" && Math.abs(v) > 0.009
+          )
+      ),
+      3: Boolean(
+        ctx.chain303?.[3] &&
+          Object.values(ctx.chain303[3]).some(
+            (v) => typeof v === "number" && Math.abs(v) > 0.009
+          )
+      ),
+      4: Boolean(
+        ctx.chain303?.[4] &&
+          Object.values(ctx.chain303[4]).some(
+            (v) => typeof v === "number" && Math.abs(v) > 0.009
+          )
+      ),
+    },
     model347HasDeclarableOps:
       ctx.draft347 != null ? (ctx.draft347.operators?.length ?? 0) > 0 : null,
     model390Status: ctx.model390?.filingObligation.status,
@@ -180,55 +206,83 @@ export function runObligationChecks(
   }
 
   for (const m of result.mismatches) {
+    const isCensusBooks =
+      m.code === "CENSUS_CONTRADICTS_BOOKS" || m.severity === "CRITICAL";
     const preserved =
-      m.code === "CENSUS_MODEL111_MISMATCH" ||
-      m.code === "CENSUS_MODEL115_MISMATCH" ||
-      m.code === "CENSUS_RENT_ACTIVITY_MISMATCH" ||
-      m.code === "MODEL111_OBLIGATION_REVIEW_REQUIRED" ||
-      m.code === "MODEL115_OBLIGATION_REVIEW_REQUIRED"
-        ? m.code
-        : m.code.startsWith("CENSUS_MODEL") && m.code.includes("MISMATCH")
-          ? "CENSUS_OBLIGATION_MISMATCH"
-          : m.code.startsWith("CENSUS_MODEL") && m.code.includes("REVIEW")
-            ? m.code
-            : m.code;
+      m.code === "CENSUS_CONTRADICTS_BOOKS"
+        ? "CENSUS_CONTRADICTS_BOOKS"
+        : m.code === "CENSUS_MODEL111_MISMATCH" ||
+            m.code === "CENSUS_MODEL115_MISMATCH" ||
+            m.code === "CENSUS_RENT_ACTIVITY_MISMATCH" ||
+            m.code === "MODEL111_OBLIGATION_REVIEW_REQUIRED" ||
+            m.code === "MODEL115_OBLIGATION_REVIEW_REQUIRED"
+          ? m.code
+          : m.code.startsWith("CENSUS_MODEL") && m.code.includes("MISMATCH")
+            ? "CENSUS_OBLIGATION_MISMATCH"
+            : m.code.startsWith("CENSUS_MODEL") && m.code.includes("REVIEW")
+              ? m.code
+              : m.code;
 
     issues.push(
       createHealthIssue({
         code:
-          m.code === "CENSUS_MODEL111_MISMATCH"
+          m.code === "CENSUS_MODEL111_MISMATCH" && !isCensusBooks
             ? "CENSUS_OBLIGATION_MISMATCH"
             : preserved,
-        severity: m.severity,
-        blocksFiling: false,
+        severity: isCensusBooks ? "CRITICAL" : m.severity,
+        blocksFiling:
+          isCensusBooks ||
+          m.code === "CENSUS_CONTRADICTS_BOOKS" ||
+          m.severity === "CRITICAL" ||
+          m.severity === "ERROR",
         title: m.title,
         description: m.description,
-        model: (m.model === "HEALTH" ? "HEALTH" : m.model) as FiscalModelType | "HEALTH",
+        model: (m.model === "HEALTH" ? "HEALTH" : m.model) as
+          | FiscalModelType
+          | "HEALTH",
         year: ctx.year,
         href: "/settings",
       })
     );
   }
 
-  // Deduplicate by fingerprint code+model for display statuses
   const relevantEntries =
     ctx.mode === "quarter" && ctx.quarter != null
       ? result.obligations.filter(
           (o) =>
-            o.period.quarter === ctx.quarter ||
-            o.period.quarter == null
+            o.period.quarter === ctx.quarter || o.period.quarter == null
         )
       : result.obligations;
 
+  const quarterModels = new Set(["130", "303", "111", "115", "349"]);
+
   for (const entry of relevantEntries) {
+    if (entry.reasonCodes.includes("CENSUS_CONTRADICTS_BOOKS")) {
+      issues.push(
+        createHealthIssue({
+          code: "CENSUS_CONTRADICTS_BOOKS",
+          severity: "CRITICAL",
+          blocksFiling: true,
+          title: `${entry.model}: censo contradice los libros`,
+          description: entry.reason,
+          model: entry.model as FiscalModelType,
+          year: entry.period.year,
+          quarter: entry.period.quarter ?? null,
+          href: "/settings",
+        })
+      );
+    }
+
     if (entry.obligationStatus === "UNKNOWN") {
+      const relevantUnknown =
+        quarterModels.has(entry.model) ||
+        entry.operationsSignal === "HAS_OPS" ||
+        entry.statusSource === "INSUFFICIENT_DATA";
       issues.push(
         createHealthIssue({
           code: "OBLIGATION_UNKNOWN",
-          severity: "WARNING",
-          blocksFiling:
-            entry.model === "303" &&
-            entry.statusSource === "INSUFFICIENT_DATA",
+          severity: relevantUnknown ? "ERROR" : "WARNING",
+          blocksFiling: relevantUnknown,
           title: `${entry.model}: obligación desconocida`,
           description: entry.reason,
           model: entry.model as FiscalModelType,
@@ -248,10 +302,11 @@ export function runObligationChecks(
       issues.push(
         createHealthIssue({
           code: "REQUIRED_FILING_OVERDUE",
-          severity: "WARNING",
+          severity: "CRITICAL",
           blocksFiling: false,
           title: `${entry.model}: presentación fuera de plazo`,
-          description: entry.reason,
+          description:
+            "Obligación REQUIRED vencida sin FiscalFiling. Puede prepararse fuera de plazo, pero el periodo no es fiscalmente sano ni CLOSED.",
           model: entry.model as FiscalModelType,
           year: entry.period.year,
           quarter: entry.period.quarter ?? null,
@@ -262,7 +317,6 @@ export function runObligationChecks(
       entry.filingStatus !== "FILED" &&
       (entry.filingStatus === "DUE" || entry.filingStatus === "UPCOMING")
     ) {
-      // INFO only for missing — not OVERDUE
       if (entry.filingStatus === "DUE") {
         issues.push(
           createHealthIssue({
@@ -279,7 +333,8 @@ export function runObligationChecks(
       }
     }
 
-    const presented = entry.filingStatus === "FILED";
+    const presented =
+      entry.filingStatus === "FILED" || entry.filingStatus === "FILED_LATE";
     let obligation = mapObligationToHealth(entry.obligationStatus);
     // Preserve EXEMPT label for 390 when NOT_REQUIRED from exempt resolver
     if (

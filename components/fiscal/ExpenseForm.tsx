@@ -623,12 +623,17 @@ export function ExpenseForm({
               name="subtotal"
               type="number"
               step="0.01"
-              min="0"
               required
               className="input font-mono"
               value={subtotal}
-              onChange={(e) => setSubtotal(parseFloat(e.target.value) || 0)}
+              onChange={(e) => {
+                const n = parseFloat(e.target.value);
+                setSubtotal(Number.isFinite(n) ? n : 0);
+              }}
             />
+            <p className="mt-1 text-xs text-ink-muted">
+              Usa importe negativo para notas de crédito / abonos de proveedor.
+            </p>
           </div>
           <div>
             <label className="label" htmlFor="vatRate">
@@ -661,7 +666,6 @@ export function ExpenseForm({
               name="vatAmount"
               type="number"
               step="0.01"
-              min="0"
               className="input font-mono"
               value={vatAmount}
               readOnly

@@ -1,15 +1,24 @@
 /**
  * Deducibilidad independiente IVA / IRPF para gastos.
  * Centraliza el importe computable en IRPF (incl. IVA no deducible como coste).
+ *
+ * DECISIÓN FASE 2 (fail-closed / históricos):
+ * - Prisma persiste vatDeductiblePct/irpfDeductiblePct @default(100) y deductible@default(true).
+ *   Esos defaults son fuente de verdad explícita para datos migrados → se respetan (no romper histórico).
+ * - Campos omitidos (undefined) en filas intermedias ≡ mismos defaults 100.
+ * - Ausencia ambigua solo si deductible === null (explícito) Y ambos pct son null
+ *   → unresolvedDeductibility=true; el caller debe bloquear presentación, no asumir 100% en silencio.
  */
 
 export type ExpenseDeductibilityInput = {
   subtotal: number;
   vatAmount: number;
+  /** 0–100; omitido + deductible null → unresolved */
+  vatDeductiblePct?: number | null;
   /** 0–100 */
-  vatDeductiblePct: number;
-  /** 0–100 */
-  irpfDeductiblePct: number;
+  irpfDeductiblePct?: number | null;
+  /** Legacy binario; false → 0%; null + pcts null → unresolved */
+  deductible?: boolean | null;
   isInvestment?: boolean;
 };
 
@@ -22,6 +31,8 @@ export type ExpenseDeductibilityBreakdown = {
   irpfCostBeforePct: number;
   /** Importe computable en IRPF / casilla 02 (0 si inversión) */
   irpfComputable: number;
+  /** true si no hay base segura para % — no usar como 100% silencioso */
+  unresolvedDeductibility: boolean;
 };
 
 function round2(n: number): number {
@@ -32,6 +43,41 @@ export function clampPct(raw: unknown, fallback = 100): number {
   const n = typeof raw === "number" ? raw : parseFloat(String(raw ?? ""));
   if (!Number.isFinite(n)) return fallback;
   return Math.min(100, Math.max(0, n));
+}
+
+function resolvePcts(input: ExpenseDeductibilityInput): {
+  vatDeductiblePct: number;
+  irpfDeductiblePct: number;
+  unresolvedDeductibility: boolean;
+} {
+  const vatMissing = input.vatDeductiblePct == null;
+  const irpfMissing = input.irpfDeductiblePct == null;
+  /**
+   * Ausencia ambigua = deductible explícitamente null Y ambos pct null.
+   * Omitir campos (undefined) ≡ defaults Prisma históricos 100 — no romper fixtures/DB shape.
+   */
+  if (vatMissing && irpfMissing && input.deductible === null) {
+    return {
+      vatDeductiblePct: 0,
+      irpfDeductiblePct: 0,
+      unresolvedDeductibility: true,
+    };
+  }
+
+  if (input.deductible === false) {
+    return {
+      vatDeductiblePct: vatMissing ? 0 : clampPct(input.vatDeductiblePct, 0),
+      irpfDeductiblePct: irpfMissing ? 0 : clampPct(input.irpfDeductiblePct, 0),
+      unresolvedDeductibility: false,
+    };
+  }
+
+  // deductible true/undefined with at least one pct or legacy omit → defaults 100 (histórico)
+  return {
+    vatDeductiblePct: clampPct(input.vatDeductiblePct, 100),
+    irpfDeductiblePct: clampPct(input.irpfDeductiblePct, 100),
+    unresolvedDeductibility: false,
+  };
 }
 
 /**
@@ -45,10 +91,23 @@ export function clampPct(raw: unknown, fallback = 100): number {
 export function computeExpenseDeductibility(
   input: ExpenseDeductibilityInput
 ): ExpenseDeductibilityBreakdown {
-  const vatDeductiblePct = clampPct(input.vatDeductiblePct);
-  const irpfDeductiblePct = clampPct(input.irpfDeductiblePct);
+  const { vatDeductiblePct, irpfDeductiblePct, unresolvedDeductibility } =
+    resolvePcts(input);
   const subtotal = Number(input.subtotal) || 0;
-  const vatAmount = Math.max(0, Number(input.vatAmount) || 0);
+  // Preserve sign: supplier credit notes / abonos carry negative base and VAT.
+  const vatAmount = Number(input.vatAmount) || 0;
+
+  if (unresolvedDeductibility) {
+    return {
+      vatDeductiblePct: 0,
+      irpfDeductiblePct: 0,
+      deductibleVat: 0,
+      nonDeductibleVat: 0,
+      irpfCostBeforePct: 0,
+      irpfComputable: 0,
+      unresolvedDeductibility: true,
+    };
+  }
 
   const deductibleVat = round2(vatAmount * (vatDeductiblePct / 100));
   const nonDeductibleVat = round2(vatAmount - deductibleVat);
@@ -62,6 +121,7 @@ export function computeExpenseDeductibility(
       nonDeductibleVat,
       irpfCostBeforePct,
       irpfComputable: 0,
+      unresolvedDeductibility: false,
     };
   }
 
@@ -72,15 +132,16 @@ export function computeExpenseDeductibility(
     nonDeductibleVat,
     irpfCostBeforePct,
     irpfComputable: round2(irpfCostBeforePct * (irpfDeductiblePct / 100)),
+    unresolvedDeductibility: false,
   };
 }
 
-/** Base IVA soportado deducible (interior / extracom cuota en 29). */
+/** Base IVA soportado deducible (interior / extracom cuota en 29). Sign-preserving. */
 export function deductibleVatAmount(
   vatAmount: number,
   vatDeductiblePct: number
 ): number {
-  return round2(Math.max(0, vatAmount) * (clampPct(vatDeductiblePct) / 100));
+  return round2((Number(vatAmount) || 0) * (clampPct(vatDeductiblePct) / 100));
 }
 
 /** Base AIB deducible (casillas 36) a partir de base accrued × %. */

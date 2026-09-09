@@ -68,7 +68,7 @@ function parseExpenseForm(formData: FormData) {
     ? parseFloat(vatAmountRaw.replace(",", ".")) || 0
     : round2(subtotal * (vatRate / 100));
   const resolvedVatAmount =
-    reverseCharge && vatAmount <= 0
+    reverseCharge && Math.abs(vatAmount) < 0.005 && Math.abs(subtotal) >= 0.005
       ? round2(subtotal * (vatRate / 100))
       : vatAmount;
   const totalRaw = String(formData.get("total") ?? "").trim();
@@ -200,8 +200,7 @@ async function validate(data: ReturnType<typeof parseExpenseForm>) {
   if (!(data.issueDate instanceof Date) || Number.isNaN(data.issueDate.getTime())) {
     return "Fecha no válida";
   }
-  if (data.subtotal < 0) return "La base no puede ser negativa";
-  if (data.vatAmount < 0) return "El IVA no puede ser negativo";
+  // Negative subtotal/vatAmount are valid for supplier credit notes / abonos.
   const nif = String(data.supplierNif ?? "").trim();
   if (
     (data.vatOperationType === "INTRACOMUNITARIA" ||
@@ -554,22 +553,27 @@ export type ExpenseDraftInput = {
 };
 
 function fromDraftInput(input: ExpenseDraftInput): ExpenseWriteData {
-  const subtotal = round2(Math.max(0, Number(input.subtotal) || 0));
+  // Preserve signed amounts (supplier credit notes / abonos).
+  const subtotal = round2(Number(input.subtotal) || 0);
   const vatOperationType = parseExpenseVatOperationType(input.vatOperationType);
   const reverseCharge = isExpenseReverseCharge(vatOperationType);
   let vatRate = Number(input.vatRate) || 0;
   if (reverseCharge && vatRate <= 0) vatRate = 21;
   let vatAmount =
     input.vatAmount != null
-      ? round2(Math.max(0, Number(input.vatAmount) || 0))
+      ? round2(Number(input.vatAmount) || 0)
       : round2(subtotal * (vatRate / 100));
-  if (reverseCharge && vatAmount <= 0) {
+  if (
+    reverseCharge &&
+    Math.abs(vatAmount) < 0.005 &&
+    Math.abs(subtotal) >= 0.005
+  ) {
     vatAmount = round2(subtotal * (vatRate / 100));
   }
   const total = reverseCharge
     ? subtotal
     : input.total != null
-      ? round2(Math.max(0, Number(input.total) || 0))
+      ? round2(Number(input.total) || 0)
       : round2(subtotal + vatAmount);
   const issueDateRaw = String(input.issueDate ?? "").trim();
   const usefulLifeRaw = Number(input.usefulLifeYears) || 4;

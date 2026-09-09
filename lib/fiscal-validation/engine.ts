@@ -324,11 +324,62 @@ export async function buildFiscalPeriodValidation(
     hasBlockers: ctx.health.blockers.length > 0,
   });
 
-  const lifecycle = resolveCloseLifecycle({
+  const lifecycleRaw = resolveCloseLifecycle({
     readinessStatus: readiness.status,
     quarterObligations: quarterObs,
     submissionGate,
   });
+
+  const driftStatuses: ReconciliationStatus[] = [
+    "CURRENT_BOOK_CHANGED_AFTER_FILING",
+    "POTENTIAL_AMENDMENT_REQUIRED",
+    "UNEXPLAINED_DIFFERENCE",
+  ];
+  const hasBookDrift =
+    driftStatuses.includes(reconciliation.status) ||
+    models.some((m) => driftStatuses.includes(m.reconciliationStatus));
+
+  const lifecycle =
+    lifecycleRaw.status === "CLOSED" && hasBookDrift
+      ? {
+          ...lifecycleRaw,
+          status: "AMENDMENT_REVIEW_REQUIRED" as const,
+          closed: false,
+          reason:
+            "Había filings del período pero el libro actual diverge (CURRENT_BOOK_CHANGED_AFTER_FILING). Filing histórico intacto; requiere revisión de enmienda.",
+        }
+      : lifecycleRaw;
+
+  const annualObs = ctx.obligations.obligations.filter(
+    (o) =>
+      o.period.quarter == null &&
+      (o.model === "180" ||
+        o.model === "190" ||
+        o.model === "347" ||
+        o.model === "390")
+  );
+  const pendingAnnual = annualObs
+    .filter(
+      (o) =>
+        (o.obligationStatus === "REQUIRED" ||
+          o.obligationStatus === "UNKNOWN") &&
+        o.filingStatus !== "FILED" &&
+        o.filingStatus !== "FILED_LATE"
+    )
+    .map((o) => o.model as import("@/lib/fiscal-validation/types").AnnualCloseModelCode);
+
+  const fiscalYear = {
+    periodClosed:
+      lifecycleRaw.status === "CLOSED" ||
+      lifecycle.status === "AMENDMENT_REVIEW_REQUIRED",
+    /** Pendientes anuales REQUIRED/UNKNOWN sin FILED → ejercicio incompleto (aunque el trimestre esté CLOSED). */
+    fiscalYearComplete: pendingAnnual.length === 0,
+    pendingAnnualModels: pendingAnnual,
+    note:
+      pendingAnnual.length > 0
+        ? `Cierre trimestral ≠ ejercicio completo. Pendientes anuales: ${pendingAnnual.join(", ")}.`
+        : "Sin obligaciones anuales pendientes detectadas en el mapa.",
+  };
 
   const closeActions = buildFiscalCloseActions(ctx.health.issues);
 
@@ -352,6 +403,7 @@ export async function buildFiscalPeriodValidation(
     reconciliation,
     readiness,
     lifecycle,
+    fiscalYear,
     closeActions,
     euReviews,
     performance: {
@@ -388,10 +440,62 @@ export function buildFiscalPeriodValidationFromParts(opts: {
   const quarterObs = opts.obligations.obligations.filter(
     (o) => o.period.quarter === opts.quarter
   );
-  const lifecycle = resolveCloseLifecycle({
+  const lifecycleRaw = resolveCloseLifecycle({
     readinessStatus: readiness.status,
     quarterObligations: quarterObs,
   });
+  const reconciliation = {
+    status: aggregateReconciliationStatus(
+      opts.models.map((m) => m.reconciliationStatus)
+    ),
+    issues: [] as FiscalPeriodValidation["reconciliation"]["issues"],
+  };
+  const driftStatuses = [
+    "CURRENT_BOOK_CHANGED_AFTER_FILING",
+    "POTENTIAL_AMENDMENT_REQUIRED",
+    "UNEXPLAINED_DIFFERENCE",
+  ] as const;
+  const hasBookDrift =
+    driftStatuses.includes(
+      reconciliation.status as (typeof driftStatuses)[number]
+    ) ||
+    opts.models.some((m) =>
+      driftStatuses.includes(
+        m.reconciliationStatus as (typeof driftStatuses)[number]
+      )
+    );
+  const lifecycle =
+    lifecycleRaw.status === "CLOSED" && hasBookDrift
+      ? {
+          ...lifecycleRaw,
+          status: "AMENDMENT_REVIEW_REQUIRED" as const,
+          closed: false,
+          reason:
+            "Había filings del período pero el libro actual diverge. Filing histórico intacto; requiere revisión de enmienda.",
+        }
+      : lifecycleRaw;
+
+  const annualObs = opts.obligations.obligations.filter(
+    (o) =>
+      o.period.quarter == null &&
+      (o.model === "180" ||
+        o.model === "190" ||
+        o.model === "347" ||
+        o.model === "390")
+  );
+  const pendingAnnual = annualObs
+    .filter(
+      (o) =>
+        (o.obligationStatus === "REQUIRED" ||
+          o.obligationStatus === "UNKNOWN") &&
+        o.filingStatus !== "FILED" &&
+        o.filingStatus !== "FILED_LATE"
+    )
+    .map(
+      (o) =>
+        o.model as import("@/lib/fiscal-validation/types").AnnualCloseModelCode
+    );
+
   return {
     period: {
       year: opts.year,
@@ -401,14 +505,20 @@ export function buildFiscalPeriodValidationFromParts(opts: {
     health: opts.health,
     obligations: opts.obligations,
     models: opts.models,
-    reconciliation: {
-      status: aggregateReconciliationStatus(
-        opts.models.map((m) => m.reconciliationStatus)
-      ),
-      issues: [],
-    },
+    reconciliation,
     readiness,
     lifecycle,
+    fiscalYear: {
+      periodClosed:
+        lifecycleRaw.status === "CLOSED" ||
+        lifecycle.status === "AMENDMENT_REVIEW_REQUIRED",
+      fiscalYearComplete: pendingAnnual.length === 0,
+      pendingAnnualModels: pendingAnnual,
+      note:
+        pendingAnnual.length > 0
+          ? `Cierre trimestral ≠ ejercicio completo. Pendientes anuales: ${pendingAnnual.join(", ")}.`
+          : "Sin obligaciones anuales pendientes detectadas en el mapa.",
+    },
     closeActions: buildFiscalCloseActions(opts.health.issues ?? []),
     performance: {
       queryCountApprox: opts.health.queryCount ?? 0,

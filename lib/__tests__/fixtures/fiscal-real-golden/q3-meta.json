@@ -1,0 +1,13 @@
+{
+  "intraInvoices": [
+    {
+      "number": "W3D260113",
+      "date": "2026-07-30",
+      "subtotal": 580,
+      "vatOperationType": "INTRACOMUNITARIA",
+      "clientCountry": "PT",
+      "vatIdOk": false,
+      "vatIdCode": "EU_VAT_ID_INVALID"
+    }
+  ]
+}

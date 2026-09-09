@@ -1,4 +1,5 @@
 import type { FiscalQuarter } from "@/lib/fiscal";
+import { resolveCensusNoAgainstBooks } from "@/lib/fiscal-obligations/census-contradiction";
 import { compareResolverVsCensus } from "@/lib/fiscal-obligations/compare-census";
 import {
   resolveFilingStatus,
@@ -13,9 +14,8 @@ import type {
 } from "@/lib/fiscal-obligations/types";
 
 /**
- * 303: combina censusModel303 + vatPeriodicity.
- * No sobreafirma REQUIRED si faltan hechos.
- * No altera el cálculo del borrador 303.
+ * 303: censusModel303 + vatPeriodicity + señal de actividad IVA en libros.
+ * census=NO + HAS_OPS → UNKNOWN (CENSUS_CONTRADICTS_BOOKS).
  */
 export function adapt303Obligation(opts: {
   profile: FiscalCensusProfile;
@@ -24,16 +24,41 @@ export function adapt303Obligation(opts: {
   filed: boolean;
   filingId: string | null;
   now: Date;
+  /** Facturas/gastos con IVA o operaciones sujetas en el período. */
+  hasVatActivity?: boolean | null;
 }): { entry: FiscalObligationEntry; mismatch: CensusMismatch | null } {
   const census = opts.profile.obligations.model303;
   const periodicity = opts.profile.facts.vatPeriodicity;
+  const hasOps =
+    opts.hasVatActivity === undefined ? null : opts.hasVatActivity;
 
   let obligationStatus: ObligationStatus;
   let statusSource: ObligationStatusSource;
   let reason: string;
   const reasonCodes: string[] = [];
+  const warnings: string[] = [];
+  let mismatch: CensusMismatch | null = null;
 
-  if (census === "NO") {
+  const censusNo = resolveCensusNoAgainstBooks({
+    model: "303",
+    census,
+    hasOps,
+  });
+
+  if (censusNo?.contradicts) {
+    obligationStatus = censusNo.obligationStatus;
+    statusSource = censusNo.statusSource;
+    reason = censusNo.reason;
+    reasonCodes.push(...censusNo.reasonCodes);
+    warnings.push(...censusNo.warnings);
+    mismatch = {
+      code: "CENSUS_CONTRADICTS_BOOKS",
+      model: "303",
+      severity: "CRITICAL",
+      title: "Censo 303 contradice los libros",
+      description: censusNo.reason,
+    };
+  } else if (census === "NO") {
     obligationStatus = "NOT_APPLICABLE";
     statusSource = "CENSUS";
     reason = "Perfil censal: Modelo 303 = NO.";
@@ -81,11 +106,13 @@ export function adapt303Obligation(opts: {
     now: opts.now,
   });
 
-  const mismatch = compareResolverVsCensus({
-    model: "303",
-    resolverStatus: obligationStatus,
-    censusSignal: census,
-  });
+  if (!mismatch) {
+    mismatch = compareResolverVsCensus({
+      model: "303",
+      resolverStatus: obligationStatus,
+      censusSignal: census,
+    });
+  }
 
   return {
     entry: {
@@ -101,12 +128,13 @@ export function adapt303Obligation(opts: {
       reasonCodes,
       statusSource,
       censusSignal: census,
-      operationsSignal: "UNKNOWN",
+      operationsSignal:
+        hasOps == null ? "UNKNOWN" : hasOps ? "HAS_OPS" : "ZERO_OPS",
       filingStatus,
       dueDate: due.dueDate,
       dueDateReliable: due.reliable,
       filingId: opts.filingId,
-      warnings: mismatch ? [mismatch.description] : [],
+      warnings,
     },
     mismatch,
   };

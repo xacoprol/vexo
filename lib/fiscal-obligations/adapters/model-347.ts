@@ -1,8 +1,10 @@
+import { resolveCensusNoAgainstBooks } from "@/lib/fiscal-obligations/census-contradiction";
 import {
   resolveFilingStatus,
   resolveObligationDueDate,
 } from "@/lib/fiscal-obligations/filing-status";
 import type {
+  CensusMismatch,
   FiscalCensusProfile,
   FiscalObligationEntry,
   ObligationStatus,
@@ -12,17 +14,16 @@ import type {
 
 /**
  * 347 anual: elegibilidad por operaciones + censo.
- * ZERO_OPS no implica NOT_REQUIRED si censo = YES.
+ * census=NO + HAS_OPS → UNKNOWN (CENSUS_CONTRADICTS_BOOKS).
  */
 export function adapt347Obligation(opts: {
   profile: FiscalCensusProfile;
   year: number;
-  /** true si hay operadores que superan umbral / hay borrador con contenido. */
   hasDeclarableOps: boolean | null;
   filed: boolean;
   filingId: string | null;
   now: Date;
-}): { entry: FiscalObligationEntry } {
+}): { entry: FiscalObligationEntry; mismatch: CensusMismatch | null } {
   const census = opts.profile.obligations.model347;
   const operationsSignal: OperationsSignal =
     opts.hasDeclarableOps == null
@@ -36,12 +37,29 @@ export function adapt347Obligation(opts: {
   let reason: string;
   const reasonCodes: string[] = [];
   const warnings: string[] = [];
+  let mismatch: CensusMismatch | null = null;
 
-  if (census === "NO") {
-    obligationStatus = "NOT_APPLICABLE";
-    statusSource = "CENSUS";
-    reason = "Perfil censal: Modelo 347 = NO.";
-    reasonCodes.push("CENSUS_347_NO");
+  const censusNo = resolveCensusNoAgainstBooks({
+    model: "347",
+    census,
+    hasOps: opts.hasDeclarableOps,
+  });
+
+  if (censusNo) {
+    obligationStatus = censusNo.obligationStatus;
+    statusSource = censusNo.statusSource;
+    reason = censusNo.reason;
+    reasonCodes.push(...censusNo.reasonCodes);
+    warnings.push(...censusNo.warnings);
+    if (censusNo.contradicts) {
+      mismatch = {
+        code: "CENSUS_CONTRADICTS_BOOKS",
+        model: "347",
+        severity: "CRITICAL",
+        title: "Censo 347 contradice los libros",
+        description: censusNo.reason,
+      };
+    }
   } else if (census === "YES") {
     obligationStatus = "REQUIRED";
     statusSource = "CENSUS";
@@ -103,5 +121,6 @@ export function adapt347Obligation(opts: {
       filingId: opts.filingId,
       warnings,
     },
+    mismatch,
   };
 }

@@ -1,4 +1,5 @@
 import type { FiscalQuarter } from "@/lib/fiscal";
+import { resolveCensusNoAgainstBooks } from "@/lib/fiscal-obligations/census-contradiction";
 import { compareResolverVsCensus } from "@/lib/fiscal-obligations/compare-census";
 import {
   resolveFilingStatus,
@@ -15,7 +16,7 @@ import type {
 
 /**
  * 349: operationsSignal SEPARADO de obligationStatus.
- * ZERO_OPS ≠ NOT_APPLICABLE / NOT_REQUIRED.
+ * census=NO + HAS_OPS → UNKNOWN (CENSUS_CONTRADICTS_BOOKS), no NOT_APPLICABLE.
  */
 export function adapt349Obligation(opts: {
   profile: FiscalCensusProfile;
@@ -37,18 +38,19 @@ export function adapt349Obligation(opts: {
   const reasonCodes: string[] = [];
   const warnings: string[] = [];
 
-  if (census === "NO") {
-    obligationStatus = "NOT_APPLICABLE";
-    statusSource = "CENSUS";
-    reason = "Perfil censal: Modelo 349 = NO.";
-    reasonCodes.push("CENSUS_349_NO");
-    if (operationsSignal === "HAS_OPS") {
-      warnings.push(
-        "Hay operaciones intracomunitarias pero el censo 349 = NO — revisar ROI/036."
-      );
-    }
+  const censusNo = resolveCensusNoAgainstBooks({
+    model: "349",
+    census,
+    hasOps: opts.hasOps,
+  });
+
+  if (censusNo) {
+    obligationStatus = censusNo.obligationStatus;
+    statusSource = censusNo.statusSource;
+    reason = censusNo.reason;
+    reasonCodes.push(...censusNo.reasonCodes);
+    warnings.push(...censusNo.warnings);
   } else if (census === "YES") {
-    // Obligación censal periódica: NO degradar a NOT_REQUIRED por zero ops
     obligationStatus = "REQUIRED";
     statusSource = "CENSUS";
     reason =
@@ -62,27 +64,24 @@ export function adapt349Obligation(opts: {
         "Sin operaciones este período: la obligación censal sigue vigente hasta confirmar baja."
       );
     }
+  } else if (operationsSignal === "HAS_OPS") {
+    obligationStatus = "REQUIRED";
+    statusSource = "OPERATIONS";
+    reason =
+      "Hay operaciones intracomunitarias; censo 349 UNKNOWN — presenta y confirma ROI.";
+    reasonCodes.push("HAS_OPS", "CENSUS_349_UNKNOWN");
+    warnings.push("Completa el perfil censal 349.");
+  } else if (operationsSignal === "ZERO_OPS") {
+    obligationStatus = "UNKNOWN";
+    statusSource = "INSUFFICIENT_DATA";
+    reason =
+      "Sin operaciones este período y censo 349 UNKNOWN. No se infiere NOT_APPLICABLE.";
+    reasonCodes.push("ZERO_OPS", "CENSUS_349_UNKNOWN");
   } else {
-    // census UNKNOWN
-    if (operationsSignal === "HAS_OPS") {
-      obligationStatus = "REQUIRED";
-      statusSource = "OPERATIONS";
-      reason =
-        "Hay operaciones intracomunitarias; censo 349 UNKNOWN — presenta y confirma ROI.";
-      reasonCodes.push("HAS_OPS", "CENSUS_349_UNKNOWN");
-      warnings.push("Completa el perfil censal 349.");
-    } else if (operationsSignal === "ZERO_OPS") {
-      obligationStatus = "UNKNOWN";
-      statusSource = "INSUFFICIENT_DATA";
-      reason =
-        "Sin operaciones este período y censo 349 UNKNOWN. No se infiere NOT_APPLICABLE.";
-      reasonCodes.push("ZERO_OPS", "CENSUS_349_UNKNOWN");
-    } else {
-      obligationStatus = "UNKNOWN";
-      statusSource = "INSUFFICIENT_DATA";
-      reason = "Datos insuficientes para determinar obligación 349.";
-      reasonCodes.push("349_UNKNOWN");
-    }
+    obligationStatus = "UNKNOWN";
+    statusSource = "INSUFFICIENT_DATA";
+    reason = "Datos insuficientes para determinar obligación 349.";
+    reasonCodes.push("349_UNKNOWN");
   }
 
   const due = resolveObligationDueDate({
@@ -99,11 +98,20 @@ export function adapt349Obligation(opts: {
     now: opts.now,
   });
 
-  const mismatch = compareResolverVsCensus({
+  let mismatch = compareResolverVsCensus({
     model: "349",
     resolverStatus: obligationStatus,
     censusSignal: census,
   });
+  if (censusNo?.contradicts) {
+    mismatch = {
+      code: "CENSUS_CONTRADICTS_BOOKS",
+      model: "349",
+      severity: "CRITICAL",
+      title: "Censo 349 contradice los libros",
+      description: censusNo.reason,
+    };
+  }
   if (mismatch) warnings.push(mismatch.description);
 
   return {

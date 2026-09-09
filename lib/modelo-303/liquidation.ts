@@ -2,7 +2,7 @@ function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
-/** Casilla 27 — suma explícita de cuotas devengadas soportadas por VEXO. */
+/** Casilla 27 — cuotas devengadas de casillas oficiales 03/06/09/11/13/17. */
 export function computeBox27(parts: {
   box03: number;
   box06: number;
@@ -11,17 +11,20 @@ export function computeBox27(parts: {
   box13: number;
   /** Recargo equivalencia (16/17): no soportado → 0 */
   box17: number;
-  /** Otros tipos repercutidos no estándar */
-  otherDevengadoQuota: number;
+  /**
+   * Tipos no estándar (p. ej. 23 % PT). No forman parte del 303 español.
+   * Se exponen en otherQuota / casilla "revisar"; no se liquidan aquí.
+   */
+  otherDevengadoQuota?: number;
 }): number {
+  void parts.otherDevengadoQuota;
   return round2(
     parts.box03 +
       parts.box06 +
       parts.box09 +
       parts.box11 +
       parts.box13 +
-      parts.box17 +
-      parts.otherDevengadoQuota
+      parts.box17
   );
 }
 

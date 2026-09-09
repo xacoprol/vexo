@@ -32,6 +32,8 @@ export { assessCensusProfileCompleteness } from "@/lib/fiscal-obligations/comple
 export {
   resolveObligationDueDate,
   resolveFilingStatus,
+  canPrepareWhileOverdue,
+  buildLateFilingEvidence,
 } from "@/lib/fiscal-obligations/filing-status";
 
 export {

@@ -22,6 +22,7 @@ export default async function MarketplaceIncomePage({
     vat?: string;
     year?: string;
     month?: string;
+    convertError?: string;
   }>;
 }) {
   const sp = await searchParams;
@@ -31,6 +32,7 @@ export default async function MarketplaceIncomePage({
   const vat = (sp.vat ?? "").toUpperCase();
   const year = parseInt(sp.year ?? "", 10);
   const month = parseInt(sp.month ?? "", 10);
+  const convertError = sp.convertError?.trim();
 
   const and: Prisma.MarketplaceIncomeWhereInput[] = [];
 
@@ -156,6 +158,15 @@ export default async function MarketplaceIncomePage({
         shop={shopifyHint.shop}
         lastSyncAt={settings?.shopifyLastSyncAt?.toISOString() ?? null}
       />
+
+      {convertError ? (
+        <div
+          role="alert"
+          className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900"
+        >
+          No se pudo convertir en factura: {convertError}
+        </div>
+      ) : null}
 
       <MarketplaceIncomeDropZone />
 

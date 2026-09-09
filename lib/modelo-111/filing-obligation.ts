@@ -52,7 +52,7 @@ export function assess111FilingObligation(opts: {
       reasons.push(
         "Hay retenciones practicadas a profesionales pero el censo 111 = NO."
       );
-      reasonCodes.push("CENSUS_MODEL111_MISMATCH");
+      reasonCodes.push("CENSUS_MODEL111_MISMATCH", "CENSUS_CONTRADICTS_BOOKS");
       return {
         status: "UNKNOWN",
         reasons,

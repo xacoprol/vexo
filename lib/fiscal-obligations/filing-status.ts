@@ -92,6 +92,8 @@ export function resolveObligationDueDate(opts: {
 
 /**
  * Nunca OVERDUE si dueDate no es fiable.
+ * Si filed=true y filedAt > dueDate → FILED_LATE (histórico de extemporaneidad).
+ * OVERDUE no impide preparar/congelar; solo marca el calendario.
  */
 export function resolveFilingStatus(opts: {
   obligationStatus: ObligationStatus;
@@ -100,6 +102,8 @@ export function resolveFilingStatus(opts: {
   dueDate: Date | null;
   dueDateReliable: boolean;
   now: Date;
+  /** Fecha efectiva de presentación (para FILED_LATE). */
+  filedAt?: Date | null;
 }): FilingStatus {
   const {
     obligationStatus,
@@ -107,6 +111,7 @@ export function resolveFilingStatus(opts: {
     dueDate,
     dueDateReliable,
     now,
+    filedAt,
   } = opts;
 
   if (
@@ -116,7 +121,17 @@ export function resolveFilingStatus(opts: {
     return filed ? "FILED" : "NOT_APPLICABLE";
   }
 
-  if (filed) return "FILED";
+  if (filed) {
+    if (
+      dueDateReliable &&
+      dueDate &&
+      filedAt &&
+      filedAt.getTime() > dueDate.getTime()
+    ) {
+      return "FILED_LATE";
+    }
+    return "FILED";
+  }
 
   if (obligationStatus === "UNKNOWN") {
     return "REQUIRES_REVIEW";
@@ -133,4 +148,44 @@ export function resolveFilingStatus(opts: {
   if (msLeft < 0) return "OVERDUE";
   if (daysLeft <= 30) return "DUE";
   return "UPCOMING";
+}
+
+/** OVERDUE puede seguir preparando freeze/declaration. */
+export function canPrepareWhileOverdue(filingStatus: FilingStatus): boolean {
+  return (
+    filingStatus === "OVERDUE" ||
+    filingStatus === "DUE" ||
+    filingStatus === "UPCOMING" ||
+    filingStatus === "REQUIRES_REVIEW"
+  );
+}
+
+/** Marcador persistente de presentación extemporánea. */
+export type LateFilingEvidence = {
+  model: string;
+  year: number;
+  quarter: number | null;
+  dueDate: string;
+  filedAt: string;
+  wasLate: true;
+  filingStatus: "FILED_LATE";
+};
+
+export function buildLateFilingEvidence(opts: {
+  model: string;
+  year: number;
+  quarter: number | null;
+  dueDate: Date;
+  filedAt: Date;
+}): LateFilingEvidence | null {
+  if (opts.filedAt.getTime() <= opts.dueDate.getTime()) return null;
+  return {
+    model: opts.model,
+    year: opts.year,
+    quarter: opts.quarter,
+    dueDate: opts.dueDate.toISOString(),
+    filedAt: opts.filedAt.toISOString(),
+    wasLate: true,
+    filingStatus: "FILED_LATE",
+  };
 }

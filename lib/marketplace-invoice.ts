@@ -1,4 +1,4 @@
-import type { MarketplaceIncome, Prisma } from "@prisma/client";
+import type { MarketplaceIncome, Prisma, PrismaClient } from "@prisma/client";
 import { isEuCountryCode } from "@/lib/invoice-fiscal";
 import { resolveOrCreateClient } from "@/lib/invoice-import";
 import { countryNameFromCode } from "@/lib/nif";
@@ -6,7 +6,11 @@ import { allocateInvoiceNumber } from "@/lib/numbering";
 import { isZeroVatOperation } from "@/lib/recurring";
 import { applyVerifactuSeal } from "@/lib/verifactu-seal";
 
-type Db = Prisma.TransactionClient;
+/**
+ * PrismaNeonHTTP no soporta $transaction interactiva.
+ * Usamos el cliente raíz (o un tx si algún día hay driver TCP).
+ */
+type Db = PrismaClient | Prisma.TransactionClient;
 
 /** Ingresos marketplace que aún no tienen factura W3D (evita doble cómputo). */
 export const marketplaceIncomeNotInvoicedWhere = {
@@ -17,6 +21,13 @@ function channelLabel(channel: string): string {
   if (channel === "AMAZON") return "Amazon";
   if (channel === "SHOPIFY") return "Shopify";
   return channel;
+}
+
+function isInvoiceNumberConflict(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const e = err as { code?: string; message?: string };
+  if (e.code === "P2002") return true;
+  return /unique constraint|seriesId_number/i.test(String(e.message ?? ""));
 }
 
 export function mapMarketplaceVatOperation(income: {
@@ -71,12 +82,12 @@ export function canConvertMarketplaceIncome(income: {
 }
 
 async function resolveMarketplaceClient(
-  tx: Db,
+  db: Db,
   income: Pick<MarketplaceIncome, "channel" | "shipToCountry">
 ): Promise<{ clientId: string }> {
   const cc = (income.shipToCountry ?? "ES").trim().toUpperCase() || "ES";
   const name = `Consumidor final (${channelLabel(income.channel)}) · ${cc}`;
-  const { clientId } = await resolveOrCreateClient(tx, {
+  const { clientId } = await resolveOrCreateClient(db, {
     name,
     nif: `PEND-MKT-${cc}`,
     countryCode: cc,
@@ -87,26 +98,24 @@ async function resolveMarketplaceClient(
 
 /**
  * Convierte un ingreso marketplace en factura W3D con correlativo y sello VeriFactu.
- * Debe ejecutarse dentro de una transacción atómica.
+ *
+ * Neon HTTP: secuencia con compensación (sin $transaction interactiva).
+ * Si falla tras crear la factura, se intenta borrar el borrador/huérfano.
  */
-export async function convertMarketplaceIncomeInTransaction(
-  tx: Db,
+export async function convertMarketplaceIncomeToInvoiceRecord(
+  db: Db,
   incomeId: string
 ): Promise<string> {
-  const income = await tx.marketplaceIncome.findUnique({ where: { id: incomeId } });
+  const income = await db.marketplaceIncome.findUnique({
+    where: { id: incomeId },
+  });
   if (!income) throw new Error("Ingreso no encontrado");
 
   const check = canConvertMarketplaceIncome(income);
   if (!check.ok) throw new Error(check.reason);
 
   const vatOperationType = mapMarketplaceVatOperation(income);
-  const { clientId } = await resolveMarketplaceClient(tx, income);
-
-  const num = await allocateInvoiceNumber(tx);
-  const lastInSeries = await tx.invoice.findFirst({
-    where: { seriesId: num.seriesId, status: { not: "ANULADA" } },
-    orderBy: { number: "desc" },
-  });
+  const { clientId } = await resolveMarketplaceClient(db, income);
 
   const subtotal = Number(income.subtotal);
   const vatAmount = isZeroVatOperation(vatOperationType)
@@ -124,64 +133,118 @@ export async function convertMarketplaceIncomeInTransaction(
     `Generada desde ingreso ${channel} · ${income.externalRef ?? income.externalKey}`,
     income.notes?.trim(),
   ].filter(Boolean);
+  const paymentMethod =
+    income.channel === "SHOPIFY" ? "Shopify" : "Marketplace";
 
-  const invoice = await tx.invoice.create({
-    data: {
-      seriesId: num.seriesId,
-      seriesPrefix: num.seriesPrefix,
-      number: num.number,
-      fullNumber: num.fullNumber,
-      clientId,
-      issueDate,
-      dueDate,
-      status: "PAGADA",
-      fiscalStatus: "ISSUED",
-      invoiceKind: "SIMPLIFIED",
-      paymentMethod: income.channel === "SHOPIFY" ? "Shopify" : "Marketplace",
-      notes: noteParts.join(" · ") || null,
-      vatOperationType,
-      subtotal,
-      vatAmount,
-      irpfRate: 0,
-      irpfAmount: 0,
-      total,
-      previousInvoiceId: lastInSeries?.id ?? null,
-    },
-  });
+  let invoice: { id: string; seriesId: string; number: number } | null = null;
 
-  await tx.invoiceLine.create({
-    data: {
-      invoiceId: invoice.id,
-      sortOrder: 0,
-      description: buildMarketplaceLineDescription(income),
-      quantity: 1,
-      unitPrice: subtotal,
-      vatRate: lineVatRate,
-      discountPct: 0,
-      lineSubtotal: subtotal,
-      lineVat: vatAmount,
-      lineTotal: total,
-    },
-  });
-
-  if (total > 0) {
-    await tx.invoicePayment.create({
-      data: {
-        invoiceId: invoice.id,
-        amount: total,
-        paidAt: issueDate,
-        method: income.channel === "SHOPIFY" ? "Shopify" : "Marketplace",
-        notes: `Cobro ${channel}`,
-      },
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const num = await allocateInvoiceNumber(db);
+    const lastInSeries = await db.invoice.findFirst({
+      where: { seriesId: num.seriesId, status: { not: "ANULADA" } },
+      orderBy: { number: "desc" },
     });
+    try {
+      invoice = await db.invoice.create({
+        data: {
+          seriesId: num.seriesId,
+          seriesPrefix: num.seriesPrefix,
+          number: num.number,
+          fullNumber: num.fullNumber,
+          clientId,
+          issueDate,
+          dueDate,
+          status: "PAGADA",
+          fiscalStatus: "ISSUED",
+          invoiceKind: "SIMPLIFIED",
+          paymentMethod,
+          notes: noteParts.join(" · ") || null,
+          vatOperationType,
+          subtotal,
+          vatAmount,
+          irpfRate: 0,
+          irpfAmount: 0,
+          total,
+          previousInvoiceId: lastInSeries?.id ?? null,
+        },
+        select: { id: true, seriesId: true, number: true },
+      });
+      break;
+    } catch (err) {
+      if (!isInvoiceNumberConflict(err) || attempt === 2) throw err;
+    }
   }
 
-  await applyVerifactuSeal(tx, invoice.id, { markIssued: true });
+  if (!invoice) {
+    throw new Error("No se pudo reservar un número de factura válido");
+  }
 
-  await tx.marketplaceIncome.update({
-    where: { id: incomeId },
-    data: { invoiceId: invoice.id, convertedAt: new Date() },
-  });
+  try {
+    await db.invoiceLine.create({
+      data: {
+        invoiceId: invoice.id,
+        sortOrder: 0,
+        description: buildMarketplaceLineDescription(income),
+        quantity: 1,
+        unitPrice: subtotal,
+        vatRate: lineVatRate,
+        discountPct: 0,
+        lineSubtotal: subtotal,
+        lineVat: vatAmount,
+        lineTotal: total,
+      },
+    });
 
-  return invoice.id;
+    if (total > 0) {
+      await db.invoicePayment.create({
+        data: {
+          invoiceId: invoice.id,
+          amount: total,
+          paidAt: issueDate,
+          method: paymentMethod,
+          notes: `Cobro ${channel}`,
+        },
+      });
+    }
+
+    await applyVerifactuSeal(db, invoice.id, { markIssued: true });
+
+    await db.marketplaceIncome.update({
+      where: { id: incomeId },
+      data: { invoiceId: invoice.id, convertedAt: new Date() },
+    });
+
+    return invoice.id;
+  } catch (err) {
+    console.error(
+      "[convertMarketplaceIncome] Fallo tras crear factura; compensación delete",
+      {
+        invoiceId: invoice.id,
+        incomeId,
+        err: err instanceof Error ? err.message : err,
+      }
+    );
+    try {
+      await db.invoice.delete({ where: { id: invoice.id } });
+    } catch (delErr) {
+      console.error(
+        "[convertMarketplaceIncome] Rollback delete falló — factura huérfana",
+        {
+          invoiceId: invoice.id,
+          err: delErr instanceof Error ? delErr.message : delErr,
+        }
+      );
+    }
+    throw err instanceof Error
+      ? err
+      : new Error("No se pudo convertir en factura");
+  }
+}
+
+/** @deprecated Prefer convertMarketplaceIncomeToInvoiceRecord (sin $transaction). */
+export async function convertMarketplaceIncomeInTransaction(
+  tx: Db,
+  incomeId: string
+): Promise<string> {
+  return convertMarketplaceIncomeToInvoiceRecord(tx, incomeId);
 }

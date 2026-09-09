@@ -49,7 +49,17 @@ export type CloseLifecycleStatus =
   | "READY_FOR_SUBMISSION"
   | "STALE_REVIEW"
   | "FILED"
-  | "CLOSED";
+  | "CLOSED"
+  /** CLOSED trimestral pero el libro actual diverge del filing (revisión enmienda). */
+  | "AMENDMENT_REVIEW_REQUIRED";
+
+/** Distinción cierre trimestral vs ejercicio fiscal completo. */
+export type FiscalYearCompletion = {
+  periodClosed: boolean;
+  fiscalYearComplete: boolean;
+  pendingAnnualModels: AnnualCloseModelCode[];
+  note: string;
+};
 
 export type ModelDifferenceKind =
   | "none"
@@ -147,6 +157,8 @@ export type FiscalPeriodValidation = {
       };
     };
   };
+  /** Cierre trimestral ≠ ejercicio fiscal completo (180/190/347/390). */
+  fiscalYear?: FiscalYearCompletion;
   /** Acciones UX deduplicadas (Fase 14). */
   closeActions?: import("@/lib/fiscal-close").FiscalCloseAction[];
   /** Preview UE opcional (Shopify etc.). */
