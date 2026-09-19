@@ -96,7 +96,7 @@ export function CreateClientModal({
               Nuevo cliente
             </h2>
             <p className="mt-0.5 text-sm text-ink-muted">
-              Se asignará automáticamente al documento
+              Solo nombre y móvil; el resto lo puedes completar después
             </p>
           </div>
           <button
@@ -133,14 +133,43 @@ export function CreateClientModal({
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
+              <label className="label" htmlFor={`${formId}-phone`}>
+                Teléfono móvil
+              </label>
+              <input
+                id={`${formId}-phone`}
+                name="phone"
+                type="tel"
+                className="input"
+                required
+                placeholder="600 000 000"
+              />
+              {err("phone")}
+            </div>
+            <div>
+              <label className="label" htmlFor={`${formId}-email`}>
+                Email{" "}
+                <span className="font-normal text-ink-muted">(opcional)</span>
+              </label>
+              <input
+                id={`${formId}-email`}
+                name="email"
+                type="email"
+                className="input"
+              />
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
               <label className="label" htmlFor={`${formId}-nif`}>
-                NIF / CIF / VAT
+                NIF / CIF / VAT{" "}
+                <span className="font-normal text-ink-muted">(opcional)</span>
               </label>
               <input
                 id={`${formId}-nif`}
                 name="nif"
                 className="input font-mono"
-                required
                 placeholder="B12345678"
               />
               {err("nif")}
@@ -171,35 +200,15 @@ export function CreateClientModal({
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <label className="label" htmlFor={`${formId}-email`}>
-                Email
-              </label>
-              <input
-                id={`${formId}-email`}
-                name="email"
-                type="email"
-                className="input"
-              />
-            </div>
-            <div>
-              <label className="label" htmlFor={`${formId}-phone`}>
-                Teléfono
-              </label>
-              <input id={`${formId}-phone`} name="phone" className="input" />
-            </div>
-          </div>
-
           <div>
             <label className="label" htmlFor={`${formId}-street`}>
-              Calle
+              Calle{" "}
+              <span className="font-normal text-ink-muted">(opcional)</span>
             </label>
             <input
               id={`${formId}-street`}
               name="addressStreet"
               className="input"
-              required
             />
             {err("addressStreet")}
           </div>
@@ -213,7 +222,6 @@ export function CreateClientModal({
                 id={`${formId}-city`}
                 name="addressCity"
                 className="input"
-                required
               />
               {err("addressCity")}
             </div>
@@ -225,7 +233,6 @@ export function CreateClientModal({
                 id={`${formId}-province`}
                 name="addressProvince"
                 className="input"
-                required
               />
               {err("addressProvince")}
             </div>
@@ -237,7 +244,6 @@ export function CreateClientModal({
                 id={`${formId}-zip`}
                 name="addressZip"
                 className="input"
-                required
               />
               {err("addressZip")}
             </div>

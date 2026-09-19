@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/session";
-import { normalizeTaxId, taxIdErrorMessage } from "@/lib/nif";
+import { normalizeTaxId, isValidTaxId } from "@/lib/nif";
 
 export type ClientFormState = {
   error?: string;
@@ -23,7 +23,7 @@ function parseClientForm(formData: FormData) {
     addressCity: String(formData.get("addressCity") ?? "").trim(),
     addressProvince: String(formData.get("addressProvince") ?? "").trim(),
     addressZip: String(formData.get("addressZip") ?? "").trim(),
-    addressCountry: String(formData.get("addressCountry") ?? "España").trim(),
+    addressCountry: String(formData.get("addressCountry") ?? "España").trim() || "España",
     email: String(formData.get("email") ?? "").trim() || null,
     phone: String(formData.get("phone") ?? "").trim() || null,
     contactPerson: String(formData.get("contactPerson") ?? "").trim() || null,
@@ -34,12 +34,15 @@ function parseClientForm(formData: FormData) {
 function validateClient(data: ReturnType<typeof parseClientForm>) {
   const fieldErrors: Record<string, string> = {};
   if (!data.name) fieldErrors.name = "El nombre es obligatorio";
-  const nifErr = taxIdErrorMessage(data.nif, data.countryCode);
-  if (nifErr) fieldErrors.nif = nifErr;
-  if (!data.addressStreet) fieldErrors.addressStreet = "Obligatorio";
-  if (!data.addressCity) fieldErrors.addressCity = "Obligatorio";
-  if (!data.addressProvince) fieldErrors.addressProvince = "Obligatorio";
-  if (!data.addressZip) fieldErrors.addressZip = "Obligatorio";
+  if (!data.phone) fieldErrors.phone = "El teléfono móvil es obligatorio";
+  if (data.nif && !isValidTaxId(data.nif, data.countryCode)) {
+    fieldErrors.nif =
+      data.countryCode === "ES"
+        ? "NIF/CIF no válido (formato español: 12345678A o A12345678)"
+        : data.countryCode === "PT"
+          ? "NIF portugués no válido (9 dígitos)"
+          : "Identificador fiscal no válido (mín. 3 caracteres)";
+  }
   return fieldErrors;
 }
 

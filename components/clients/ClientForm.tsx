@@ -53,13 +53,13 @@ export function ClientForm({ client }: Props) {
         </div>
         <div>
           <label className="label" htmlFor="nif">
-            NIF / CIF / VAT
+            NIF / CIF / VAT{" "}
+            <span className="font-normal text-ink-muted">(opcional)</span>
           </label>
           <input
             id="nif"
             name="nif"
             className="input font-mono"
-            required
             defaultValue={client?.nif ?? ""}
             placeholder="12345678A o 516327372"
           />
@@ -115,19 +115,26 @@ export function ClientForm({ client }: Props) {
         </div>
         <div>
           <label className="label" htmlFor="phone">
-            Teléfono
+            Teléfono móvil
           </label>
           <input
             id="phone"
             name="phone"
+            type="tel"
             className="input"
+            required
             defaultValue={client?.phone ?? ""}
+            placeholder="600 000 000"
           />
+          {err("phone")}
         </div>
       </div>
 
       <fieldset className="space-y-4">
-        <legend className="text-sm font-semibold text-ink">Dirección</legend>
+        <legend className="text-sm font-semibold text-ink">
+          Dirección{" "}
+          <span className="font-normal text-ink-muted">(opcional)</span>
+        </legend>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <label className="label" htmlFor="addressStreet">
@@ -137,7 +144,6 @@ export function ClientForm({ client }: Props) {
               id="addressStreet"
               name="addressStreet"
               className="input"
-              required
               defaultValue={client?.addressStreet ?? ""}
             />
             {err("addressStreet")}
@@ -150,7 +156,6 @@ export function ClientForm({ client }: Props) {
               id="addressCity"
               name="addressCity"
               className="input"
-              required
               defaultValue={client?.addressCity ?? ""}
             />
             {err("addressCity")}
@@ -163,7 +168,6 @@ export function ClientForm({ client }: Props) {
               id="addressProvince"
               name="addressProvince"
               className="input"
-              required
               defaultValue={client?.addressProvince ?? ""}
             />
             {err("addressProvince")}
@@ -176,7 +180,6 @@ export function ClientForm({ client }: Props) {
               id="addressZip"
               name="addressZip"
               className="input"
-              required
               defaultValue={client?.addressZip ?? ""}
             />
             {err("addressZip")}
