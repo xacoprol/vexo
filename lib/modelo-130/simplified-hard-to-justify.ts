@@ -16,7 +16,14 @@ export type HardToJustifyResult = {
 
 /**
  * Gastos de difícil justificación — estimación directa simplificada.
- * 5 % sobre rendimiento neto positivo previo (antes de este gasto), máx. 2.000 €/año acumulado.
+ * 5 % sobre rendimiento neto positivo previo (antes de este gasto), máx. 2.000 €/año.
+ *
+ * `amount` es el **importe YTD acumulado** a incluir en casilla 02 del trimestre
+ * (el 130 es acumulativo). No es un incremento trimestral.
+ *
+ * `hardToJustifyUsedEarlierInYear` se ignora en el cálculo del tope: el máximo
+ * anual se aplica sobre el YTD del trimestre actual. Si se pasara a restar
+ * importes YTD previos, los T posteriores podrían poner amount=0 y vaciar cas.02.
  *
  * Incompatibilidades no auto-detectables (documentadas como warnings en el motor):
  * - Actividades excluidas del supuesto (art. 30)
@@ -26,9 +33,10 @@ export function computeHardToJustifyExpense(opts: {
   incomeBase: number;
   ordinaryExpenseBase: number;
   amortizationYtd: number;
-  /** Gasto difícil justificación ya computado en trimestres anteriores del mismo ejercicio. */
+  /** @deprecated No afecta al importe YTD; se conserva por compatibilidad de API. */
   hardToJustifyUsedEarlierInYear?: number;
 }): HardToJustifyResult {
+  void opts.hardToJustifyUsedEarlierInYear;
   const rendimientoPrevio = round2(
     opts.incomeBase - opts.ordinaryExpenseBase - opts.amortizationYtd
   );
@@ -42,16 +50,14 @@ export function computeHardToJustifyExpense(opts: {
   }
 
   const raw = round2(rendimientoPrevio * IRPF_SIMPLIFIED_HARD_TO_JUSTIFY_RATE);
-  const used = Math.max(0, opts.hardToJustifyUsedEarlierInYear ?? 0);
-  const remainingCap = round2(
-    Math.max(0, IRPF_SIMPLIFIED_HARD_TO_JUSTIFY_MAX_ANNUAL - used)
+  const amount = round2(
+    Math.min(raw, IRPF_SIMPLIFIED_HARD_TO_JUSTIFY_MAX_ANNUAL)
   );
-  const amount = round2(Math.min(raw, remainingCap));
 
   return {
     amount,
     rendimientoPrevio,
     rateApplied: IRPF_SIMPLIFIED_HARD_TO_JUSTIFY_RATE,
-    cappedByAnnualMax: raw > remainingCap,
+    cappedByAnnualMax: raw > IRPF_SIMPLIFIED_HARD_TO_JUSTIFY_MAX_ANNUAL,
   };
 }

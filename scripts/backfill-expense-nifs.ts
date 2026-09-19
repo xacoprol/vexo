@@ -27,6 +27,10 @@ function isAppleName(name: string): boolean {
   return name.toLowerCase().includes("apple");
 }
 
+function shouldStampAppleIeNif(): boolean {
+  return false;
+}
+
 function isBambulab(name: string): boolean {
   return /bambulab/i.test(name);
 }
@@ -84,13 +88,19 @@ async function main() {
   let bambuVatFixed = 0;
 
   for (const e of missing) {
-    if (isAppleName(e.supplierName)) {
+    if (isAppleName(e.supplierName) && shouldStampAppleIeNif()) {
       await prisma.expense.update({
         where: { id: e.id },
         data: { supplierNif: APPLE_IE },
       });
       apple += 1;
       console.log(`Apple → ${APPLE_IE}: ${e.supplierName} (${e.id})`);
+      continue;
+    }
+    if (isAppleName(e.supplierName)) {
+      console.log(
+        `Apple SKIP (no NIF por nombre; clasificar por documento): ${e.supplierName} (${e.id})`
+      );
       continue;
     }
 

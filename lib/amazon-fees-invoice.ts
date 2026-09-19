@@ -179,7 +179,7 @@ export function parseAmazonFeesInvoiceCsv(
       invoiceNumber: agg.invoiceNumber,
       description,
       category: "SOFTWARE",
-      vatOperationType: "INTRACOMUNITARIA",
+      vatOperationType: "SERVICIO_INTRACOMUNITARIO",
       subtotal,
       vatRate: VAT_RATE,
       vatAmount,

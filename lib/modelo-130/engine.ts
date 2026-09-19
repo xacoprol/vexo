@@ -4,7 +4,6 @@ import {
 } from "@/lib/modelo-130/constants";
 import { computeModel130Liquidation } from "@/lib/modelo-130/liquidation";
 import {
-  assess130FilingObligation,
   type FilingObligation,
 } from "@/lib/modelo-130/filing-obligation";
 import {
@@ -320,7 +319,8 @@ export function buildModel130Chain(
     });
 
     out[q] = result;
-    hardToJustifyUsed = round2(hardToJustifyUsed + result.hardToJustifyAmount);
+    // HTJ es YTD en cas.02: sustituir, no sumar (evitar vaciar cas.02 al tocar tope).
+    hardToJustifyUsed = round2(result.hardToJustifyAmount);
     housingDeductionUsed = round2(housingDeductionUsed + result.boxes.box16);
 
     /**

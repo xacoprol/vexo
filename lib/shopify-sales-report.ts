@@ -53,11 +53,32 @@ export function isShopifySalesByCountryReport(headers: string[]): boolean {
   return REQUIRED_HEADERS.every((h) => set.has(h));
 }
 
-function countryCode(raw: string): string | null {
-  const t = raw.trim();
+/** ISO-3166-1 alpha-2 o nombre mapeado; rechaza basura tipo "IVA". */
+export function normalizeShipToCountry(raw: string | null | undefined): string | null {
+  if (raw == null) return null;
+  const t = String(raw).trim();
   if (!t) return null;
   if (/^[A-Za-z]{2}$/.test(t)) return t.toUpperCase();
-  return COUNTRY_MAP[t.toLowerCase()] ?? t.slice(0, 24).toUpperCase();
+  const mapped = COUNTRY_MAP[t.toLowerCase()];
+  if (mapped) return mapped;
+  return null;
+}
+
+function countryCode(raw: string): string | null {
+  return normalizeShipToCountry(raw);
+}
+
+export function marketplaceRowHasInvalidCountry(
+  row: Pick<AmazonTaxReportRow, "shipToCountry" | "importFlags" | "notes"> & {
+    shipToCountry?: string | null;
+    notes?: string | null;
+  }
+): boolean {
+  if (row.importFlags?.includes("IMPORT_DATA_INVALID")) return true;
+  if ((row.notes ?? "").includes("IMPORT_DATA_INVALID")) return true;
+  const c = row.shipToCountry?.trim() ?? "";
+  if (!c) return false;
+  return normalizeShipToCountry(c) == null || c.toUpperCase() === "IVA";
 }
 
 function inferVatRate(base: number, vat: number): number {
@@ -167,8 +188,15 @@ export function parseShopifyIvaSummaryDraft(
     draft.periodLabel?.trim() ||
     `Informe IVA ${periodTag}`;
 
+  // Resumen IVA agregado: NO inventar país. "IVA" no es ISO y no implica PT/OSS.
+  const shipToCountry: string | null = null;
+  const importFlags: NonNullable<AmazonTaxReportRow["importFlags"]> = [
+    "IMPORT_DATA_INVALID",
+    "NEEDS_REVIEW",
+  ];
+
   const externalKey = shopifyExternalKey({
-    country: "IVA",
+    country: "SUMMARY",
     issueDate,
     netSales,
     taxes,
@@ -194,8 +222,12 @@ export function parseShopifyIvaSummaryDraft(
     subtotal,
     vatAmount,
     total,
-    shipToCountry: "IVA",
+    shipToCountry,
+    importFlags,
     notes: [
+      "IMPORT_DATA_INVALID",
+      "NEEDS_REVIEW",
+      "Resumen IVA mensual sin desglose por país ISO — no liquidar como operación fiscal válida hasta desglose.",
       sourceFile ? `Archivo: ${sourceFile}` : null,
       draft.reportKind === "chat" ? "Resumen IVA chat/email Shopify" : null,
       gross ? `Gross ${gross}` : null,
@@ -211,9 +243,9 @@ export function parseShopifyIvaSummaryDraft(
       .join(" · "),
   };
 
-  const taxableBase = vatStatus === "TAXABLE" ? subtotal : 0;
-  const taxableVat = vatStatus === "TAXABLE" ? vatAmount : 0;
-  const exemptBase = vatStatus === "EXEMPT" ? subtotal : 0;
+  const taxableBase = 0;
+  const taxableVat = 0;
+  const exemptBase = 0;
   const refundsBase = subtotal < 0 ? subtotal : 0;
 
   return {
@@ -314,8 +346,14 @@ export function parseShopifySalesByCountryCsv(
     }
 
     const countryLabel = countryRaw.trim() || "Sin país";
+    const invalidCountry =
+      Boolean(countryRaw.trim()) && country == null;
+    const importFlags: AmazonTaxReportRow["importFlags"] = invalidCountry
+      ? ["IMPORT_DATA_INVALID", "NEEDS_REVIEW"]
+      : undefined;
+
     const externalKey = shopifyExternalKey({
-      country: country || "UNKNOWN",
+      country: country || (invalidCountry ? "INVALID" : "UNKNOWN"),
       issueDate,
       netSales,
       taxes,
@@ -342,7 +380,13 @@ export function parseShopifySalesByCountryCsv(
       vatAmount,
       total,
       shipToCountry: country,
+      importFlags,
       notes: [
+        invalidCountry ? "IMPORT_DATA_INVALID" : null,
+        invalidCountry ? "NEEDS_REVIEW" : null,
+        invalidCountry
+          ? `País de facturación no ISO: "${countryRaw.trim()}"`
+          : null,
         sourceFile ? `Archivo: ${sourceFile}` : null,
         gross ? `Gross ${gross}` : null,
         discounts ? `Discounts ${discounts}` : null,

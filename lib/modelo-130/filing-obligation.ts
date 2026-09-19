@@ -73,9 +73,13 @@ export function assess130FilingObligation(opts: {
         ],
       };
     }
-    reasons.push(
-      "Inicio de actividad: falta confirmar tipo de actividad para aplicar la exención por retenciones."
-    );
+    // Empresarial (BUSINESS): la exención por ≥70 % retenciones no aplica por inicio.
+    // Solo pedimos confirmar tipo si aún es desconocido (null).
+    if (opts.isProfessionalActivity == null) {
+      reasons.push(
+        "Inicio de actividad: falta confirmar tipo de actividad para aplicar la exención por retenciones."
+      );
+    }
   }
 
   if (reasons.length === 0) {

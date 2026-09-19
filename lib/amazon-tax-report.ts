@@ -23,6 +23,8 @@ export type AmazonTaxReportRow = {
   total: number;
   shipToCountry: string | null;
   notes: string | null;
+  /** Flags de calidad de import (p. ej. país imposible). No liquidar como op. válida. */
+  importFlags?: Array<"IMPORT_DATA_INVALID" | "NEEDS_REVIEW">;
 };
 
 export type AmazonTaxReportParseResult = {

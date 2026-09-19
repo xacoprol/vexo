@@ -191,28 +191,10 @@ export function runPracticedWithholdingChecks(ctx: FiscalHealthContext): {
     }
   }
 
-  for (const e of ctx.expensesYear) {
-    if (
-      e.practicedWithholdingStatus === PRACTICED_WITHHOLDING_STATUS.UNKNOWN &&
-      e.category === "PROFESIONALES"
-    ) {
-      issues.push(
-        createHealthIssue({
-          code: "MODEL111_OBLIGATION_REVIEW_REQUIRED",
-          severity: "INFO",
-          blocksFiling: false,
-          title: `Gasto profesional sin clasificación de retención · ${e.supplierName}`,
-          description:
-            "Categoría PROFESIONALES con retención UNKNOWN. Confirma si está sujeto a retención practicada.",
-          model: "111",
-          year: ctx.year,
-          sourceType: "expense",
-          sourceId: e.id,
-          href: `/fiscal/expenses/${e.id}/edit`,
-        })
-      );
-    }
-  }
+  // Categoría contable PROFESIONALES ≠ obligación de retención IRPF.
+  // No emitir MODEL111_* solo por categoría: una sociedad (p. ej. asesoría SL)
+  // puede ser PROFESIONALES con practicedWithholdingStatus=NO/UNKNOWN sin generar 111.
+  // La retención se declara con practicedWithholdingStatus=YES → FiscalWithholding.
 
   checks.push(
     check(

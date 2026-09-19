@@ -162,29 +162,29 @@ describe("Fase 4 golden — Modelo 303 Q2", () => {
     }
   });
 
-  it("Shopify 23 % queda en otherQuota y bloquea, no en 07/09/27", () => {
+  it("Shopify mayo SUMMARY con país inválido → IMPORT_DATA_INVALID (no otherQuota ni 07)", () => {
     const r = computeGolden303(2);
-    assert.equal(r.modelo303.boxes.otherBase, 578.89);
-    assert.equal(r.modelo303.boxes.otherQuota, 136.44);
+    assert.equal(r.modelo303.boxes.otherBase, 0);
+    assert.equal(r.modelo303.boxes.otherQuota, 0);
     assert.ok(
-      r.modelo303.warnings.some(
-        (w) => w.code === "NON_STANDARD_VAT_RATE_REVIEW_REQUIRED"
+      r.modelo303.warnings.some((w) => w.code === "IMPORT_DATA_INVALID")
+    );
+    // No congelar 23 % = PT/OSS: solo metadata imposible.
+    assert.ok(
+      !r.modelo303.warnings.some(
+        (w) =>
+          w.code === "NON_STANDARD_VAT_RATE_REVIEW_REQUIRED" &&
+          /tipo 23/.test(w.message) &&
+          /IVA/.test(w.message)
       )
     );
-    const issue = normalizeMotorWarning(
-      { code: "NON_STANDARD_VAT_RATE_REVIEW_REQUIRED", message: "tipo 23" },
-      "303",
-      2026,
-      2
-    );
-    assert.equal(issue.blocksFiling, true);
   });
 
-  it("delta 07 vs gestoría ≈ base Shopify 23 % (GESTORÍA_CLASSIFICATION / MARKETPLACE)", () => {
+  it("delta 07 vs gestoría incluye Shopify SUMMARY sin país ISO (WAIT_FOR_GESTORIA)", () => {
     const b = computeGolden303(2).modelo303.boxes;
     const presented07 = PRESENTED_303_Q2.boxes.find((x) => x.code === "07")!.value;
-    assert.equal(round2(presented07 - b.box07), 572.51);
-    assert.equal(round2(b.otherBase - 572.51), 6.38);
+    // VEXO no liquida resúmenes con shipToCountry=IVA; gestoría sí mete parte en 07.
+    assert.equal(round2(presented07 - b.box07), 1433.47);
   });
 
   it("cas.10 VEXO incluye AIB reales; gestoría solo Bambu 104.09", () => {

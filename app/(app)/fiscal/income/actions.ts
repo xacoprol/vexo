@@ -173,6 +173,7 @@ export type MarketplaceIncomeInput = {
   sourceFile?: string | null;
   documentId?: string | null;
   notes?: string | null;
+  importFlags?: Array<"IMPORT_DATA_INVALID" | "NEEDS_REVIEW">;
 };
 
 function round2(n: number): number {
@@ -283,6 +284,19 @@ export async function importMarketplaceIncomeRows(
           : round2(subtotal + vatAmount);
 
       try {
+        const flagNotes = (row.importFlags ?? [])
+          .filter(Boolean)
+          .join(" · ");
+        const notes = [flagNotes, row.notes?.trim() || null]
+          .filter(Boolean)
+          .join(" · ");
+        const shipRaw = row.shipToCountry?.trim() || null;
+        // Solo persistir ISO-2; rechazar basura tipo "IVA" (no es país).
+        const shipToCountry =
+          shipRaw && /^[A-Za-z]{2}$/.test(shipRaw)
+            ? shipRaw.toUpperCase()
+            : null;
+
         await prisma.marketplaceIncome.create({
           data: {
             channel,
@@ -298,10 +312,10 @@ export async function importMarketplaceIncomeRows(
             subtotal,
             vatAmount,
             total,
-            shipToCountry: row.shipToCountry?.trim() || null,
+            shipToCountry,
             sourceFile: row.sourceFile?.trim() || null,
             documentId: row.documentId?.trim() || null,
-            notes: row.notes?.trim() || null,
+            notes: notes || null,
           },
         });
         imported++;

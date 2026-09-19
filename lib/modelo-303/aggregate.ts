@@ -23,6 +23,7 @@ import {
   parsePurchaseVatKind,
   parseSalesVatKind,
 } from "@/lib/modelo-303/vat-classification";
+import { marketplaceRowHasInvalidCountry } from "@/lib/shopify-sales-report";
 
 function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
@@ -108,6 +109,7 @@ export type Model303MarketplaceRow = {
   transactionType?: string | null;
   shipToCountry?: string | null;
   invoiceId?: string | null;
+  notes?: string | null;
 };
 
 export type Model303AssetRow = {
@@ -408,6 +410,30 @@ export function aggregateModel303Period(opts: {
     }
 
     if (status === "TAXABLE") {
+      if (
+        marketplaceRowHasInvalidCountry({
+          shipToCountry: m.shipToCountry ?? null,
+          notes: m.notes ?? null,
+        }) ||
+        (m.notes ?? "").includes("IMPORT_DATA_INVALID")
+      ) {
+        warnings.push({
+          code: "IMPORT_DATA_INVALID",
+          message: `Ingreso marketplace ${label}: metadata de país inválida o resumen sin desglose ISO — no se liquida como operación fiscal válida.`,
+          sourceId: m.id,
+        });
+        pushTrace(trace, "revisar", {
+          sourceType: "marketplace",
+          sourceId: m.id,
+          description: `${label} · IMPORT_DATA_INVALID`,
+          vatKind: "DOMESTIC_TAXABLE",
+          base: subtotal,
+          vatAccrued: vatAmount,
+          vatRate: m.vatRate || 0,
+          boxCodes: ["revisar"],
+        });
+        continue;
+      }
       addBucket(vatMap, m.vatRate || 21, subtotal, vatAmount);
       const rate = m.vatRate || 21;
       if (!isStandardSpanishVatRate(rate)) {

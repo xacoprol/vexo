@@ -34,7 +34,7 @@ export type ParsedExpenseDraft = {
   invoiceNumber: string | null;
   description: string | null;
   category: string;
-  /** INTERIOR | INTRACOMUNITARIA | SERVICIO_EXTRACOMUNITARIO */
+  /** INTERIOR | INTRACOMUNITARIA | SERVICIO_INTRACOMUNITARIO | SERVICIO_EXTRACOMUNITARIO */
   vatOperationType: ExpenseVatOperationType;
   subtotal: number;
   vatRate: number;
@@ -295,7 +295,7 @@ Devuelve SOLO un JSON válido con esta forma exacta:
   "invoiceNumber": "número de factura del proveedor o null",
   "description": "concepto breve en español o null",
   "category": "una de: ${categories}",
-  "vatOperationType": "INTERIOR" | "INTRACOMUNITARIA" | "SERVICIO_EXTRACOMUNITARIO",
+  "vatOperationType": "INTERIOR" | "INTRACOMUNITARIA" | "SERVICIO_INTRACOMUNITARIO" | "SERVICIO_EXTRACOMUNITARIO",
   "subtotal": 0,
   "vatRate": 21,
   "vatAmount": 0,
@@ -315,9 +315,11 @@ Reglas de extracción:
 - invoiceNumber = nº de factura/ticket/nota de crédito del emisor (Factura nº, Nº, Invoice #, ES-CN-AEU-…). Si no se lee, null.
 - Si hay varios tipos de IVA, usa el predominante o el del total; anótalo en notes.
 - Si no hay IVA en factura interior española, vatRate=0, vatAmount=0, total=subtotal.
-- vatOperationType = INTRACOMUNITARIA si: proveedor en la UE (VAT ID europeo DE/IE/FR/IT…), compra de bienes/servicios UE sin IVA español, "intra-community", AIB. subtotal = importe factura, vatRate = 21 (casi siempre), vatAmount = subtotal×21/100, total = subtotal. supplierNif = VAT ID UE.
+- vatOperationType = INTRACOMUNITARIA solo si: proveedor UE + compra de BIENES (mercancía, material, hardware) / AIB / "intra-community acquisition of goods". subtotal = base, vatRate = 21 (casi siempre), vatAmount = subtotal×21/100, total = subtotal. supplierNif = VAT ID UE.
+- vatOperationType = SERVICIO_INTRACOMUNITARIO si: proveedor UE + SERVICIO (SaaS, apps, suscripción, fees, hosting, publicidad, ISP / "reverse charge" / inversión del sujeto pasivo sobre servicios). Misma lógica numérica (base + 21% cuota autorrepercutida, total = base). NO uses INTRACOMUNITARIA (bienes/clave A) para servicios. Ejemplos típicos: Shopify IE apps/subscription/fees, Amazon EU fees de servicio.
 - vatOperationType = SERVICIO_EXTRACOMUNITARIO si: proveedor fuera de la UE (EEUU, UK post-Brexit sin VAT UE, etc.), factura en USD, EIN/TIN en lugar de VAT, o texto "reverse charge" / "tax to be paid on reverse charge" sin VAT ID europeo (p. ej. Cursor/Anysphere, SaaS USA). Misma lógica numérica que intracom (base + 21% cuota, total = base). supplierNif = EIN/TIN si aparece, o null. NO es intracomunitaria UE.
-- Si no hay indicios claros de intracom ni extracom → INTERIOR (incl. Amazon ES / sucursal España con IVA español en la nota).
+- vatOperationType = INTERIOR si hay IVA español cobrado en la factura (p. ej. 21 % ES), aunque el nombre comercial sea Apple/Shopify/Amazon u otra marca internacional. Clasifica por documento (entidad/VAT/IVA cobrado), no por marca.
+- Si no hay indicios claros de intracom bienes, servicio UE ni extracom → INTERIOR.
 - No inventes NIF: si no se lee claramente, null.
 - La fecha es la de la factura/ticket, no la de hoy.
 - category: elige la más razonable (SOFTWARE, SUMINISTROS, MATERIAL, DIETAS, PROFESIONALES, OTROS).

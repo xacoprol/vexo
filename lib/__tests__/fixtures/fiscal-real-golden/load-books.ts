@@ -327,13 +327,13 @@ export const VEXO_130_Q1 = {
 };
 
 export const VEXO_303_Q2 = {
-  box07: 6646.28,
-  box09: 1391.01,
+  box07: 5785.32,
+  box09: 1215.77,
   box10: 1390.14,
   box11: 291.93,
   box12: 60,
   box13: 12.6,
-  box27: 1695.54,
+  box27: 1520.3,
   box28: 4750.55,
   box29: 802.12,
   box36: 893.64,
@@ -341,14 +341,14 @@ export const VEXO_303_Q2 = {
   box38: 496.5,
   box39: 104.27,
   box45: 1094.05,
-  box46: 601.49,
+  box46: 426.25,
   box59: 0,
   box60: 365,
-  box71: 601.49,
+  box71: 426.25,
   box123: 116.5,
   baseExenta: 2602.8,
-  otherBase: 578.89,
-  otherQuota: 136.44,
+  otherBase: 0,
+  otherQuota: 0,
 };
 
 /** Operadores 349 Q2 — VAT ID públicos de proveedores UE (no NIF del titular). */
