@@ -46,6 +46,15 @@ export function CreateClientModal({
     setAddressCountry("España");
   }, [open]);
 
+  useEffect(() => {
+    if (!open) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape" && !pending) onClose();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open, pending, onClose]);
+
   if (!open || !mounted) return null;
 
   function err(field: string) {
@@ -82,9 +91,6 @@ export function CreateClientModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby={`${formId}-title`}
-      onClick={(e) => {
-        if (e.target === e.currentTarget && !pending) onClose();
-      }}
     >
       <div className="card-panel max-h-[90vh] w-full max-w-lg overflow-y-auto p-5 shadow-xl">
         <div className="mb-4 flex items-start justify-between gap-3">
