@@ -132,41 +132,47 @@ export async function GET(request: Request) {
 
   const { from, to, label, fileTag } = period;
 
-  const [amazonRaw, shopifyRaw, invoicesRaw] = await Promise.all([
-    prisma.marketplaceIncome.findMany({
-      where: {
-        channel: "AMAZON",
-        issueDate: { gte: from, lte: to },
-      },
-      orderBy: [{ issueDate: "asc" }, { createdAt: "asc" }],
-      include: { invoice: { select: { fullNumber: true } } },
-    }),
-    prisma.marketplaceIncome.findMany({
-      where: {
-        channel: "SHOPIFY",
-        issueDate: { gte: from, lte: to },
-      },
-      orderBy: [{ issueDate: "asc" }, { createdAt: "asc" }],
-      include: { invoice: { select: { fullNumber: true } } },
-    }),
-    prisma.invoice.findMany({
-      where: {
-        issueDate: { gte: from, lte: to },
-        fiscalStatus: FISCAL_STATUS.ISSUED,
-        status: { not: "ANULADA" },
-      },
-      orderBy: [{ issueDate: "asc" }, { number: "asc" }],
-      include: {
-        client: { select: { name: true, nif: true } },
-        lines: {
-          orderBy: { sortOrder: "asc" },
-          take: 1,
-          select: { description: true, vatRate: true },
+  const [amazonRaw, shopifyRaw, invoicesRaw, amazonLastMonth] =
+    await Promise.all([
+      prisma.marketplaceIncome.findMany({
+        where: {
+          channel: { equals: "AMAZON", mode: "insensitive" },
+          issueDate: { gte: from, lte: to },
         },
-        marketplaceIncome: { select: { channel: true } },
-      },
-    }),
-  ]);
+        orderBy: [{ issueDate: "asc" }, { createdAt: "asc" }],
+        include: { invoice: { select: { fullNumber: true } } },
+      }),
+      prisma.marketplaceIncome.findMany({
+        where: {
+          channel: { equals: "SHOPIFY", mode: "insensitive" },
+          issueDate: { gte: from, lte: to },
+        },
+        orderBy: [{ issueDate: "asc" }, { createdAt: "asc" }],
+        include: { invoice: { select: { fullNumber: true } } },
+      }),
+      prisma.invoice.findMany({
+        where: {
+          issueDate: { gte: from, lte: to },
+          fiscalStatus: FISCAL_STATUS.ISSUED,
+          status: { not: "ANULADA" },
+        },
+        orderBy: [{ issueDate: "asc" }, { number: "asc" }],
+        include: {
+          client: { select: { name: true, nif: true } },
+          lines: {
+            orderBy: { sortOrder: "asc" },
+            take: 1,
+            select: { description: true, vatRate: true },
+          },
+          marketplaceIncome: { select: { channel: true } },
+        },
+      }),
+      prisma.marketplaceIncome.findFirst({
+        where: { channel: { equals: "AMAZON", mode: "insensitive" } },
+        orderBy: { issueDate: "desc" },
+        select: { issueDate: true },
+      }),
+    ]);
 
   const amazon = mapMarketplace(amazonRaw);
   const shopify = mapMarketplace(shopifyRaw);
@@ -184,10 +190,7 @@ export async function GET(request: Request) {
       issueDate: inv.issueDate,
       clientName: inv.client.name,
       clientNif: inv.client.nif,
-      concept:
-        inv.lines[0]?.description ??
-        inv.notes ??
-        inv.fullNumber,
+      concept: inv.lines[0]?.description ?? inv.notes ?? inv.fullNumber,
       subtotal: Number(inv.subtotal),
       vatRate: inv.lines[0]?.vatRate ?? 0,
       vatAmount: Number(inv.vatAmount),
@@ -207,11 +210,18 @@ export async function GET(request: Request) {
     );
   }
 
+  const amazonLastMonthWithData = amazonLastMonth
+    ? `${amazonLastMonth.issueDate.getUTCFullYear()}-${String(
+        amazonLastMonth.issueDate.getUTCMonth() + 1
+      ).padStart(2, "0")}`
+    : null;
+
   const buffer = buildIncomeGestoriaExcelBuffer({
     periodLabel: label,
     amazon,
     shopify,
     invoices,
+    amazonLastMonthWithData: amazon.length ? null : amazonLastMonthWithData,
   });
 
   const fileName = `ingresos_gestoria_${fileTag}.xlsx`;
