@@ -28,13 +28,33 @@ function resolvePeriod(url: URL): {
   label: string;
   fileTag: string;
 } | null {
+  const MONTH_NAMES = [
+    "enero",
+    "febrero",
+    "marzo",
+    "abril",
+    "mayo",
+    "junio",
+    "julio",
+    "agosto",
+    "septiembre",
+    "octubre",
+    "noviembre",
+    "diciembre",
+  ];
+
   const monthCombo = parseMonthParam(url.searchParams.get("month"));
   if (monthCombo) {
     const { year, month } = monthCombo;
     const from = new Date(year, month - 1, 1, 0, 0, 0, 0);
     const to = new Date(year, month, 0, 23, 59, 59, 999);
     const tag = `${year}-${String(month).padStart(2, "0")}`;
-    return { from, to, label: tag, fileTag: tag };
+    return {
+      from,
+      to,
+      label: `${MONTH_NAMES[month - 1]} ${year}`,
+      fileTag: tag,
+    };
   }
 
   const year = parseInt(url.searchParams.get("year") ?? "", 10);
@@ -47,7 +67,12 @@ function resolvePeriod(url: URL): {
     const from = new Date(year, month - 1, 1, 0, 0, 0, 0);
     const to = new Date(year, month, 0, 23, 59, 59, 999);
     const tag = `${year}-${String(month).padStart(2, "0")}`;
-    return { from, to, label: tag, fileTag: tag };
+    return {
+      from,
+      to,
+      label: `${MONTH_NAMES[month - 1]} ${year}`,
+      fileTag: tag,
+    };
   }
 
   if (quarter === 1 || quarter === 2 || quarter === 3 || quarter === 4) {
@@ -62,7 +87,7 @@ function resolvePeriod(url: URL): {
 
   const from = new Date(year, 0, 1, 0, 0, 0, 0);
   const to = new Date(year, 11, 31, 23, 59, 59, 999);
-  return { from, to, label: String(year), fileTag: String(year) };
+  return { from, to, label: `año ${year}`, fileTag: String(year) };
 }
 
 function mapMarketplace(
@@ -105,7 +130,7 @@ function mapMarketplace(
 
 /**
  * Informe ingresos para gestoría (Excel):
- * Resumen + Amazon + Shopify + Facturas Vexo.
+ * Resumen + Amazon + Shopify + Facturas venta por email.
  *
  * ?month=YYYY-MM
  * ?year=2026&month=9
@@ -184,7 +209,7 @@ export async function GET(request: Request) {
         ? "Amazon"
         : channel === "SHOPIFY"
           ? "Shopify"
-          : "Vexo";
+          : "Email";
     return {
       fullNumber: inv.fullNumber,
       issueDate: inv.issueDate,
