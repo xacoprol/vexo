@@ -8,6 +8,7 @@ import { parsePage, paginationMeta } from "@/lib/pagination";
 import { Pagination } from "@/components/ui/Pagination";
 import { LiveSearch } from "@/components/ui/LiveSearch";
 import { ExpenseDropZone } from "@/components/fiscal/ExpenseDropZone";
+import { ExpenseGestoriaExportLink } from "@/components/fiscal/ExpenseGestoriaExportLink";
 import { deleteExpense } from "./actions";
 import type { Prisma } from "@prisma/client";
 
@@ -119,16 +120,19 @@ export default async function ExpensesPage({
             Facturas recibidas para IVA soportado y modelo 130
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Link
-            href="/fiscal/expenses/attach"
-            className="btn-secondary text-sm"
-          >
-            Adjuntar PDFs
-          </Link>
-          <Link href="/fiscal/expenses/new" className="btn-ghost text-sm">
-            Alta manual
-          </Link>
+        <div className="flex flex-wrap items-end gap-3">
+          <ExpenseGestoriaExportLink />
+          <div className="flex flex-wrap items-center gap-2 self-end">
+            <Link
+              href="/fiscal/expenses/attach"
+              className="btn-secondary text-sm"
+            >
+              Adjuntar PDFs
+            </Link>
+            <Link href="/fiscal/expenses/new" className="btn-ghost text-sm">
+              Alta manual
+            </Link>
+          </div>
         </div>
       </div>
 
@@ -234,13 +238,22 @@ export default async function ExpensesPage({
                     >
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <span>{section.label}</span>
-                        <a
-                          href={`/api/fiscal/expenses/zip?month=${section.key}`}
-                          className="btn-ghost px-2 py-1 text-[11px] font-medium normal-case tracking-normal"
-                          title={`Descargar facturas de ${section.label} en ZIP`}
-                        >
-                          Descargar ZIP
-                        </a>
+                        <span className="flex flex-wrap gap-1">
+                          <a
+                            href={`/api/fiscal/expenses/export?month=${section.key}`}
+                            className="btn-secondary px-2 py-1 text-[11px] font-medium normal-case tracking-normal"
+                            title={`Excel gestoría de ${section.label}`}
+                          >
+                            Excel
+                          </a>
+                          <a
+                            href={`/api/fiscal/expenses/zip?month=${section.key}`}
+                            className="btn-ghost px-2 py-1 text-[11px] font-medium normal-case tracking-normal"
+                            title={`Descargar facturas de ${section.label} en ZIP`}
+                          >
+                            ZIP
+                          </a>
+                        </span>
                       </div>
                     </td>
                   </tr>

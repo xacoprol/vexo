@@ -222,12 +222,16 @@ function buildSheet(
         if (money.has(C)) cell.z = "#,##0.00";
       }
       if (baseStyle) {
+        const align =
+          "alignment" in baseStyle && baseStyle.alignment
+            ? baseStyle.alignment
+            : {};
         cell.s = {
           ...baseStyle,
           ...(money.has(C) && typeof cell.v === "number"
             ? {
                 alignment: {
-                  ...(baseStyle.alignment ?? {}),
+                  ...align,
                   horizontal: "right" as const,
                 },
               }
