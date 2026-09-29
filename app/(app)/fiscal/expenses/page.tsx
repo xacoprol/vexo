@@ -311,7 +311,7 @@ export default async function ExpensesPage({
                               href={`/api/fiscal/documents/${e.documentId}`}
                               target="_blank"
                               rel="noreferrer"
-                              className="btn-ghost px-2 py-1 text-xs"
+                              className="btn-secondary px-2.5 py-1 text-xs font-medium"
                             >
                               PDF
                             </a>
