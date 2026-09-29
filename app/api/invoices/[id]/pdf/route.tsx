@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { buildInvoicePdf } from "@/lib/pdf/build-document-pdf";
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth();
@@ -12,13 +12,14 @@ export async function GET(
   }
 
   const { id } = await params;
+  const asDownload = req.nextUrl.searchParams.get("download") === "1";
 
   try {
     const { buffer, filename } = await buildInvoicePdf(id);
     return new NextResponse(new Uint8Array(buffer), {
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `inline; filename="${filename}"`,
+        "Content-Disposition": `${asDownload ? "attachment" : "inline"}; filename="${filename}"`,
         "Cache-Control": "private, no-store",
       },
     });

@@ -197,6 +197,6 @@ export async function buildInvoicePdf(
   return {
     buffer,
     fullNumber: invoice.fullNumber,
-    filename: `Factura_${invoice.fullNumber}.pdf`,
+    filename: `${invoice.fullNumber}.pdf`,
   };
 }

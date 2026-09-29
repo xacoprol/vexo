@@ -615,6 +615,14 @@ export function InvoicesTable({ invoices }: { invoices: InvoiceListRow[] }) {
                     onClick={(e) => e.stopPropagation()}
                   >
                     <div className="inline-flex items-center justify-end gap-1">
+                      <a
+                        href={`/api/invoices/${inv.id}/pdf?download=1`}
+                        className="btn-secondary px-2.5 py-1 text-xs font-medium"
+                        title={`Descargar ${inv.fullNumber}.pdf`}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        PDF
+                      </a>
                       {hasVerifactuQr(inv.verifactuStatus) ? (
                         <a
                           href={`/api/invoices/${inv.id}/pdf`}
@@ -637,7 +645,7 @@ export function InvoicesTable({ invoices }: { invoices: InvoiceListRow[] }) {
                       {inv.status !== "ANULADA" ? (
                         <button
                           type="button"
-                          className="btn-secondary hidden px-2 py-1 text-xs sm:inline-flex"
+                          className="btn-ghost hidden px-2 py-1 text-xs sm:inline-flex"
                           onClick={() => setSendId(inv.id)}
                         >
                           Enviar

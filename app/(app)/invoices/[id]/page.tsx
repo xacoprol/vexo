@@ -213,13 +213,12 @@ export default async function InvoiceDetailPage({
               )}
             </>
           )}
-          <Link
-            href={`/api/invoices/${id}/pdf`}
+          <a
+            href={`/api/invoices/${id}/pdf?download=1`}
             className="btn-primary"
-            target="_blank"
           >
             Descargar PDF
-          </Link>
+          </a>
           {invoice.sourceDocumentId ? (
             <a
               href={`/api/fiscal/documents/${invoice.sourceDocumentId}`}
