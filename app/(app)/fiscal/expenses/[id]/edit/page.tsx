@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { ExpenseForm } from "@/components/fiscal/ExpenseForm";
+import { ExpenseAttachSingle } from "@/components/fiscal/ExpenseAttachSingle";
 import {
   findActiveExpensePracticedWithholding,
   findActiveExpenseRentWithholding,
@@ -68,6 +69,10 @@ export default async function EditExpensePage({
           Editar gasto
         </h1>
       </div>
+      <ExpenseAttachSingle
+        expenseId={expense.id}
+        documentId={expense.documentId}
+      />
       <ExpenseForm
         expense={expense}
         practicedWithholding={toDraft(withholding)}

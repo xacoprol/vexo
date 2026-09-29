@@ -119,9 +119,17 @@ export default async function ExpensesPage({
             Facturas recibidas para IVA soportado y modelo 130
           </p>
         </div>
-        <Link href="/fiscal/expenses/new" className="btn-ghost text-sm">
-          Alta manual
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href="/fiscal/expenses/attach"
+            className="btn-secondary text-sm"
+          >
+            Adjuntar PDFs
+          </Link>
+          <Link href="/fiscal/expenses/new" className="btn-ghost text-sm">
+            Alta manual
+          </Link>
+        </div>
       </div>
 
       <ExpenseDropZone />
