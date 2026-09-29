@@ -77,7 +77,7 @@ export function ExpenseGestoriaExportLink() {
       <a
         href={`/api/fiscal/expenses/export?${qs.toString()}`}
         className="btn-secondary text-sm self-end"
-        title="Excel para gestoría: resumen, detalle y sin PDF"
+        title="Excel: resumen, detalle y gastos sin PDF"
       >
         Informe Excel ({periodLabel})
       </a>

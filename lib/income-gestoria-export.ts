@@ -532,7 +532,7 @@ function summarySheet(opts: {
     kinds.push(kind);
   };
 
-  push(["INFORME DE INGRESOS · GESTORÍA"], "title");
+  push(["INFORME DE INGRESOS"], "title");
   push([`Periodo  ${opts.periodLabel}`], "subtitle");
   push([`Generado  ${formatDateLocal(new Date())}`], "subtitle");
   push([], "none");

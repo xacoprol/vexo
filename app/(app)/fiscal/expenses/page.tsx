@@ -242,7 +242,7 @@ export default async function ExpensesPage({
                           <a
                             href={`/api/fiscal/expenses/export?month=${section.key}`}
                             className="btn-secondary px-2 py-1 text-[11px] font-medium normal-case tracking-normal"
-                            title={`Excel gestoría de ${section.label}`}
+                            title={`Excel de gastos · ${section.label}`}
                           >
                             Excel
                           </a>

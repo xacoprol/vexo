@@ -164,7 +164,7 @@ export async function GET(request: Request) {
     expenses,
   });
 
-  const fileName = `gastos_gestoria_${fileTag}.xlsx`;
+  const fileName = `gastos_${fileTag}.xlsx`;
   return new NextResponse(new Uint8Array(buffer), {
     status: 200,
     headers: {

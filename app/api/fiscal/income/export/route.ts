@@ -249,7 +249,7 @@ export async function GET(request: Request) {
     amazonLastMonthWithData: amazon.length ? null : amazonLastMonthWithData,
   });
 
-  const fileName = `ingresos_gestoria_${fileTag}.xlsx`;
+  const fileName = `ingresos_${fileTag}.xlsx`;
   return new NextResponse(new Uint8Array(buffer), {
     status: 200,
     headers: {

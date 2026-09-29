@@ -261,7 +261,7 @@ function summarySheet(
   const all = sumRows(rows);
   const missingPdf = rows.filter((r) => !r.hasDocument).length;
 
-  push(["INFORME DE GASTOS · GESTORÍA"], "title");
+  push(["INFORME DE GASTOS"], "title");
   push([`Periodo  ${periodLabel}`], "subtitle");
   push([`Generado  ${formatDateLocal(new Date())}`], "subtitle");
   push([], "none");
