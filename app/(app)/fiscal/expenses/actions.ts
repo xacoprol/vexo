@@ -286,6 +286,7 @@ async function findDuplicateExpense(
       supplierNif: true,
       invoiceNumber: true,
       issueDate: true,
+      documentId: true,
     },
     take: 20,
   });
@@ -302,8 +303,27 @@ async function findDuplicateExpense(
   );
 }
 
-function duplicateMessage(invoiceNumber: string | null) {
-  return `Ya existe un gasto con la factura ${invoiceNumber ?? "indicada"} del mismo proveedor.`;
+function duplicateMessage(invoiceNumber: string | null, hasDocument: boolean) {
+  const base = `Ya existe un gasto con la factura ${invoiceNumber ?? "indicada"} del mismo proveedor.`;
+  if (hasDocument) {
+    return `${base} Ya tiene PDF; no se crea otro.`;
+  }
+  return `${base} Usa «Adjuntar PDFs» o vuelve a subir el archivo para enlazar el documento.`;
+}
+
+/**
+ * Si el gasto ya existe sin PDF y el borrador trae documentId, enlaza el archivo
+ * en lugar de fallar como duplicado (caso típico: gastos creados antes de Blob).
+ */
+async function attachDocumentToExistingExpense(opts: {
+  expenseId: string;
+  documentId: string;
+}): Promise<boolean> {
+  const updated = await prisma.expense.updateMany({
+    where: { id: opts.expenseId, documentId: null },
+    data: { documentId: opts.documentId },
+  });
+  return updated.count === 1;
 }
 
 type ExpenseWriteData = ReturnType<typeof parseExpenseForm>;
@@ -449,7 +469,7 @@ async function insertExpense(
   data: ExpenseWriteData,
   importDuaDocumentId: string | null = null
 ): Promise<
-  | { ok: true; id: string }
+  | { ok: true; id: string; attachedExisting?: boolean }
   | { ok: false; error: string; duplicateId?: string }
 > {
   const err = await validate(data);
@@ -457,9 +477,20 @@ async function insertExpense(
 
   const dup = await findDuplicateExpense(data);
   if (dup) {
+    const incomingDoc = data.documentId?.trim() || null;
+    if (incomingDoc && !dup.documentId) {
+      const attached = await attachDocumentToExistingExpense({
+        expenseId: dup.id,
+        documentId: incomingDoc,
+      });
+      if (attached) {
+        revalidateExpensePaths(dup.id);
+        return { ok: true, id: dup.id, attachedExisting: true };
+      }
+    }
     return {
       ok: false,
-      error: duplicateMessage(dup.invoiceNumber),
+      error: duplicateMessage(dup.invoiceNumber, Boolean(dup.documentId)),
       duplicateId: dup.id,
     };
   }
@@ -630,7 +661,7 @@ function fromDraftInput(input: ExpenseDraftInput): ExpenseWriteData {
 export async function createExpenseFromDraft(
   input: ExpenseDraftInput
 ): Promise<
-  | { ok: true; id: string }
+  | { ok: true; id: string; attachedExisting?: boolean }
   | { ok: false; error: string; duplicateId?: string }
 > {
   await requireAuth();
@@ -685,7 +716,7 @@ export async function updateExpense(
     const dup = await findDuplicateExpense(data, id);
     if (dup) {
       return {
-        error: duplicateMessage(dup.invoiceNumber),
+        error: duplicateMessage(dup.invoiceNumber, Boolean(dup.documentId)),
         duplicateId: dup.id,
       };
     }

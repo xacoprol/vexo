@@ -31,6 +31,8 @@ type Row = ExpenseQueueItem & {
   status: RowStatus;
   error?: string;
   duplicateId?: string;
+  /** true = no se creó gasto nuevo; se enlazó el PDF al existente */
+  attachedExisting?: boolean;
   deductible: boolean;
   isInvestment: boolean;
   usefulLifeYears: number;
@@ -162,10 +164,15 @@ export function ExpenseBatchReview() {
         status: "error",
         error: res.error,
         duplicateId: res.duplicateId,
+        attachedExisting: false,
       });
       return false;
     }
-    patchRow(row.localId, { status: "saved", error: undefined });
+    patchRow(row.localId, {
+      status: "saved",
+      error: undefined,
+      attachedExisting: Boolean(res.attachedExisting),
+    });
     persistPending(rowsRef.current ?? []);
     return true;
   }
@@ -261,7 +268,11 @@ export function ExpenseBatchReview() {
                       : row.confidence === "low"
                         ? "baja"
                         : "media"}
-                    {row.status === "saved" ? " · guardada" : null}
+                    {row.status === "saved"
+                      ? row.attachedExisting
+                        ? " · PDF adjunto al gasto existente"
+                        : " · guardada"
+                      : null}
                   </p>
                 </div>
                 <div className="flex gap-2">
