@@ -10,6 +10,7 @@ import { MarketplaceIncomeDropZone } from "@/components/fiscal/MarketplaceIncome
 import { MarketplaceIncomeFilters } from "@/components/fiscal/MarketplaceIncomeFilters";
 import { MarketplaceIncomeTable } from "@/components/fiscal/MarketplaceIncomeTable";
 import { ShopifySyncCard } from "@/components/fiscal/ShopifySyncCard";
+import { IncomeGestoriaExportLink } from "@/components/fiscal/IncomeGestoriaExportLink";
 import { shopifyConfiguredHint } from "@/lib/shopify-client";
 
 export default async function MarketplaceIncomePage({
@@ -148,9 +149,14 @@ export default async function MarketplaceIncomePage({
             en factura W3D con correlativo y VeriFactu
           </p>
         </div>
-        <Link href="/fiscal/income/new" className="btn-primary text-sm">
-          Nuevo ingreso
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <Suspense fallback={null}>
+            <IncomeGestoriaExportLink />
+          </Suspense>
+          <Link href="/fiscal/income/new" className="btn-primary text-sm">
+            Nuevo ingreso
+          </Link>
+        </div>
       </div>
 
       <ShopifySyncCard

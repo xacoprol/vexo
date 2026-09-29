@@ -224,7 +224,16 @@ export default async function ExpensesPage({
                       colSpan={8}
                       className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-ink"
                     >
-                      {section.label}
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span>{section.label}</span>
+                        <a
+                          href={`/api/fiscal/expenses/zip?month=${section.key}`}
+                          className="btn-ghost px-2 py-1 text-[11px] font-medium normal-case tracking-normal"
+                          title={`Descargar facturas de ${section.label} en ZIP`}
+                        >
+                          Descargar ZIP
+                        </a>
+                      </div>
                     </td>
                   </tr>
                   {section.items.map((e) => {
