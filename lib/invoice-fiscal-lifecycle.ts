@@ -26,6 +26,7 @@ export const ISSUED_DELETE_ERROR =
 export type InvoiceFiscalGate = {
   fiscalStatus?: string | null;
   verifactuHash?: string | null;
+  verifactuSentAt?: Date | string | null;
   status?: string | null;
 };
 
@@ -41,11 +42,22 @@ export function isInvoiceDraft(inv: InvoiceFiscalGate): boolean {
   return !isInvoiceIssued(inv);
 }
 
+/**
+ * Contenido fiscal editable si no hay huella Veri*Factu ni remisión AEAT.
+ * Con Veri*Factu desactivado las facturas se emiten sin sello y siguen editables.
+ */
+export function isInvoiceContentEditable(inv: InvoiceFiscalGate): boolean {
+  if (inv.status === "ANULADA") return false;
+  if (inv.verifactuSentAt) return false;
+  if (inv.verifactuHash) return false;
+  return true;
+}
+
 export function assertInvoiceEditable(inv: InvoiceFiscalGate): void {
   if (inv.status === "ANULADA") {
     throw new InvoiceFiscalError("No se puede editar una factura anulada");
   }
-  if (isInvoiceIssued(inv)) {
+  if (!isInvoiceContentEditable(inv)) {
     throw new InvoiceFiscalError(ISSUED_IMMUTABLE_ERROR, 409);
   }
 }

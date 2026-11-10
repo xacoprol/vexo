@@ -53,8 +53,10 @@ export default async function VerifactuPage() {
 
       <div className="grid gap-4 sm:grid-cols-4">
         <div className="card-panel px-4 py-3">
-          <p className="text-xs uppercase text-ink-muted">Modo</p>
-          <p className="mt-1 font-semibold">{mode}</p>
+          <p className="text-xs uppercase text-ink-muted">Estado</p>
+          <p className="mt-1 font-semibold">
+            {mode === "VERIFACTU" ? "Activado" : "Desactivado"}
+          </p>
         </div>
         <div className="card-panel px-4 py-3">
           <p className="text-xs uppercase text-ink-muted">Entorno</p>

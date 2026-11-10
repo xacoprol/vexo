@@ -271,6 +271,13 @@ export async function issueInvoice(id: string): Promise<DocFormState> {
       return { error: validation.errors.join(" ") };
     }
 
+    const modeSettings = await prisma.companySettings.findFirst({
+      select: { verifactuMode: true },
+    });
+    const { parseVerifactuMode } = await import("@/lib/verifactu");
+    const verifactuOff =
+      parseVerifactuMode(modeSettings?.verifactuMode) === "NO_VERIFACTU";
+
     const sealed = await applyVerifactuSeal(prisma, id, {
       markIssued: true,
     });
@@ -293,18 +300,18 @@ export async function issueInvoice(id: string): Promise<DocFormState> {
       };
     }
 
-    // Garantía detectable: ISSUED + hash coherentes.
+    // Con Veri*Factu activo: ISSUED + hash. Desactivado: ISSUED sin huella.
     const after = await prisma.invoice.findUnique({
       where: { id },
       select: { fiscalStatus: true, verifactuHash: true },
     });
-    if (
-      !after?.verifactuHash ||
-      after.fiscalStatus !== FISCAL_STATUS.ISSUED
-    ) {
+    const okIssued = after?.fiscalStatus === FISCAL_STATUS.ISSUED;
+    const okSeal = verifactuOff || Boolean(after?.verifactuHash);
+    if (!okIssued || !okSeal) {
       console.error("[issueInvoice] Emisión incompleta; revirtiendo a DRAFT", {
         id,
         after,
+        verifactuOff,
       });
       await prisma.invoice
         .update({
@@ -350,13 +357,19 @@ export async function updateInvoice(
       return { error: "No se puede editar una factura anulada" };
     }
 
-    // ISSUED: el formulario completo no puede alterar contenido fiscal.
-    // Metadatos de cobro van por setInvoiceStatus / payments / updateInvoiceNotes.
-    if (isInvoiceIssued(existing)) {
-      return { error: ISSUED_IMMUTABLE_ERROR };
+    // Con huella/remisión Veri*Factu el contenido fiscal queda bloqueado.
+    // Sin sello (modo desactivado) se puede corregir aunque esté ISSUED.
+    try {
+      assertInvoiceEditable({
+        ...existing,
+        verifactuSentAt: existing.verifactuSentAt,
+      });
+    } catch (e) {
+      if (e instanceof InvoiceFiscalError) {
+        return { error: e.message };
+      }
+      throw e;
     }
-
-    assertInvoiceEditable(existing);
 
     const clientId = String(formData.get("clientId") ?? "");
     const vatOperationType = parseVatOperationType(

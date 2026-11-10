@@ -15,7 +15,11 @@ import { IssueInvoiceButton } from "@/components/invoices/IssueInvoiceButton";
 import { InvoicePaymentsPanel } from "@/components/invoices/InvoicePaymentsPanel";
 import { MarkPendingButton } from "@/components/invoices/MarkPendingButton";
 import { SendReminderButton } from "@/components/documents/SendReminderButton";
-import { isInvoiceDraft, isInvoiceIssued } from "@/lib/invoice-fiscal-lifecycle";
+import {
+  isInvoiceContentEditable,
+  isInvoiceDraft,
+  isInvoiceIssued,
+} from "@/lib/invoice-fiscal-lifecycle";
 import {
   canAnnulInvoice,
   canRectifyInvoice,
@@ -95,6 +99,7 @@ export default async function InvoiceDetailPage({
 
   const draft = isInvoiceDraft(invoice);
   const issued = isInvoiceIssued(invoice);
+  const contentEditable = isInvoiceContentEditable(invoice);
   const rectifying = isRectifyingInvoice(invoice);
   const rectifyCheck = canRectifyInvoice(invoice);
   const annulCheck = canAnnulInvoice(invoice);
@@ -199,14 +204,14 @@ export default async function InvoiceDetailPage({
               {canRemind && issued ? (
                 <SendReminderButton invoiceId={id} />
               ) : null}
-              {draft ? (
+              {contentEditable ? (
                 <Link href={`/invoices/${id}/edit`} className="btn-secondary">
                   Editar
                 </Link>
               ) : (
                 <span
                   className="btn-secondary cursor-not-allowed opacity-60"
-                  title="La factura ya ha sido emitida y su contenido fiscal no puede modificarse. Usa anulación o una rectificativa (fase futura)."
+                  title="Tiene sello Veri*Factu: el contenido fiscal no se puede modificar. Usa anulación o una rectificativa."
                 >
                   Editar
                 </span>
@@ -294,8 +299,9 @@ export default async function InvoiceDetailPage({
 
       {issued && invoice.status !== "ANULADA" && !rectifying ? (
         <p className="rounded-lg border border-line bg-line/20 px-3 py-2 text-sm text-ink-muted">
-          Factura emitida: contenido fiscal bloqueado. Gestiona cobros o emite
-          una rectificativa si la operación necesita corrección.
+          {contentEditable
+            ? "Factura emitida sin sello Veri*Factu: puedes editar el contenido."
+            : "Factura emitida con sello Veri*Factu: contenido fiscal bloqueado. Gestiona cobros o emite una rectificativa si hace falta corregir."}
         </p>
       ) : null}
 

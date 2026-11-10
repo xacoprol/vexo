@@ -10,7 +10,7 @@ import {
   rectificationMethodToAeat,
 } from "@/lib/invoice-rectification";
 import type { RectificationMethod } from "@/lib/invoice-rectification";
-import { sealVerifactuRecord } from "@/lib/verifactu";
+import { parseVerifactuMode, sealVerifactuRecord } from "@/lib/verifactu";
 import { enqueueVerifactuAlta } from "@/lib/verifactu-events";
 
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -47,7 +47,7 @@ export async function applyVerifactuSeal(
       },
     }),
     db.companySettings.findFirst({
-      select: { nif: true },
+      select: { nif: true, verifactuMode: true },
     }),
   ]);
 
@@ -58,6 +58,20 @@ export async function applyVerifactuSeal(
   const tipoFactura = isRectifying
     ? invoice.rectificationType ?? "R1"
     : resolveInvoiceTipoFactura({ invoiceKind: invoice.invoiceKind });
+
+  // Veri*Factu desactivado: emitir sin huella ni QR.
+  if (parseVerifactuMode(settings?.verifactuMode) === "NO_VERIFACTU") {
+    if (
+      options.markIssued &&
+      invoice.fiscalStatus !== FISCAL_STATUS.ISSUED
+    ) {
+      await db.invoice.update({
+        where: { id: invoiceId },
+        data: { fiscalStatus: FISCAL_STATUS.ISSUED },
+      });
+    }
+    return { hash: "", qrUrl: "", tipoFactura };
+  }
 
   if (invoice.verifactuHash) {
     if (

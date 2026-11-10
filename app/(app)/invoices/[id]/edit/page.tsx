@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { InvoiceForm } from "@/components/documents/InvoiceForm";
 import {
-  isInvoiceIssued,
+  isInvoiceContentEditable,
   ISSUED_IMMUTABLE_ERROR,
 } from "@/lib/invoice-fiscal-lifecycle";
 import { prisma } from "@/lib/prisma";
@@ -35,13 +35,13 @@ export default async function EditInvoicePage({
       </div>
     );
   }
-  if (isInvoiceIssued(invoice)) {
+  if (!isInvoiceContentEditable(invoice)) {
     return (
       <div className="mx-auto max-w-lg space-y-4 py-10">
         <p className="text-sm text-ink">{ISSUED_IMMUTABLE_ERROR}</p>
         <p className="text-sm text-ink-muted">
-          Puedes anular la factura o esperar a la fase de rectificativas. Los
-          cobros y notas se gestionan desde la ficha.
+          Tiene sello Veri*Factu. Puedes anularla o emitir una rectificativa.
+          Los cobros y notas se gestionan desde la ficha.
         </p>
         <Link href={`/invoices/${id}`} className="btn-secondary">
           Volver a la factura

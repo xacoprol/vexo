@@ -901,6 +901,26 @@ export function SettingsForm({ settings, invoiceSeries, quoteSeries }: Props) {
           </div>
         </section>
 
+        <section className="card-panel space-y-3 p-6">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-muted">
+            Veri*Factu
+          </h2>
+          <p className="text-sm text-ink-muted">
+            Ahora mismo:{" "}
+            <strong className="text-ink">
+              {(settings.verifactuMode ?? "NO_VERIFACTU") === "VERIFACTU"
+                ? "activado"
+                : "desactivado"}
+            </strong>
+            {(settings.verifactuMode ?? "NO_VERIFACTU") === "VERIFACTU"
+              ? " — las facturas se sellan al emitir."
+              : " — sin huella ni QR; puedes corregir importes."}
+          </p>
+          <a href="/fiscal/verifactu" className="btn-secondary text-sm">
+            Activar / desactivar en panel Veri*Factu
+          </a>
+        </section>
+
         <section className="card-panel space-y-4 p-6">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-muted">
             Shopify · sync pedidos

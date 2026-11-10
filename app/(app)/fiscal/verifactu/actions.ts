@@ -18,7 +18,13 @@ export async function updateVerifactuSettings(
 ): Promise<VerifactuSettingsState> {
   await requireAuth();
   try {
-    const mode = parseVerifactuMode(formData.get("verifactuMode"));
+    // Checkbox: presente = activado; ausente = desactivado.
+    // Compat: si llega verifactuMode (API/legacy) se respeta.
+    const resolvedMode = formData.has("verifactuMode")
+      ? parseVerifactuMode(formData.get("verifactuMode"))
+      : formData.get("verifactuEnabled")
+        ? "VERIFACTU"
+        : "NO_VERIFACTU";
     const env = parseVerifactuEnv(formData.get("verifactuEnv"));
 
     const settings = await prisma.companySettings.findFirst({
@@ -28,11 +34,43 @@ export async function updateVerifactuSettings(
 
     await prisma.companySettings.update({
       where: { id: settings.id },
-      data: { verifactuMode: mode, verifactuEnv: env },
+      data: { verifactuMode: resolvedMode, verifactuEnv: env },
     });
 
+    // Al desactivar: quitar huellas locales no remitidas para poder corregir.
+    if (resolvedMode === "NO_VERIFACTU") {
+      const unsent = await prisma.invoice.findMany({
+        where: {
+          verifactuHash: { not: null },
+          verifactuSentAt: null,
+        },
+        select: { id: true },
+      });
+      for (const inv of unsent) {
+        await prisma.invoice.update({
+          where: { id: inv.id },
+          data: {
+            verifactuHash: null,
+            verifactuPreviousHash: null,
+            verifactuRecordAt: null,
+            verifactuQrUrl: null,
+          },
+        });
+        const pending = await prisma.verifactuEvent.findMany({
+          where: {
+            invoiceId: inv.id,
+            status: { in: ["PENDING", "SKIPPED", "REJECTED"] },
+          },
+          select: { id: true },
+        });
+        for (const ev of pending) {
+          await prisma.verifactuEvent.delete({ where: { id: ev.id } });
+        }
+      }
+    }
+
     // Reencolar SKIPPED → PENDING (no updateMany: PrismaNeonHTTP lo rompe)
-    if (mode === "VERIFACTU") {
+    if (resolvedMode === "VERIFACTU") {
       const skipped = await prisma.verifactuEvent.findMany({
         where: { status: "SKIPPED" },
         select: { id: true },
@@ -50,6 +88,7 @@ export async function updateVerifactuSettings(
 
     revalidatePath("/fiscal/verifactu");
     revalidatePath("/settings");
+    revalidatePath("/invoices");
     return { success: true };
   } catch (e) {
     console.error("[verifactu] updateVerifactuSettings", e);
