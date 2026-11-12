@@ -14,6 +14,13 @@ import {
   buildQuotePdf,
 } from "@/lib/pdf/build-document-pdf";
 import { quoteKindLabel, quotePdfFilename } from "@/lib/quote-kind";
+import {
+  fillWhatsappPreview,
+  isWhatsappConfigured,
+  normalizeWhatsappPhone,
+  sendWhatsappDocument,
+  whatsappConfigHint,
+} from "@/lib/whatsapp";
 
 export type SendDocKind = "quote" | "invoice";
 
@@ -28,12 +35,24 @@ export type SendDocDraft = {
   attachName: string;
 };
 
+/** Borrador de envío de presupuesto/factura: email + canal WhatsApp */
+export type SendDocumentDraft = SendDocDraft & {
+  whatsapp: {
+    configured: boolean;
+    configHint: string;
+    /** Teléfono del cliente en formato internacional, o tal cual si no se pudo normalizar */
+    to: string;
+    /** Texto fijo de la plantilla aprobada, ya rellenado */
+    preview: string;
+  };
+};
+
 export type SendDocResult = { ok: true } | { error: string };
 
 export async function getSendDocumentDraft(
   kind: SendDocKind,
   id: string
-): Promise<SendDocDraft | { error: string }> {
+): Promise<SendDocumentDraft | { error: string }> {
   await requireAuth();
   const settings = await prisma.companySettings.findFirst();
   const company =
@@ -64,6 +83,12 @@ export async function getSendDocumentDraft(
       docLabel: kind,
       fullNumber: quote.fullNumber,
       attachName: quotePdfFilename(quote.fullNumber, quote.isProforma),
+      whatsapp: whatsappDraft(quote.client, [
+        contact,
+        quote.isProforma ? "la proforma" : "el presupuesto",
+        quote.fullNumber,
+        company,
+      ]),
     };
   }
 
@@ -90,6 +115,26 @@ export async function getSendDocumentDraft(
     docLabel: "Factura",
     fullNumber: invoice.fullNumber,
     attachName: `Factura_${invoice.fullNumber}.pdf`,
+    whatsapp: whatsappDraft(invoice.client, [
+      contact,
+      "la factura",
+      invoice.fullNumber,
+      company,
+    ]),
+  };
+}
+
+function whatsappDraft(
+  client: { phone: string | null; countryCode: string },
+  params: string[]
+): SendDocumentDraft["whatsapp"] {
+  const raw = client.phone?.trim() || "";
+  const normalized = normalizeWhatsappPhone(raw, client.countryCode);
+  return {
+    configured: isWhatsappConfigured(),
+    configHint: whatsappConfigHint(),
+    to: normalized ? `+${normalized}` : raw,
+    preview: fillWhatsappPreview(params),
   };
 }
 
@@ -140,6 +185,98 @@ export async function sendDocumentEmail(
   } catch (err) {
     return {
       error: err instanceof Error ? err.message : "No se pudo enviar el correo",
+    };
+  }
+}
+
+export async function sendDocumentWhatsapp(
+  kind: SendDocKind,
+  id: string,
+  payload: { to: string }
+): Promise<SendDocResult> {
+  await requireAuth();
+
+  if (!isWhatsappConfigured()) return { error: whatsappConfigHint() };
+
+  try {
+    const settings = await prisma.companySettings.findFirst();
+    const company =
+      settings?.companyName?.trim() || settings?.name?.trim() || "Empresa";
+
+    const doc =
+      kind === "quote"
+        ? await prisma.quote.findUnique({
+            where: { id },
+            select: {
+              fullNumber: true,
+              isProforma: true,
+              client: {
+                select: { name: true, contactPerson: true, countryCode: true },
+              },
+            },
+          })
+        : await prisma.invoice.findUnique({
+            where: { id },
+            select: {
+              fullNumber: true,
+              client: {
+                select: { name: true, contactPerson: true, countryCode: true },
+              },
+            },
+          });
+    if (!doc) {
+      return {
+        error:
+          kind === "quote" ? "Presupuesto no encontrado" : "Factura no encontrada",
+      };
+    }
+
+    const to = normalizeWhatsappPhone(payload.to, doc.client.countryCode);
+    if (!to) {
+      return {
+        error:
+          "Teléfono no válido. Escríbelo con prefijo internacional, p. ej. +34 612 345 678.",
+      };
+    }
+
+    const docPhrase =
+      kind === "invoice"
+        ? "la factura"
+        : "isProforma" in doc && doc.isProforma
+          ? "la proforma"
+          : "el presupuesto";
+
+    const pdf =
+      kind === "quote" ? await buildQuotePdf(id) : await buildInvoicePdf(id);
+
+    await sendWhatsappDocument({
+      to,
+      pdf: { buffer: pdf.buffer, filename: pdf.filename },
+      bodyParams: [
+        doc.client.contactPerson?.trim() || doc.client.name,
+        docPhrase,
+        doc.fullNumber,
+        company,
+      ],
+    });
+
+    if (kind === "quote") {
+      await prisma.quote.update({
+        where: { id },
+        data: { status: "ENVIADO" },
+      });
+      revalidatePath("/quotes");
+      revalidatePath(`/quotes/${id}`);
+    } else {
+      revalidatePath("/invoices");
+      revalidatePath(`/invoices/${id}`);
+    }
+
+    return { ok: true };
+  } catch (err) {
+    return {
+      error:
+        err instanceof Error ? err.message : "No se pudo enviar el WhatsApp",
     };
   }
 }
