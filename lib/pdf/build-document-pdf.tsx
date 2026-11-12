@@ -9,6 +9,7 @@ import {
   quotePdfTitle,
 } from "@/lib/quote-kind";
 import { buildVerifactuQrUrl, formatFechaExpedicion } from "@/lib/verifactu";
+import { mergeVatOperationNotes } from "@/lib/recurring";
 
 export async function buildQuotePdf(
   quoteId: string
@@ -115,6 +116,11 @@ export async function buildInvoicePdf(
   ]);
   if (!invoice || !settings) throw new Error("Factura no encontrada");
 
+  const invoiceNotes = mergeVatOperationNotes(
+    invoice.notes,
+    invoice.vatOperationType
+  );
+
   let verifactuQrDataUrl: string | null = null;
   const qrUrl =
     invoice.verifactuQrUrl ||
@@ -182,7 +188,7 @@ export async function buildInvoicePdf(
       irpfAmount={Number(invoice.irpfAmount)}
       total={Number(invoice.total)}
       paymentMethod={invoice.paymentMethod || "Transferencia"}
-      notes={invoice.notes}
+      notes={invoiceNotes}
       bankIban={settings.bankIban}
       bankName={settings.bankName}
       bizumPhone={settings.bizumPhone}

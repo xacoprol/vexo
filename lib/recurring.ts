@@ -100,3 +100,35 @@ export function parseVatOperationType(raw: unknown): VatOperationType {
   const allowed = VAT_OPERATION_TYPES.map((t) => t.value) as string[];
   return (allowed.includes(v) ? v : "SUJETA") as VatOperationType;
 }
+
+/** Texto legal que debe figurar en factura según tipo de operación IVA. */
+export function vatOperationLegalNote(
+  vatOperationType: string | null | undefined
+): string | null {
+  const op = String(vatOperationType ?? "SUJETA").toUpperCase();
+  switch (op) {
+    case "CANARIAS":
+      return "Operación no sujeta al IVA por reglas de localización. Art. 69 de la Ley 37/1992 del IVA";
+    case "INTRACOMUNITARIA":
+      return "Operación exenta de IVA. Entrega/prestación intracomunitaria. Art. 25 Ley 37/1992 del IVA";
+    case "EXPORTACION":
+      return "Operación exenta de IVA. Exportación. Art. 21 Ley 37/1992 del IVA";
+    default:
+      return null;
+  }
+}
+
+/** Une notas del usuario con la cláusula legal, sin duplicarla. */
+export function mergeVatOperationNotes(
+  notes: string | null | undefined,
+  vatOperationType: string | null | undefined
+): string | null {
+  const legal = vatOperationLegalNote(vatOperationType);
+  const user = String(notes ?? "").trim();
+  if (!legal) return user || null;
+  if (!user) return legal;
+  if (user.includes(legal) || /Ley\s*37\s*\/\s*1992/i.test(user)) {
+    return user;
+  }
+  return `${user} · ${legal}`;
+}

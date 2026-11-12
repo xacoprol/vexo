@@ -18,6 +18,7 @@ import {
 } from "@/lib/invoice-payments";
 import {
   isZeroVatOperation,
+  mergeVatOperationNotes,
   parseVatOperationType,
 } from "@/lib/recurring";
 import {
@@ -127,7 +128,10 @@ export async function createInvoice(
     let invoice: { id: string; seriesId: string; number: number } | null = null;
     const paymentMethod =
       String(formData.get("paymentMethod") ?? "").trim() || "Transferencia";
-    const notes = String(formData.get("notes") ?? "").trim() || null;
+    const notes = mergeVatOperationNotes(
+      String(formData.get("notes") ?? "").trim() || null,
+      vatOperationType
+    );
     const { parseInvoiceKind } = await import("@/lib/invoice-issuance");
     const invoiceKind = parseInvoiceKind(formData.get("invoiceKind"));
 
@@ -438,7 +442,10 @@ export async function updateInvoice(
         status,
         paymentMethod:
           String(formData.get("paymentMethod") ?? "").trim() || "Transferencia",
-        notes: String(formData.get("notes") ?? "").trim() || null,
+        notes: mergeVatOperationNotes(
+          String(formData.get("notes") ?? "").trim() || null,
+          vatOperationType
+        ),
         vatOperationType,
         operationKey347,
         invoiceKind,
@@ -860,7 +867,10 @@ export async function createHistoricalInvoice(
         invoiceKind: "FULL",
         paymentMethod:
           data.paymentMethod?.trim() || "Transferencia",
-        notes: noteParts.join(" · ") || null,
+        notes: mergeVatOperationNotes(
+          noteParts.join(" · ") || null,
+          vatOperationType
+        ),
         vatOperationType,
         operationKey347,
         subtotal: totals.subtotal,
