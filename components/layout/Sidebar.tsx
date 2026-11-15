@@ -9,6 +9,8 @@ import {
   type ReactNode,
   type SVGProps,
 } from "react";
+import { getWhatsappUnreadCount } from "@/app/(app)/whatsapp/actions";
+import { WA_UNREAD_EVENT } from "@/components/whatsapp/WhatsappLive";
 
 const STORAGE_KEY = "vexo-sidebar-collapsed";
 
@@ -40,6 +42,8 @@ type NavItem = {
   label: string;
   icon: ReactNode;
   children?: NavChild[];
+  /** Muestra el contador de mensajes de WhatsApp sin leer */
+  badge?: "whatsapp";
 };
 
 const NAV: NavItem[] = [
@@ -75,6 +79,17 @@ const NAV: NavItem[] = [
         <path d="M14 2v6h6" />
         <path d="M8 13h8" />
         <path d="M8 17h5" />
+      </Icon>
+    ),
+  },
+  {
+    href: "/whatsapp",
+    label: "WhatsApp",
+    badge: "whatsapp",
+    icon: (
+      <Icon>
+        <path d="M21 11.5a8.4 8.4 0 0 1-12.4 7.4L3 21l2.1-5.4A8.4 8.4 0 1 1 21 11.5z" />
+        <path d="M8.5 9.5c.3 1.9 2.1 3.8 4 4.3l1.1-1.1 2 .9-.4 1.6c-3.6.4-7.7-3.6-7.3-7.2l1.6-.4.9 2z" />
       </Icon>
     ),
   },
@@ -190,11 +205,13 @@ function NavItemRow({
   collapsed,
   pathname,
   onNavigate,
+  badgeCount = 0,
 }: {
   item: NavItem;
   collapsed: boolean;
   pathname: string;
   onNavigate: () => void;
+  badgeCount?: number;
 }) {
   const routeActive =
     pathname === item.href || pathname.startsWith(item.href + "/");
@@ -224,15 +241,28 @@ function NavItemRow({
         onClick={onNavigate}
       >
         <span
-          className={
+          className={`relative ${
             routeActive
               ? "text-white"
               : "text-white/55 group-hover:text-white/90"
-          }
+          }`}
         >
           {item.icon}
+          {badgeCount > 0 && collapsed ? (
+            <span className="absolute -right-1 -top-1 hidden h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-sidebar lg:block" />
+          ) : null}
         </span>
         <span className={collapsed ? "lg:hidden" : ""}>{item.label}</span>
+        {badgeCount > 0 ? (
+          <span
+            className={`ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-emerald-500 px-1.5 text-[11px] font-semibold text-white ${
+              collapsed ? "lg:hidden" : ""
+            }`}
+            aria-label={`${badgeCount} sin leer`}
+          >
+            {badgeCount > 99 ? "99+" : badgeCount}
+          </span>
+        ) : null}
       </Link>
     );
   }
@@ -362,11 +392,34 @@ function NavItemRow({
 export function Sidebar({
   companyName,
   signOutSlot,
+  whatsappUnread = 0,
 }: {
   companyName: string;
   signOutSlot?: ReactNode;
+  whatsappUnread?: number;
 }) {
   const pathname = usePathname();
+  const [waUnread, setWaUnread] = useState(whatsappUnread);
+
+  // Contador de WhatsApp: cada 30 s con la pestaña visible y al leer/enviar
+  useEffect(() => {
+    let alive = true;
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return;
+      void getWhatsappUnreadCount().then((n) => {
+        if (alive) setWaUnread(n);
+      });
+    };
+    const id = window.setInterval(refresh, 30_000);
+    window.addEventListener(WA_UNREAD_EVENT, refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      alive = false;
+      window.clearInterval(id);
+      window.removeEventListener(WA_UNREAD_EVENT, refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, []);
   const [open, setOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
 
@@ -524,6 +577,7 @@ export function Sidebar({
               collapsed={collapsed}
               pathname={pathname}
               onNavigate={() => setOpen(false)}
+              badgeCount={item.badge === "whatsapp" ? waUnread : 0}
             />
           ))}
         </nav>

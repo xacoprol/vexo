@@ -187,7 +187,10 @@ export function describeWhatsappError(
   if (code === 131042) {
     return "Meta ha bloqueado el envío por un problema con el método de pago de la cuenta de WhatsApp Business.";
   }
-  if (code === 131047 || code === 131049) {
+  if (code === 131047) {
+    return "Han pasado más de 24 h desde el último mensaje del cliente: Meta solo deja contestar con una plantilla aprobada (por ejemplo, reenviando el documento).";
+  }
+  if (code === 131049) {
     return `Meta no ha entregado el mensaje (límite de mensajes a este usuario o fuera de ventana). (${detail})`;
   }
   return `WhatsApp rechazó el envío${code ? ` (${code})` : ""}: ${detail}`;
@@ -241,7 +244,7 @@ async function uploadPdf(
 /**
  * Sube el PDF y envía la plantilla con el documento en la cabecera.
  * Que Meta acepte el mensaje no garantiza la entrega: el estado final
- * (entregado/leído/fallido) llega por webhook, que esta app no escucha.
+ * (entregado/leído/fallido) llega por webhook (/api/whatsapp/webhook).
  */
 export async function sendWhatsappDocument(opts: {
   to: string;
@@ -268,4 +271,79 @@ export async function sendWhatsappDocument(opts: {
   });
   const messages = json.messages as { id?: string }[] | undefined;
   return { messageId: messages?.[0]?.id ?? "" };
+}
+
+// ─── Bandeja: webhook, respuestas y adjuntos ────────────────────────────────
+
+export function getWhatsappWebhookConfig(): {
+  verifyToken: string;
+  appSecret: string;
+} | null {
+  const verifyToken = env("WHATSAPP_WEBHOOK_VERIFY_TOKEN");
+  const appSecret = env("WHATSAPP_APP_SECRET");
+  if (!verifyToken || !appSecret) return null;
+  return { verifyToken, appSecret };
+}
+
+export function isWhatsappInboxConfigured(): boolean {
+  return isWhatsappConfigured() && getWhatsappWebhookConfig() !== null;
+}
+
+export function buildTextPayload(opts: {
+  to: string;
+  text: string;
+  replyToWaId?: string | null;
+}) {
+  return {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to: opts.to,
+    type: "text",
+    text: { body: opts.text, preview_url: true },
+    ...(opts.replyToWaId ? { context: { message_id: opts.replyToWaId } } : {}),
+  };
+}
+
+/**
+ * Texto libre. Meta solo lo entrega dentro de las 24 h desde el último
+ * mensaje del cliente; fuera de esa ventana devuelve el error 131047.
+ */
+export async function sendWhatsappText(opts: {
+  to: string;
+  text: string;
+  replyToWaId?: string | null;
+}): Promise<{ messageId: string }> {
+  const cfg = getWhatsappConfig();
+  if (!cfg) throw new Error(whatsappConfigHint());
+  const json = await graphFetch(cfg, `${cfg.phoneNumberId}/messages`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(buildTextPayload(opts)),
+  });
+  const messages = json.messages as { id?: string }[] | undefined;
+  return { messageId: messages?.[0]?.id ?? "" };
+}
+
+/**
+ * Descarga un adjunto recibido. Meta da primero una URL temporal y luego hay
+ * que pedirla con el mismo token.
+ */
+export async function downloadWhatsappMedia(
+  mediaId: string
+): Promise<{ body: ArrayBuffer; mime: string }> {
+  const cfg = getWhatsappConfig();
+  if (!cfg) throw new Error(whatsappConfigHint());
+  const meta = await graphFetch(cfg, encodeURIComponent(mediaId), { method: "GET" });
+  const url = typeof meta.url === "string" ? meta.url : "";
+  if (!url) throw new Error("Meta no devolvió la URL del adjunto");
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${cfg.token}` },
+    signal: AbortSignal.timeout(25_000),
+  });
+  if (!res.ok) throw new Error(`No se pudo descargar el adjunto (HTTP ${res.status})`);
+  const mime =
+    (typeof meta.mime_type === "string" && meta.mime_type) ||
+    res.headers.get("content-type") ||
+    "application/octet-stream";
+  return { body: await res.arrayBuffer(), mime };
 }

@@ -111,6 +111,8 @@ En Vercel (*Settings → Environment Variables*) y en `.env.local`:
 | `WHATSAPP_TEMPLATE_NAME` | no | Por defecto `envio_documento` |
 | `WHATSAPP_TEMPLATE_LANG` | no | Por defecto `es`. Debe coincidir exactamente con el idioma de la plantilla (`es`, `es_ES`…) |
 | `WHATSAPP_API_VERSION` | no | Por defecto `v23.0` |
+| `WHATSAPP_WEBHOOK_VERIFY_TOKEN` | para la bandeja | Cadena inventada; la misma que en el webhook de Meta |
+| `WHATSAPP_APP_SECRET` | para la bandeja | Clave secreta de la app de Meta (verifica la firma de los avisos) |
 
 Tras guardarlas, redespliega. En *Ajustes → Estado de integraciones* debe
 aparecer «WhatsApp (Meta Cloud API)» con ✓.
@@ -121,11 +123,51 @@ aparecer «WhatsApp (Meta Cloud API)» con ✓.
   del cliente (España → +34). Se puede corregir en el modal antes de enviar.
 - Al enviar un presupuesto pasa a estado **Enviado**, igual que por email.
 
+## Recibir respuestas (bandeja WhatsApp)
+
+Vexo tiene una bandeja en el menú lateral (**WhatsApp**) con una conversación
+por teléfono: ahí se ven los documentos enviados, las respuestas del cliente
+(texto, fotos, audios, PDFs…), el estado de entrega (✓ enviado, ✓✓ entregado,
+✓✓ azul leído, ! fallido) y un contador de no leídos en el menú. Si el
+teléfono coincide con el de una ficha de cliente, la conversación se asocia a
+ese cliente.
+
+Para que los mensajes lleguen hay que suscribir el webhook (una sola vez):
+
+1. **Variables** en Vercel (y redesplegar):
+   - `WHATSAPP_WEBHOOK_VERIFY_TOKEN`: una cadena larga que te inventes.
+   - `WHATSAPP_APP_SECRET`: en <https://developers.facebook.com/apps> → tu app
+     → *Configuración de la app → Básica → Clave secreta de la app*. Vexo
+     rechaza cualquier aviso que no venga firmado con ella.
+2. **Webhook** en la app de Meta: *WhatsApp → Configuración → Webhook →
+   Editar*:
+   - URL de devolución de llamada: `https://<tu-dominio-de-producción>/api/whatsapp/webhook`
+   - Token de verificación: el mismo valor de `WHATSAPP_WEBHOOK_VERIFY_TOKEN`.
+   - Pulsa *Verificar y guardar* (Meta hace un GET y Vexo contesta el reto).
+3. **Campos**: en esa misma pantalla, *Administrar* → suscribe **messages**.
+   Si usas coexistencia (el número sigue en la app WhatsApp Business del
+   móvil), suscribe también **smb_message_echoes** para que lo que contestes
+   desde el móvil aparezca en el hilo de Vexo.
+4. Comprueba en *Ajustes → Estado de integraciones* que «WhatsApp: recibir
+   respuestas» sale con ✓, y escríbete desde otro móvil al número: debe
+   aparecer en la bandeja en unos segundos (la página se refresca sola).
+
+La URL tiene que ser pública: si el proyecto de Vercel tiene *Deployment
+Protection* en producción, Meta recibirá un 401 y no llegará nada.
+
+### Contestar desde Vexo
+
+Desde el hilo se puede responder con texto libre **solo durante las 24 h
+siguientes al último mensaje del cliente** (regla de Meta). Fuera de esa
+ventana el cuadro de respuesta se bloquea: hay que reenviar el documento (que
+usa la plantilla aprobada) o contestar desde el móvil.
+
 ## Limitaciones conocidas
 
-- «WhatsApp enviado» significa que **Meta ha aceptado** el mensaje. La entrega
-  real (entregado / leído / fallido) llega por webhook y Vexo todavía no lo
-  escucha: si el número no tiene WhatsApp, puede no aparecer error en pantalla.
-- Las respuestas del cliente no llegan a Vexo. Se ven en la bandeja de
-  WhatsApp de Meta Business Suite, o habría que añadir un webhook.
+- Los adjuntos recibidos se descargan de Meta al abrirlos; Meta no los guarda
+  indefinidamente, así que los muy antiguos pueden dejar de abrirse.
+- Solo se guardan los mensajes que llegan después de suscribir el webhook (no
+  se importa el historial anterior).
+- Desde la bandeja solo se envía texto; para mandar un PDF usa el botón
+  **Enviar** del presupuesto o la factura.
 - Recordatorios de cobro y facturas recurrentes siguen saliendo solo por email.

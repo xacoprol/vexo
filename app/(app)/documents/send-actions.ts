@@ -21,6 +21,7 @@ import {
   sendWhatsappDocument,
   whatsappConfigHint,
 } from "@/lib/whatsapp";
+import { recordOutgoingWhatsapp } from "@/lib/whatsapp-inbox";
 
 export type SendDocKind = "quote" | "invoice";
 
@@ -211,7 +212,12 @@ export async function sendDocumentWhatsapp(
               fullNumber: true,
               isProforma: true,
               client: {
-                select: { name: true, contactPerson: true, countryCode: true },
+                select: {
+                  id: true,
+                  name: true,
+                  contactPerson: true,
+                  countryCode: true,
+                },
               },
             },
           })
@@ -220,7 +226,12 @@ export async function sendDocumentWhatsapp(
             select: {
               fullNumber: true,
               client: {
-                select: { name: true, contactPerson: true, countryCode: true },
+                select: {
+                  id: true,
+                  name: true,
+                  contactPerson: true,
+                  countryCode: true,
+                },
               },
             },
           });
@@ -249,16 +260,34 @@ export async function sendDocumentWhatsapp(
     const pdf =
       kind === "quote" ? await buildQuotePdf(id) : await buildInvoicePdf(id);
 
-    await sendWhatsappDocument({
+    const bodyParams = [
+      doc.client.contactPerson?.trim() || doc.client.name,
+      docPhrase,
+      doc.fullNumber,
+      company,
+    ];
+    const sent = await sendWhatsappDocument({
       to,
       pdf: { buffer: pdf.buffer, filename: pdf.filename },
-      bodyParams: [
-        doc.client.contactPerson?.trim() || doc.client.name,
-        docPhrase,
-        doc.fullNumber,
-        company,
-      ],
+      bodyParams,
     });
+
+    // Para que la respuesta del cliente aparezca en la bandeja bajo este envío
+    const docLabel =
+      kind === "invoice"
+        ? `Factura ${doc.fullNumber}`
+        : `${"isProforma" in doc && doc.isProforma ? "Proforma" : "Presupuesto"} ${doc.fullNumber}`;
+    await recordOutgoingWhatsapp({
+      waMessageId: sent.messageId,
+      phone: to,
+      type: "template",
+      body: fillWhatsappPreview(bodyParams),
+      clientId: doc.client.id,
+      quoteId: kind === "quote" ? id : null,
+      invoiceId: kind === "invoice" ? id : null,
+      docLabel,
+    });
+    revalidatePath("/whatsapp");
 
     if (kind === "quote") {
       await prisma.quote.update({

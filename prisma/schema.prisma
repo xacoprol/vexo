@@ -234,6 +234,7 @@ model Client {
   quotes              Quote[]
   invoices            Invoice[]
   recurringTemplates  RecurringInvoiceTemplate[]
+  whatsappMessages    WhatsappMessage[]
 
   @@index([name])
   @@index([nif])
@@ -1051,4 +1052,52 @@ model CronRunLog {
   invoicesCreated  Int      @default(0)
   details          String? // JSON string for SQLite/Postgres portability
   error            String?
+}
+
+// ─── WhatsApp (bandeja) ─────────────────────────────────────────────────────
+
+/**
+ * Mensajes de WhatsApp enviados y recibidos por la Cloud API.
+ * Una conversación = todos los mensajes con el mismo `phone`.
+ * Entrantes y estados llegan por /api/whatsapp/webhook (docs/whatsapp.md).
+ */
+model WhatsappMessage {
+  id            String    @id @default(cuid())
+  /// wamid de Meta (único; idempotencia del webhook)
+  waMessageId   String?   @unique
+  /// Teléfono del cliente, internacional y solo dígitos (34612345678)
+  phone         String
+  /// IN = recibido | OUT = enviado desde Vexo o desde la app WhatsApp Business
+  direction     String
+  /// text | image | document | audio | video | sticker | location | template | reaction | button | interactive | contacts | unsupported
+  type          String
+  body          String?
+  mediaId       String?
+  mediaMime     String?
+  mediaFilename String?
+  /// OUT: accepted | sent | delivered | read | failed · IN: received
+  status        String    @default("received")
+  errorText     String?
+  /// wamid del mensaje al que responde (si lo cita)
+  contextWaId   String?
+  /// Nombre del perfil de WhatsApp del contacto
+  contactName   String?
+  /// VEXO | APP (enviado desde el móvil con coexistencia)
+  origin        String?
+  clientId      String?
+  client        Client?   @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  quoteId       String?
+  invoiceId     String?
+  /// "Presupuesto PRE-2026-001", para enlazar en el hilo
+  docLabel      String?
+  /// Momento del mensaje según Meta
+  sentAt        DateTime
+  /// IN: cuándo se abrió en Vexo
+  readAt        DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([phone, sentAt])
+  @@index([direction, readAt])
+  @@index([clientId])
 }

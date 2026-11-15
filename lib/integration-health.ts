@@ -1,10 +1,10 @@
 import { isSmtpConfigured } from "@/lib/mail";
 import { blobConfigured } from "@/lib/fiscal-blob";
 import { geminiConfigured } from "@/lib/gemini-expense";
-import { isWhatsappConfigured } from "@/lib/whatsapp";
+import { getWhatsappWebhookConfig, isWhatsappConfigured } from "@/lib/whatsapp";
 
 export type IntegrationHealth = {
-  id: "smtp" | "whatsapp" | "blob" | "gemini";
+  id: "smtp" | "whatsapp" | "whatsapp-inbox" | "blob" | "gemini";
   label: string;
   ok: boolean;
   hint: string;
@@ -15,6 +15,7 @@ export function getIntegrationHealth(): IntegrationHealth[] {
   const blob = blobConfigured();
   const gemini = geminiConfigured();
   const whatsapp = isWhatsappConfigured();
+  const whatsappInbox = whatsapp && getWhatsappWebhookConfig() !== null;
 
   return [
     {
@@ -32,6 +33,14 @@ export function getIntegrationHealth(): IntegrationHealth[] {
       hint: whatsapp
         ? "Listo para enviar presupuestos y facturas por WhatsApp"
         : "Falta WHATSAPP_ACCESS_TOKEN / WHATSAPP_PHONE_NUMBER_ID (ver docs/whatsapp.md)",
+    },
+    {
+      id: "whatsapp-inbox",
+      label: "WhatsApp: recibir respuestas",
+      ok: whatsappInbox,
+      hint: whatsappInbox
+        ? "Webhook listo: las respuestas llegan a la bandeja WhatsApp"
+        : "Falta WHATSAPP_WEBHOOK_VERIFY_TOKEN / WHATSAPP_APP_SECRET y suscribir el webhook en Meta (docs/whatsapp.md)",
     },
     {
       id: "blob",

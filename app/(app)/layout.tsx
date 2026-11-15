@@ -5,6 +5,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { AppTopBar } from "@/components/layout/AppTopBar";
 import { NavigationProgress } from "@/components/ui/NavigationProgress";
 import { signOut } from "@/lib/auth";
+import { countUnreadWhatsapp } from "@/lib/whatsapp-inbox";
 
 export const dynamic = "force-dynamic";
 
@@ -70,6 +71,13 @@ export default async function AppLayout({
     companyName = "";
   }
 
+  let whatsappUnread = 0;
+  try {
+    whatsappUnread = await countUnreadWhatsapp();
+  } catch {
+    whatsappUnread = 0;
+  }
+
   const userLabel =
     session.user?.name?.trim() || session.user?.email?.trim() || null;
 
@@ -80,6 +88,7 @@ export default async function AppLayout({
       </Suspense>
       <Sidebar
         companyName={companyName}
+        whatsappUnread={whatsappUnread}
         signOutSlot={
           <SignOutForm className="btn-ghost inline-flex h-11 w-11 cursor-pointer items-center justify-center p-0">
             <SignOutIcon />
