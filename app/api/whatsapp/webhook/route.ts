@@ -40,7 +40,15 @@ export async function POST(req: NextRequest) {
   }
 
   const raw = await req.text();
-  if (!verifyWaSignature(raw, req.headers.get("x-hub-signature-256"), cfg.appSecret)) {
+  const signature = req.headers.get("x-hub-signature-256");
+  if (!verifyWaSignature(raw, signature, cfg.appSecret)) {
+    console.error(
+      "[whatsapp-webhook] firma inválida — revisa WHATSAPP_APP_SECRET (debe ser la Clave secreta de la app Vexo en Meta → Configuración → Básica)",
+      {
+        hasSignatureHeader: Boolean(signature),
+        bodyBytes: Buffer.byteLength(raw, "utf8"),
+      }
+    );
     return new Response("Invalid signature", { status: 401 });
   }
 

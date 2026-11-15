@@ -155,6 +155,24 @@ Para que los mensajes lleguen hay que suscribir el webhook (una sola vez):
 La URL tiene que ser pública: si el proyecto de Vercel tiene *Deployment
 Protection* en producción, Meta recibirá un 401 y no llegará nada.
 
+### Si el webhook verifica pero no llegan mensajes
+
+1. **App en modo Live** (Publicada), no Desarrollo.
+2. Campo **messages** suscrito en el webhook.
+3. En logs de Vercel, un `POST /api/whatsapp/webhook` con **401** y
+   «firma inválida» significa que `WHATSAPP_APP_SECRET` no es la *Clave
+   secreta* de **esta** app (Meta → app Vexo → *Configuración → Básica*).
+   Cópiala de nuevo, actualízala en Vercel Production y redespliega.
+4. Suscribe la WABA a la app (si el panel no lo hizo solo):
+
+```bash
+curl -X POST "https://graph.facebook.com/v23.0/<WABA_ID>/subscribed_apps" \
+  -H "Authorization: Bearer $WHATSAPP_ACCESS_TOKEN"
+```
+
+El **WABA ID** aparece en *WhatsApp → Configuración de la API* (junto al
+Phone Number ID), no es el teléfono ni el Phone Number ID.
+
 ### Contestar desde Vexo
 
 Desde el hilo se puede responder con texto libre **solo durante las 24 h
